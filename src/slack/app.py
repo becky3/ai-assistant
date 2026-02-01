@@ -22,4 +22,4 @@ def create_app(settings: Settings) -> AsyncApp:
 async def start_socket_mode(app: AsyncApp, settings: Settings) -> None:
     """Socket Mode でアプリを起動する."""
     handler = AsyncSocketModeHandler(app, settings.slack_app_token)
-    await handler.start_async()
+    await handler.start_async()  # type: ignore[no-untyped-call]

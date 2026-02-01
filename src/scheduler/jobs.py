@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -85,7 +85,7 @@ async def daily_collect_and_deliver(
 
         message = format_daily_digest(recent_articles, feeds)
         if message:
-            await slack_client.chat_postMessage(channel=channel_id, text=message)  # type: ignore[union-attr]
+            await slack_client.chat_postMessage(channel=channel_id, text=message)  # type: ignore[attr-defined]
             logger.info("Delivered %d articles to %s", len(recent_articles), channel_id)
     except Exception:
         logger.exception("Error in daily_collect_and_deliver job")
