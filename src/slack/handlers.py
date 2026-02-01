@@ -1,17 +1,21 @@
 """Slack イベントハンドラ
-仕様: docs/specs/f1-chat.md
+仕様: docs/specs/f1-chat.md, docs/specs/f3-user-profiling.md
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 
 from slack_bolt.async_app import AsyncApp
 
 from src.services.chat import ChatService
+from src.services.user_profiler import UserProfiler
 
 logger = logging.getLogger(__name__)
+
+_PROFILE_KEYWORDS = ("プロファイル", "プロフィール", "profile")
 
 
 def strip_mention(text: str) -> str:
@@ -19,7 +23,11 @@ def strip_mention(text: str) -> str:
     return re.sub(r"<@[A-Za-z0-9]+>\s*", "", text).strip()
 
 
-def register_handlers(app: AsyncApp, chat_service: ChatService) -> None:
+def register_handlers(
+    app: AsyncApp,
+    chat_service: ChatService,
+    user_profiler: UserProfiler | None = None,
+) -> None:
     """app_mention ハンドラを登録する."""
 
     @app.event("app_mention")
@@ -32,6 +40,20 @@ def register_handlers(app: AsyncApp, chat_service: ChatService) -> None:
         if not cleaned_text:
             return
 
+        # プロファイル確認キーワード (AC4)
+        if user_profiler is not None and any(
+            kw in cleaned_text.lower() for kw in _PROFILE_KEYWORDS
+        ):
+            profile_text = await user_profiler.get_profile(user_id)
+            if profile_text:
+                await say(text=profile_text, thread_ts=thread_ts)  # type: ignore[operator]
+            else:
+                await say(  # type: ignore[operator]
+                    text="まだプロファイル情報がありません。会話を続けると自動的に記録されます！",
+                    thread_ts=thread_ts,
+                )
+            return
+
         try:
             response = await chat_service.respond(
                 user_id=user_id,
@@ -39,9 +61,25 @@ def register_handlers(app: AsyncApp, chat_service: ChatService) -> None:
                 thread_ts=thread_ts,
             )
             await say(text=response, thread_ts=thread_ts)  # type: ignore[operator]
+
+            # ユーザー情報抽出を非同期で実行 (AC3)
+            if user_profiler is not None:
+                asyncio.create_task(
+                    _safe_extract_profile(user_profiler, user_id, cleaned_text)
+                )
         except Exception:
             logger.exception("Failed to generate response")
             await say(  # type: ignore[operator]
                 text="申し訳ありません、応答の生成中にエラーが発生しました。しばらくしてからもう一度お試しください。",
                 thread_ts=thread_ts,
             )
+
+
+async def _safe_extract_profile(
+    profiler: UserProfiler, user_id: str, message: str
+) -> None:
+    """プロファイル抽出を安全に実行する（例外をログに記録）."""
+    try:
+        await profiler.extract_profile(user_id, message)
+    except Exception:
+        logger.exception("Failed to extract user profile for %s", user_id)

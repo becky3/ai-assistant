@@ -9,8 +9,9 @@ import logging
 
 from src.config.settings import get_settings, load_assistant_config
 from src.db.session import init_db, get_session_factory
-from src.llm.factory import create_online_provider
+from src.llm.factory import create_local_provider, create_online_provider, get_provider_with_fallback
 from src.services.chat import ChatService
+from src.services.user_profiler import UserProfiler
 from src.slack.app import create_app, start_socket_mode
 from src.slack.handlers import register_handlers
 
@@ -29,18 +30,29 @@ async def main() -> None:
     system_prompt = assistant.get("personality", "")
 
     # LLM プロバイダー
-    llm = create_online_provider(settings)
+    online_llm = create_online_provider(settings)
+    local_llm = create_local_provider(settings)
+
+    # ユーザー情報抽出用LLM（ローカル優先、フォールバック）
+    profiler_llm = await get_provider_with_fallback(local_llm, online_llm)
 
     # チャットサービス
+    session_factory = get_session_factory()
     chat_service = ChatService(
-        llm=llm,
-        session_factory=get_session_factory(),
+        llm=online_llm,
+        session_factory=session_factory,
         system_prompt=system_prompt,
+    )
+
+    # ユーザー情報抽出サービス
+    user_profiler = UserProfiler(
+        llm=profiler_llm,
+        session_factory=session_factory,
     )
 
     # Slack アプリ
     app = create_app(settings)
-    register_handlers(app, chat_service)
+    register_handlers(app, chat_service, user_profiler=user_profiler)
 
     # Socket Mode で起動
     await start_socket_mode(app, settings)
