@@ -11,6 +11,7 @@ from src.config.settings import get_settings, load_assistant_config
 from src.db.session import init_db, get_session_factory
 from src.llm.factory import create_local_provider, create_online_provider, get_provider_with_fallback
 from src.services.chat import ChatService
+from src.services.topic_recommender import TopicRecommender
 from src.services.user_profiler import UserProfiler
 from src.slack.app import create_app, start_socket_mode
 from src.slack.handlers import register_handlers
@@ -50,9 +51,19 @@ async def main() -> None:
         session_factory=session_factory,
     )
 
+    # トピック提案サービス
+    topic_recommender = TopicRecommender(
+        llm=online_llm,
+        session_factory=session_factory,
+    )
+
     # Slack アプリ
     app = create_app(settings)
-    register_handlers(app, chat_service, user_profiler=user_profiler)
+    register_handlers(
+        app, chat_service,
+        user_profiler=user_profiler,
+        topic_recommender=topic_recommender,
+    )
 
     # Socket Mode で起動
     await start_socket_mode(app, settings)
