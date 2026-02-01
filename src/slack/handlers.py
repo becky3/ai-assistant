@@ -1,5 +1,5 @@
 """Slack イベントハンドラ
-仕様: docs/specs/f1-chat.md, docs/specs/f3-user-profiling.md
+仕様: docs/specs/f1-chat.md, docs/specs/f3-user-profiling.md, docs/specs/f4-topic-recommend.md
 """
 
 from __future__ import annotations
@@ -11,11 +11,13 @@ import re
 from slack_bolt.async_app import AsyncApp
 
 from src.services.chat import ChatService
+from src.services.topic_recommender import TopicRecommender
 from src.services.user_profiler import UserProfiler
 
 logger = logging.getLogger(__name__)
 
 _PROFILE_KEYWORDS = ("プロファイル", "プロフィール", "profile")
+_TOPIC_KEYWORDS = ("おすすめ", "トピック", "何を学ぶ", "何学ぶ", "学習提案", "recommend")
 
 
 def strip_mention(text: str) -> str:
@@ -27,6 +29,7 @@ def register_handlers(
     app: AsyncApp,
     chat_service: ChatService,
     user_profiler: UserProfiler | None = None,
+    topic_recommender: TopicRecommender | None = None,
 ) -> None:
     """app_mention ハンドラを登録する."""
 
@@ -50,6 +53,21 @@ def register_handlers(
             else:
                 await say(  # type: ignore[operator]
                     text="まだプロファイル情報がありません。会話を続けると自動的に記録されます！",
+                    thread_ts=thread_ts,
+                )
+            return
+
+        # トピック提案キーワード (F4)
+        if topic_recommender is not None and any(
+            kw in cleaned_text.lower() for kw in _TOPIC_KEYWORDS
+        ):
+            try:
+                recommendation = await topic_recommender.recommend(user_id)
+                await say(text=recommendation, thread_ts=thread_ts)  # type: ignore[operator]
+            except Exception:
+                logger.exception("Failed to generate topic recommendation")
+                await say(  # type: ignore[operator]
+                    text="申し訳ありません、トピック提案の生成中にエラーが発生しました。",
                     thread_ts=thread_ts,
                 )
             return
