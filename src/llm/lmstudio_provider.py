@@ -7,10 +7,24 @@ from __future__ import annotations
 import logging
 
 from openai import AsyncOpenAI
+from openai.types.chat import (
+    ChatCompletionAssistantMessageParam,
+    ChatCompletionSystemMessageParam,
+    ChatCompletionUserMessageParam,
+)
+from openai.types.chat.chat_completion_message_param import ChatCompletionMessageParam
 
 from src.llm.base import LLMProvider, LLMResponse, Message
 
 logger = logging.getLogger(__name__)
+
+
+def _to_openai_message(m: Message) -> ChatCompletionMessageParam:
+    if m.role == "system":
+        return ChatCompletionSystemMessageParam(role="system", content=m.content)
+    if m.role == "assistant":
+        return ChatCompletionAssistantMessageParam(role="assistant", content=m.content)
+    return ChatCompletionUserMessageParam(role="user", content=m.content)
 
 
 class LMStudioProvider(LLMProvider):
@@ -23,7 +37,7 @@ class LMStudioProvider(LLMProvider):
     async def complete(self, messages: list[Message]) -> LLMResponse:
         response = await self._client.chat.completions.create(
             model=self._model,
-            messages=[{"role": m.role, "content": m.content} for m in messages],
+            messages=[_to_openai_message(m) for m in messages],
         )
         choice = response.choices[0]
         usage = {}

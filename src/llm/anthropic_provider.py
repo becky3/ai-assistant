@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 
 from anthropic import AsyncAnthropic
+from anthropic.types import MessageParam
 
 from src.llm.base import LLMProvider, LLMResponse, Message
 
@@ -23,22 +24,19 @@ class AnthropicProvider(LLMProvider):
     async def complete(self, messages: list[Message]) -> LLMResponse:
         # Anthropic はシステムメッセージを別パラメータで渡す
         system_prompt = ""
-        chat_messages: list[dict[str, str]] = []
+        chat_messages: list[MessageParam] = []
         for m in messages:
             if m.role == "system":
                 system_prompt += m.content + "\n"
             else:
                 chat_messages.append({"role": m.role, "content": m.content})
 
-        kwargs: dict[str, object] = {
-            "model": self._model,
-            "max_tokens": 4096,
-            "messages": chat_messages,
-        }
-        if system_prompt:
-            kwargs["system"] = system_prompt.strip()
-
-        response = await self._client.messages.create(**kwargs)  # type: ignore[arg-type]
+        response = await self._client.messages.create(
+            model=self._model,
+            max_tokens=4096,
+            messages=chat_messages,
+            system=system_prompt.strip() if system_prompt else "",
+        )
         content = ""
         for block in response.content:
             if block.type == "text":
