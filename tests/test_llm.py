@@ -84,3 +84,28 @@ async def test_ac5_uses_local_when_available() -> None:
 
     result = await get_provider_with_fallback(local, online)
     assert result is local
+
+
+def test_openai_message_role_mapping() -> None:
+    """role ごとに正しい ChatCompletionMessageParam 型にマッピングされる."""
+    from src.llm.base import Message
+    from src.llm.openai_provider import _to_openai_message
+
+    system_msg = _to_openai_message(Message(role="system", content="sys"))
+    assert system_msg["role"] == "system"
+
+    user_msg = _to_openai_message(Message(role="user", content="hi"))
+    assert user_msg["role"] == "user"
+
+    assistant_msg = _to_openai_message(Message(role="assistant", content="hello"))
+    assert assistant_msg["role"] == "assistant"
+
+
+def test_lmstudio_message_role_mapping() -> None:
+    """LMStudio provider でも role が正しくマッピングされる."""
+    from src.llm.base import Message
+    from src.llm.lmstudio_provider import _to_openai_message
+
+    for role in ("system", "user", "assistant"):
+        msg = _to_openai_message(Message(role=role, content="test"))  # type: ignore[arg-type]
+        assert msg["role"] == role
