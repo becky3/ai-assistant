@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.db.models import Conversation
 from src.llm.base import LLMProvider, Message
@@ -24,7 +24,7 @@ class ChatService:
     def __init__(
         self,
         llm: LLMProvider,
-        session_factory: object,
+        session_factory: async_sessionmaker[AsyncSession],
         system_prompt: str = "",
     ) -> None:
         self._llm = llm
@@ -33,8 +33,7 @@ class ChatService:
 
     async def respond(self, user_id: str, text: str, thread_ts: str) -> str:
         """ユーザーメッセージに対する応答を生成し、履歴を保存する."""
-        async with self._session_factory() as session:  # type: ignore[operator]
-            session: AsyncSession
+        async with self._session_factory() as session:
             # 会話履歴を取得
             history = await self._load_history(session, thread_ts)
 

@@ -23,7 +23,7 @@ def _get_engine():  # type: ignore[no-untyped-def]
     return _engine
 
 
-def _get_session_factory() -> async_sessionmaker[AsyncSession]:
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
     global _session_factory
     if _session_factory is None:
         _session_factory = async_sessionmaker(_get_engine(), expire_on_commit=False)
@@ -39,6 +39,6 @@ async def init_db() -> None:
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """非同期セッションを生成するジェネレータ."""
-    factory = _get_session_factory()
+    factory = get_session_factory()
     async with factory() as session:
         yield session

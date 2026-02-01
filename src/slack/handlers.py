@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 def strip_mention(text: str) -> str:
     """メンション部分 (<@U...>) を除去する."""
-    return re.sub(r"<@[A-Z0-9]+>\s*", "", text).strip()
+    return re.sub(r"<@[A-Za-z0-9]+>\s*", "", text).strip()
 
 
 def register_handlers(app: AsyncApp, chat_service: ChatService) -> None:

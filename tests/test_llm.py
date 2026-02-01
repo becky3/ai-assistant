@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
 from src.config.settings import Settings
-from src.llm.base import LLMProvider, LLMResponse, Message
+from src.llm.base import LLMProvider
 from src.llm.factory import create_local_provider, create_online_provider, get_provider_with_fallback
 from src.llm.lmstudio_provider import LMStudioProvider
 

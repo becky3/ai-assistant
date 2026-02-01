@@ -8,7 +8,7 @@ import asyncio
 import logging
 
 from src.config.settings import get_settings, load_assistant_config
-from src.db.session import init_db, _get_session_factory
+from src.db.session import init_db, get_session_factory
 from src.llm.factory import create_online_provider
 from src.services.chat import ChatService
 from src.slack.app import create_app, start_socket_mode
@@ -34,7 +34,7 @@ async def main() -> None:
     # チャットサービス
     chat_service = ChatService(
         llm=llm,
-        session_factory=_get_session_factory(),
+        session_factory=get_session_factory(),
         system_prompt=system_prompt,
     )
 
