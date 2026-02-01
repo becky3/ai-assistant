@@ -41,7 +41,7 @@ _EMPTY_PROFILE_MESSAGE = (
     "3. *Web開発の基礎*\n"
     "   HTML/CSS/JavaScriptの基本を押さえましょう。\n"
     "\n"
-    ":pencil2: 会話を続けるとあなたの興味・スキルを自動で記録します。"
+    ":pencil2: 会話を続けるとあなたの興味・スキルを自動で記録します。\n"
     "プロファイルが充実すると、よりパーソナライズされた提案ができるようになります！"
 )
 
@@ -135,7 +135,7 @@ class TopicRecommender:
 
         if skills:
             skills_str = ", ".join(
-                f"{s['name']}({s['level']})" for s in skills
+                f"{s.get('name', '')}({s.get('level', '')})" for s in skills
             )
             parts.append(f"- スキル: {skills_str}")
         else:

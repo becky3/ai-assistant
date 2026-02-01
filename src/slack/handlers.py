@@ -59,7 +59,7 @@ def register_handlers(
 
         # トピック提案キーワード (F4)
         if topic_recommender is not None and any(
-            kw in cleaned_text for kw in _TOPIC_KEYWORDS
+            kw in cleaned_text.lower() for kw in _TOPIC_KEYWORDS
         ):
             try:
                 recommendation = await topic_recommender.recommend(user_id)
