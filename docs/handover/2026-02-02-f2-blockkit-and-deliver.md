@@ -36,7 +36,7 @@
 - MediumはCloudflare保護(403)でHTMLアクセス不可。RSSのsummary内imgタグからフォールバック取得している
 - Redditは `media_thumbnail` フィールドから画像取得
 - QiitaのOGP画像URLにはHTMLエンティティ(`&amp;`等)が含まれるため `html.unescape` でデコードしている
-- 既存DBに `image_url` カラムがない場合は `ALTER TABLE articles ADD COLUMN image_url VARCHAR(2048)` が必要（またはDB再作成）
+- 既存DBに不足カラムがある場合は `init_db()` 起動時に自動で `ALTER TABLE` が実行される（`src/db/session.py` の `_migrate_add_missing_columns`）
 - `deliver` を何度実行しても同じ記事が表示される問題あり → Issue #29 で対応予定
 
 ## 環境メモ
