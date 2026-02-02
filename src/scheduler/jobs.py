@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
@@ -20,39 +21,78 @@ logger = logging.getLogger(__name__)
 DEFAULT_TZ = ZoneInfo("Asia/Tokyo")
 
 
+def _build_category_blocks(
+    category: str,
+    articles: list[Article],
+    max_articles: int = 10,
+) -> list[dict[str, Any]]:
+    """1カテゴリ分の Block Kit blocks を構築する."""
+    display_articles = articles[:max_articles]
+    blocks: list[dict[str, Any]] = [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": f"【{category}】 — {len(display_articles)}件の記事",
+            },
+        },
+    ]
+
+    for i, a in enumerate(display_articles):
+        raw_summary = (a.summary or "").strip()
+        summary = raw_summary[:100] + "..." if len(raw_summary) > 100 else raw_summary
+        if not summary:
+            summary = "要約なし"
+
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*{a.title}*\n{summary}\n:link: <{a.url}|記事を読む>",
+            },
+        })
+
+        if i < len(display_articles) - 1:
+            blocks.append({"type": "divider"})
+
+    if len(articles) > max_articles:
+        blocks.append({
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": f"他 {len(articles) - max_articles} 件の記事があります",
+                },
+            ],
+        })
+
+    return blocks
+
+
 def format_daily_digest(
     articles: list[Article],
     feeds: dict[int, Feed],
-    tz: ZoneInfo = DEFAULT_TZ,
-) -> str:
-    """カテゴリ別にフォーマットされた配信メッセージを生成する."""
+    max_articles_per_category: int = 10,
+) -> dict[str, list[dict[str, Any]]]:
+    """カテゴリ別にBlock Kit blocksを生成する.
+
+    Returns:
+        カテゴリ名をキー、Block Kit blocks リストを値とする辞書。
+        記事がない場合は空辞書。
+    """
     if not articles:
-        return ""
+        return {}
 
-    today = datetime.now(tz=tz).strftime("%Y-%m-%d")
-    lines = [f":newspaper: 今日の学習ニュース ({today})", ""]
-
-    # カテゴリ別にグループ化
     by_category: dict[str, list[Article]] = {}
     for article in articles:
         feed = feeds.get(article.feed_id)
         category = feed.category if feed and feed.category else "その他"
         by_category.setdefault(category, []).append(article)
 
-    for category, cat_articles in by_category.items():
-        lines.append(f"【{category}】")
-        for a in cat_articles:
-            raw_summary = (a.summary or "").strip()
-            if not raw_summary:
-                summary = "要約なし"
-            else:
-                summary = raw_summary[:100] + "..." if len(raw_summary) > 100 else raw_summary
-            lines.append(f"• *{a.title}* - {summary}")
-            lines.append(f"  :link: {a.url}")
-        lines.append("")
-
-    lines.append(":bulb: 気になる記事があれば、スレッドで聞いてね！")
-    return "\n".join(lines)
+    return {
+        category: _build_category_blocks(category, cat_articles, max_articles_per_category)
+        for category, cat_articles in by_category.items()
+    }
 
 
 async def daily_collect_and_deliver(
@@ -60,15 +100,14 @@ async def daily_collect_and_deliver(
     session_factory: async_sessionmaker[AsyncSession],
     slack_client: object,
     channel_id: str,
+    max_articles_per_category: int = 10,
 ) -> None:
     """毎朝の収集・配信ジョブ."""
     logger.info("Starting daily feed collection and delivery")
 
     try:
-        # 記事収集（副作用でDBに保存される）
         await collector.collect_all()
 
-        # 直近24時間の記事を取得してフォーマット
         since = datetime.now(tz=timezone.utc) - timedelta(hours=24)
         async with session_factory() as session:
             result = await session.execute(
@@ -83,10 +122,52 @@ async def daily_collect_and_deliver(
             logger.info("No new articles to deliver")
             return
 
-        message = format_daily_digest(recent_articles, feeds)
-        if message:
-            await slack_client.chat_postMessage(channel=channel_id, text=message)  # type: ignore[attr-defined]
-            logger.info("Delivered %d articles to %s", len(recent_articles), channel_id)
+        today = datetime.now(tz=DEFAULT_TZ).strftime("%Y-%m-%d")
+        digest = format_daily_digest(
+            recent_articles, feeds, max_articles_per_category=max_articles_per_category
+        )
+        if not digest:
+            return
+
+        # ヘッダーメッセージ
+        await slack_client.chat_postMessage(  # type: ignore[attr-defined]
+            channel=channel_id,
+            text=f":newspaper: 今日の学習ニュース ({today})",
+            blocks=[
+                {
+                    "type": "header",
+                    "text": {
+                        "type": "plain_text",
+                        "text": f":newspaper: 今日の学習ニュース ({today})",
+                    },
+                },
+            ],
+        )
+
+        # カテゴリごとに別メッセージ
+        for category, blocks in digest.items():
+            await slack_client.chat_postMessage(  # type: ignore[attr-defined]
+                channel=channel_id,
+                text=f"【{category}】",
+                blocks=blocks,
+            )
+
+        # フッターメッセージ
+        await slack_client.chat_postMessage(  # type: ignore[attr-defined]
+            channel=channel_id,
+            text=":bulb: 気になる記事があれば、スレッドで聞いてね！",
+            blocks=[
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": ":bulb: 気になる記事があれば、スレッドで聞いてね！",
+                    },
+                },
+            ],
+        )
+
+        logger.info("Delivered %d articles to %s", len(recent_articles), channel_id)
     except Exception:
         logger.exception("Error in daily_collect_and_deliver job")
 
@@ -99,6 +180,7 @@ def setup_scheduler(
     hour: int = 7,
     minute: int = 0,
     timezone: str = "Asia/Tokyo",
+    max_articles_per_category: int = 10,
 ) -> AsyncIOScheduler:
     """スケジューラを設定して返す."""
     scheduler = AsyncIOScheduler(timezone=timezone)
@@ -112,6 +194,7 @@ def setup_scheduler(
             "session_factory": session_factory,
             "slack_client": slack_client,
             "channel_id": channel_id,
+            "max_articles_per_category": max_articles_per_category,
         },
         id="daily_feed_job",
     )

@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     daily_feed_minute: int = Field(default=0, ge=0, le=59)
     timezone: str = "Asia/Tokyo"
 
+    # Feed delivery
+    feed_articles_per_category: int = Field(default=10, ge=1)
+
     # Database
     database_url: str = "sqlite+aiosqlite:///./learning_companion.db"
 

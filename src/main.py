@@ -11,6 +11,8 @@ from src.config.settings import get_settings, load_assistant_config
 from src.db.session import init_db, get_session_factory
 from src.llm.factory import create_local_provider, create_online_provider, get_provider_with_fallback
 from src.services.chat import ChatService
+from src.services.feed_collector import FeedCollector
+from src.services.summarizer import Summarizer
 from src.services.topic_recommender import TopicRecommender
 from src.services.user_profiler import UserProfiler
 from src.slack.app import create_app, start_socket_mode
@@ -57,12 +59,26 @@ async def main() -> None:
         session_factory=session_factory,
     )
 
+    # 要約・収集サービス
+    summarizer_llm = await get_provider_with_fallback(local_llm, online_llm)
+    summarizer = Summarizer(llm=summarizer_llm)
+    feed_collector = FeedCollector(
+        session_factory=session_factory,
+        summarizer=summarizer,
+    )
+
     # Slack アプリ
     app = create_app(settings)
+    slack_client = app.client
     register_handlers(
         app, chat_service,
         user_profiler=user_profiler,
         topic_recommender=topic_recommender,
+        collector=feed_collector,
+        session_factory=session_factory,
+        slack_client=slack_client,
+        channel_id=settings.slack_news_channel_id,
+        max_articles_per_category=settings.feed_articles_per_category,
     )
 
     # Socket Mode で起動

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.db.models import Article, Base, Feed
 from src.scheduler.jobs import (
+    _build_category_blocks,
     daily_collect_and_deliver,
     format_daily_digest,
     setup_scheduler,
@@ -22,8 +23,8 @@ def _make_article(feed_id: int, title: str, url: str, summary: str) -> Article:
     return a
 
 
-def test_ac5_format_daily_digest_categorized() -> None:
-    """AC5: 専用チャンネルにカテゴリ別フォーマットで記事要約を投稿する."""
+def test_ac5_format_daily_digest_returns_dict_with_blocks() -> None:
+    """AC5: format_daily_digest がカテゴリ別のBlock Kit blocksを返す."""
     feeds = {
         1: Feed(id=1, url="https://a.com/rss", name="A", category="Python"),
         2: Feed(id=2, url="https://b.com/rss", name="B", category="機械学習"),
@@ -35,17 +36,18 @@ def test_ac5_format_daily_digest_categorized() -> None:
 
     result = format_daily_digest(articles, feeds)
 
-    assert "今日の学習ニュース" in result
-    assert "【Python】" in result
-    assert "【機械学習】" in result
-    assert "asyncioの新機能" in result
-    assert "transformer効率化" in result
-    assert ":bulb:" in result
+    assert isinstance(result, dict)
+    assert "Python" in result
+    assert "機械学習" in result
+    # Each category has blocks list
+    python_blocks = result["Python"]
+    assert any(b["type"] == "header" for b in python_blocks)
+    assert any(b["type"] == "section" for b in python_blocks)
 
 
 def test_ac5_format_empty_articles() -> None:
-    """AC5: 記事がない場合は空文字を返す."""
-    assert format_daily_digest([], {}) == ""
+    """AC5: 記事がない場合は空辞書を返す."""
+    assert format_daily_digest([], {}) == {}
 
 
 def test_ac5_format_empty_summary_shows_fallback() -> None:
@@ -54,7 +56,36 @@ def test_ac5_format_empty_summary_shows_fallback() -> None:
     articles = [_make_article(1, "Title", "https://a.com/1", "")]
 
     result = format_daily_digest(articles, feeds)
-    assert "要約なし" in result
+    python_blocks = result["Python"]
+    section_texts = [
+        b["text"]["text"] for b in python_blocks if b["type"] == "section"
+    ]
+    assert any("要約なし" in t for t in section_texts)
+
+
+def test_ac5_build_category_blocks_limits_articles() -> None:
+    """AC5: max_articles を超える記事はcontextブロックで残件表示."""
+    articles = [
+        _make_article(1, f"Title{i}", f"https://a.com/{i}", f"summary{i}")
+        for i in range(15)
+    ]
+    blocks = _build_category_blocks("Python", articles, max_articles=5)
+
+    section_blocks = [b for b in blocks if b["type"] == "section"]
+    assert len(section_blocks) == 5
+    context_blocks = [b for b in blocks if b["type"] == "context"]
+    assert len(context_blocks) == 1
+    assert "他 10 件" in context_blocks[0]["elements"][0]["text"]
+
+
+def test_ac5_build_category_blocks_no_trailing_divider() -> None:
+    """AC5: 最後の記事の後にdividerが入らない."""
+    articles = [
+        _make_article(1, "Title1", "https://a.com/1", "s1"),
+        _make_article(1, "Title2", "https://a.com/2", "s2"),
+    ]
+    blocks = _build_category_blocks("Python", articles)
+    assert blocks[-1]["type"] == "section"
 
 
 def test_ac4_scheduler_registers_cron_job() -> None:
@@ -77,7 +108,6 @@ def test_ac4_scheduler_registers_cron_job() -> None:
     assert len(jobs) == 1
     assert jobs[0].id == "daily_feed_job"
     trigger = jobs[0].trigger
-    # cron トリガーのフィールドを名前で検索して検証
     hour_field = next(f for f in trigger.fields if getattr(f, "name", None) == "hour")
     minute_field = next(f for f in trigger.fields if getattr(f, "name", None) == "minute")
     assert str(hour_field) == "7"
@@ -107,7 +137,7 @@ async def db_factory():  # type: ignore[no-untyped-def]
 
 
 async def test_ac4_daily_collect_and_deliver_posts_to_slack(db_factory) -> None:  # type: ignore[no-untyped-def]
-    """AC4: daily_collect_and_deliver がSlackにメッセージを投稿する."""
+    """AC4: daily_collect_and_deliver がSlackに複数メッセージを投稿する."""
     collector = AsyncMock()
     collector.collect_all.return_value = []
     slack_client = AsyncMock()
@@ -120,10 +150,17 @@ async def test_ac4_daily_collect_and_deliver_posts_to_slack(db_factory) -> None:
     )
 
     collector.collect_all.assert_called_once()
-    slack_client.chat_postMessage.assert_called_once()
-    call_kwargs = slack_client.chat_postMessage.call_args.kwargs
-    assert call_kwargs["channel"] == "C123"
-    assert "今日の学習ニュース" in call_kwargs["text"]
+    # ヘッダー + カテゴリ(1) + フッター = 3回
+    assert slack_client.chat_postMessage.call_count == 3
+
+    calls = slack_client.chat_postMessage.call_args_list
+    # ヘッダー
+    assert "今日の学習ニュース" in calls[0].kwargs["text"]
+    assert "blocks" in calls[0].kwargs
+    # カテゴリメッセージ
+    assert "blocks" in calls[1].kwargs
+    # フッター
+    assert ":bulb:" in calls[2].kwargs["text"]
 
 
 async def test_ac4_daily_collect_and_deliver_handles_error(db_factory) -> None:  # type: ignore[no-untyped-def]
@@ -132,7 +169,6 @@ async def test_ac4_daily_collect_and_deliver_handles_error(db_factory) -> None: 
     collector.collect_all.side_effect = RuntimeError("DB error")
     slack_client = AsyncMock()
 
-    # エラーが発生してもExceptionは外に伝播しない
     await daily_collect_and_deliver(
         collector=collector,
         session_factory=db_factory,
