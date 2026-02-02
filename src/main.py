@@ -12,6 +12,7 @@ from src.db.session import init_db, get_session_factory
 from src.llm.factory import create_local_provider, create_online_provider, get_provider_with_fallback
 from src.services.chat import ChatService
 from src.services.feed_collector import FeedCollector
+from src.services.ogp_extractor import OgpExtractor
 from src.services.summarizer import Summarizer
 from src.services.topic_recommender import TopicRecommender
 from src.services.user_profiler import UserProfiler
@@ -62,9 +63,11 @@ async def main() -> None:
     # 要約・収集サービス
     summarizer_llm = await get_provider_with_fallback(local_llm, online_llm)
     summarizer = Summarizer(llm=summarizer_llm)
+    ogp_extractor = OgpExtractor()
     feed_collector = FeedCollector(
         session_factory=session_factory,
         summarizer=summarizer,
+        ogp_extractor=ogp_extractor,
     )
 
     # Slack アプリ

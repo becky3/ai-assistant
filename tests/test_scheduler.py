@@ -18,8 +18,10 @@ from src.scheduler.jobs import (
 )
 
 
-def _make_article(feed_id: int, title: str, url: str, summary: str) -> Article:
-    a = Article(feed_id=feed_id, title=title, url=url, summary=summary)
+def _make_article(
+    feed_id: int, title: str, url: str, summary: str, image_url: str | None = None
+) -> Article:
+    a = Article(feed_id=feed_id, title=title, url=url, summary=summary, image_url=image_url)
     return a
 
 
@@ -60,7 +62,8 @@ def test_ac5_format_empty_summary_shows_fallback() -> None:
     section_texts = [
         b["text"]["text"] for b in python_blocks if b["type"] == "section"
     ]
-    assert any("要約なし" in t for t in section_texts)
+    # 要約セクション（タイトルセクションではない方）に「要約なし」が含まれる
+    assert any(t == "要約なし" for t in section_texts)
 
 
 def test_ac5_build_category_blocks_limits_articles() -> None:
@@ -71,8 +74,9 @@ def test_ac5_build_category_blocks_limits_articles() -> None:
     ]
     blocks = _build_category_blocks("Python", articles, max_articles=5)
 
+    # 各記事はタイトルsection + 要約section = 2 sections
     section_blocks = [b for b in blocks if b["type"] == "section"]
-    assert len(section_blocks) == 5
+    assert len(section_blocks) == 10
     context_blocks = [b for b in blocks if b["type"] == "context"]
     assert len(context_blocks) == 1
     assert "他 10 件" in context_blocks[0]["elements"][0]["text"]
@@ -85,7 +89,7 @@ def test_ac5_build_category_blocks_no_trailing_divider() -> None:
         _make_article(1, "Title2", "https://a.com/2", "s2"),
     ]
     blocks = _build_category_blocks("Python", articles)
-    assert blocks[-1]["type"] == "section"
+    assert blocks[-1]["type"] == "section"  # 最後は要約section
 
 
 def test_ac4_scheduler_registers_cron_job() -> None:
@@ -176,3 +180,27 @@ async def test_ac4_daily_collect_and_deliver_handles_error(db_factory) -> None: 
         channel_id="C123",
     )
     slack_client.chat_postMessage.assert_not_called()
+
+
+def test_ac10_build_category_blocks_with_image() -> None:
+    """AC10: image_urlがある記事の後に独立imageブロックが付く."""
+    articles = [
+        _make_article(1, "With Image", "https://a.com/1", "summary", image_url="https://a.com/img.png"),
+        _make_article(1, "No Image", "https://a.com/2", "summary"),
+    ]
+    blocks = _build_category_blocks("Python", articles)
+
+    # 独立imageブロックが1つある
+    image_blocks = [b for b in blocks if b["type"] == "image"]
+    assert len(image_blocks) == 1
+    assert image_blocks[0]["image_url"] == "https://a.com/img.png"
+    assert image_blocks[0]["alt_text"] == "With Image"
+
+    # タイトルsectionにリンクが含まれる
+    sections = [b for b in blocks if b["type"] == "section"]
+    title_sections = [s for s in sections if "<https://a.com/1|With Image>" in s["text"]["text"]]
+    assert len(title_sections) == 1
+
+    # 画像なし記事にはimageブロックなし（タイトル+要約の2 section）
+    no_img_sections = [s for s in sections if "No Image" in s["text"]["text"]]
+    assert len(no_img_sections) >= 1

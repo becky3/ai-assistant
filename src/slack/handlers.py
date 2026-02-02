@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 _PROFILE_KEYWORDS = ("プロファイル", "プロフィール", "profile")
 _TOPIC_KEYWORDS = ("おすすめ", "トピック", "何を学ぶ", "何学ぶ", "学習提案", "recommend")
-_DELIVER_KEYWORDS = ("配信テスト", "テスト配信", "deliver")
+_DELIVER_KEYWORDS = ("deliver",)
 
 
 def strip_mention(text: str) -> str:

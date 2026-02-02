@@ -14,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.db.models import Article, Feed
+from src.services.ogp_extractor import OgpExtractor
 from src.services.summarizer import Summarizer
 
 logger = logging.getLogger(__name__)
@@ -29,9 +30,11 @@ class FeedCollector:
         self,
         session_factory: async_sessionmaker[AsyncSession],
         summarizer: Summarizer,
+        ogp_extractor: OgpExtractor | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._summarizer = summarizer
+        self._ogp_extractor = ogp_extractor
 
     async def collect_all(self) -> list[Article]:
         """有効な全フィードから記事を収集する."""
@@ -86,11 +89,22 @@ class FeedCollector:
 
                 summary = await self._summarizer.summarize(title, url)
 
+                image_url = None
+                if self._ogp_extractor:
+                    entry_dict = {
+                        k: entry.get(k, None)
+                        for k in ("media_content", "enclosures", "media_thumbnail", "summary", "content")
+                    }
+                    image_url = await self._ogp_extractor.extract_image_url(
+                        url, entry_dict
+                    )
+
                 article = Article(
                     feed_id=feed.id,
                     title=title,
                     url=url,
                     summary=summary,
+                    image_url=image_url,
                     published_at=published_at,
                 )
                 session.add(article)

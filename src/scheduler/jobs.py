@@ -33,22 +33,36 @@ def _build_category_blocks(
             "type": "header",
             "text": {
                 "type": "plain_text",
-                "text": f"【{category}】 — {len(display_articles)}件の記事",
+                "text": f"📂 【{category}】 — {len(display_articles)}件の記事",
             },
         },
+        {"type": "divider"},
     ]
 
     for i, a in enumerate(display_articles):
-        raw_summary = (a.summary or "").strip()
-        summary = raw_summary[:100] + "..." if len(raw_summary) > 100 else raw_summary
+        summary = (a.summary or "").strip()
         if not summary:
             summary = "要約なし"
 
+        # 記事番号付きタイトル（リンク付き）
         blocks.append({
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"*{a.title}*\n{summary}\n:link: <{a.url}|記事を読む>",
+                "text": f":newspaper: *<{a.url}|{a.title}>*",
+            },
+        })
+        if a.image_url:
+            blocks.append({
+                "type": "image",
+                "image_url": a.image_url,
+                "alt_text": a.title,
+            })
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": summary,
             },
         })
 
@@ -146,11 +160,23 @@ async def daily_collect_and_deliver(
 
         # カテゴリごとに別メッセージ
         for category, blocks in digest.items():
-            await slack_client.chat_postMessage(  # type: ignore[attr-defined]
-                channel=channel_id,
-                text=f"【{category}】",
-                blocks=blocks,
-            )
+            try:
+                await slack_client.chat_postMessage(  # type: ignore[attr-defined]
+                    channel=channel_id,
+                    text=f"【{category}】",
+                    blocks=blocks,
+                )
+            except Exception:
+                # 画像ブロックが原因の場合、画像を除去してリトライ
+                blocks_without_images = [b for b in blocks if b.get("type") != "image"]
+                logger.warning(
+                    "Failed to post %s with images, retrying without images", category
+                )
+                await slack_client.chat_postMessage(  # type: ignore[attr-defined]
+                    channel=channel_id,
+                    text=f"【{category}】",
+                    blocks=blocks_without_images,
+                )
 
         # フッターメッセージ
         await slack_client.chat_postMessage(  # type: ignore[attr-defined]

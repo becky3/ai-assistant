@@ -109,7 +109,7 @@ async def test_deliver_keyword_triggers_manual_delivery() -> None:
     )
 
     say = AsyncMock()
-    event = {"user": "U123", "text": "<@UBOT> 配信テスト", "ts": "123.456"}
+    event = {"user": "U123", "text": "<@UBOT> deliver", "ts": "123.456"}
 
     mock_deliver = AsyncMock()
     with patch("src.scheduler.jobs.daily_collect_and_deliver", mock_deliver):

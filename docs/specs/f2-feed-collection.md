@@ -44,18 +44,22 @@ RSSフィードや特定サイトから学習関連の記事を自動収集し�
 
 2. カテゴリ別メッセージ（カテゴリ数分）:
 ```
-【Python】 — 2件の記事
-
-*asyncioの新機能がPython 3.13で追加*
-asyncioにTaskGroupが正式導入され...
-:link: <https://example.com/article1|記事を読む>
-
+📂 【Python】 — 2件の記事
 ───
-
-*型ヒントの最新ベストプラクティス*
-Python 3.12以降の型ヒント...
-:link: <https://example.com/article2|記事を読む>
+:newspaper: *<https://example.com/article1|asyncioの新機能がPython 3.13で追加>*
+[OGP画像（取得できた場合）]
+asyncioにTaskGroupが正式導入され...（要約全文）
+───
+:newspaper: *<https://example.com/article2|型ヒントの最新ベストプラクティス>*
+[OGP画像（取得できた場合）]
+Python 3.12以降の型ヒント...（要約全文）
 ```
+
+**カード構成:**
+- タイトルはリンク付き太字で表示（`:newspaper:` アイコン付き）
+- OGP画像がある場合は独立imageブロックとして表示（画像取得失敗時はスキップ）
+- 要約は全文表示（切り詰めなし）
+- 記事間はdividerで区切り
 
 3. フッターメッセージ（1通）:
 ```
@@ -68,7 +72,7 @@ Python 3.12以降の型ヒント...
 ### 手動配信テスト
 
 **入力:**
-- Slackでボットにメンション + キーワード（`配信テスト`, `テスト配信`, `deliver`）
+- Slackでボットにメンション + キーワード（`deliver`）
 
 **処理:**
 1. 「配信を開始します...」と応答
@@ -99,6 +103,7 @@ Python 3.12以降の型ヒント...
 - [ ] AC7: フィードの追加・削除・有効/無効切替ができる
 - [ ] AC8: RSS取得失敗時はエラーをログに記録し、他のフィードの処理を継続する
 - [ ] AC9: Slackメンション+キーワードで手動配信テストを実行できる
+- [ ] AC10: 記事収集時にOGP画像URLを取得し、Block Kitカードにサムネイルとして表示する
 
 ## 使用LLMプロバイダー
 
@@ -111,7 +116,8 @@ Python 3.12以降の型ヒント...
 
 | ファイル | 役割 |
 |---------|------|
-| `src/services/feed_collector.py` | RSS取得・新規記事判定 |
+| `src/services/ogp_extractor.py` | OGP画像URL抽出 |
+| `src/services/feed_collector.py` | RSS取得・新規記事判定・OGP画像取得統合 |
 | `src/services/summarizer.py` | ローカルLLMによる記事要約 |
 | `src/scheduler/jobs.py` | 毎朝の定期実行ジョブ |
 | `src/slack/handlers.py` | 情報源追加リクエストのハンドリング |

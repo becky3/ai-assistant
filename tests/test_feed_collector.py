@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.db.models import Article, Base, Feed
 from src.services.feed_collector import FeedCollector
+from src.services.ogp_extractor import OgpExtractor
 from src.services.summarizer import Summarizer
 
 
@@ -137,3 +138,49 @@ async def test_ac8_rss_failure_continues_other_feeds(db_factory) -> None:  # typ
     # bad フィードが失敗しても good フィードの記事は収集される
     assert len(articles) == 1
     assert articles[0].title == "Good"
+
+
+async def test_ac10_ogp_extractor_integration(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC10: OgpExtractorが統合され、image_urlが記事に設定される."""
+    summarizer = AsyncMock(spec=Summarizer)
+    summarizer.summarize.return_value = "要約"
+
+    ogp_extractor = AsyncMock(spec=OgpExtractor)
+    ogp_extractor.extract_image_url.return_value = "https://example.com/img.png"
+
+    collector = FeedCollector(
+        session_factory=db_factory,
+        summarizer=summarizer,
+        ogp_extractor=ogp_extractor,
+    )
+
+    parsed = _make_parsed_feed([
+        {"link": "https://example.com/ogp", "title": "OGP Test"},
+    ])
+
+    with patch("src.services.feed_collector.feedparser.parse", return_value=parsed):
+        with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
+            articles = await collector.collect_all()
+
+    assert len(articles) == 1
+    assert articles[0].image_url == "https://example.com/img.png"
+    ogp_extractor.extract_image_url.assert_called_once()
+
+
+async def test_ac10_no_ogp_extractor_backward_compat(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC10: OgpExtractor未指定時もimage_url=Noneで正常動作する."""
+    summarizer = AsyncMock(spec=Summarizer)
+    summarizer.summarize.return_value = "要約"
+
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    parsed = _make_parsed_feed([
+        {"link": "https://example.com/noimg", "title": "No Image"},
+    ])
+
+    with patch("src.services.feed_collector.feedparser.parse", return_value=parsed):
+        with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
+            articles = await collector.collect_all()
+
+    assert len(articles) == 1
+    assert articles[0].image_url is None
