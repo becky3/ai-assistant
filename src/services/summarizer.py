@@ -12,6 +12,10 @@ logger = logging.getLogger(__name__)
 
 SUMMARIZE_PROMPT = (
     "以下の記事タイトルとURLから、記事の内容を日本語で2〜3文で簡潔に要約してください。\n\n"
+    "【重要】前置き（「この記事では」「要約すると」など）は不要です。本文の内容をそのまま書いてください。\n\n"
+    "例:\n"
+    "良い例: asyncioにTaskGroupが正式導入され、エラーハンドリングが簡潔になりました。\n"
+    "悪い例: この記事では、asyncioにTaskGroupが正式導入された内容を解説しています。\n\n"
     "タイトル: {title}\nURL: {url}"
 )
 
