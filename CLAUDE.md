@@ -161,3 +161,24 @@ PRに対するレビュー指摘（Copilot、人間問わず）を修正した�
 **Windows環境での注意点**:
 - シェルスクリプト（`.sh`）は **LF 改行コード** で保存すること（CRLF だとエラー）
 - 改行コード変換: `cat file.sh | tr -d '\r' > file_tmp.sh && mv file_tmp.sh file.sh`
+
+## スキルの使用方法
+
+### ドキュメント生成 (doc-gen)
+```bash
+/doc-gen spec <feature-name>    # 仕様書生成（例: /doc-gen spec feed-collection）
+/doc-gen handover                # 引き継ぎ資料生成
+/doc-gen retro <feature-name>   # レトロスペクティブ生成（例: /doc-gen retro chat）
+```
+
+### ドキュメント編集 (doc-edit)
+```bash
+/doc-edit <file-path> [更新理由]  # 既存ドキュメントの編集
+# 例: /doc-edit docs/specs/f1-chat.md "AC追加"
+```
+
+### Copilotレビュー対応 (fix-copilot-reviews)
+```bash
+/fix-copilot-reviews [pr-number]  # PRの未解決レビュー指摘に対応
+# 例: /fix-copilot-reviews 42
+```

@@ -29,8 +29,12 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Claude Code
-# .claude directory is tracked for project configuration (skills, hooks, scripts)
+# Claude Code (プロジェクト設定を含め、個人設定を除外)
+# .claude directory is tracked for project configuration
+.claude/*
+!.claude/scripts/
+!.claude/skills/
+!.claude/settings.json
 
 # Testing
 .pytest_cache/

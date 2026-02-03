@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/scripts/notify.sh 確認が必要です 承認を待っています"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./.claude/scripts/notify.sh タスク完了 完了しました"
+          }
+        ]
+      }
+    ]
+  }
+}
