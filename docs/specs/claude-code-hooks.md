@@ -101,7 +101,7 @@ Claude Code の hooks 機能を使用して、ツール実行時やタスク完�
 ## 受け入れ条件
 
 - [x] AC1: `.claude/settings.json` に hooks が設定されている
-- [x] AC2: `.claude/scripts/notify.sh` が実装され、実行可能権限がある
+- [x] AC2: `.claude/scripts/notify.sh` が実装され、実行可能権限がある（クローン後に `chmod +x` が必要な場合あり）
 - [x] AC3: macOS環境でデスクトップ通知が表示される
 - [x] AC4: Linux環境で `notify-send` 通知が表示される
 - [x] AC5: Windows環境で PowerShell 通知が表示される
@@ -114,6 +114,7 @@ Claude Code の hooks 機能を使用して、ツール実行時やタスク完�
 - **環境依存**: 各環境での通知コマンド存在確認とフォールバック処理が必須
 - **設定の配置**: プロジェクト固有は `.claude/settings.json`、グローバルは `~/.claude/settings.json`
 - **Windows環境**: シェルスクリプトは LF 改行コードで保存すること（CRLF だとエラー）
+- **実行権限**: クローン後に `chmod +x .claude/scripts/notify.sh` が必要な場合がある（特にLinux/macOS）
 
 ## 実装の優先順位
 
