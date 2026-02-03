@@ -95,19 +95,38 @@ async def test_ac3_articles_are_summarized_by_local_llm(db_factory) -> None:  # 
     collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
 
     parsed = _make_parsed_feed([
-        {"link": "https://example.com/a", "title": "Test"},
+        {"link": "https://example.com/a", "title": "Test", "summary": "記事の概要"},
     ])
 
     with patch("src.services.feed_collector.feedparser.parse", return_value=parsed):
         with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
             await collector.collect_all()
 
-    summarizer.summarize.assert_called_once_with("Test", "https://example.com/a")
+    summarizer.summarize.assert_called_once_with("Test", "https://example.com/a", "記事の概要")
 
     async with db_factory() as session:
         result = await session.execute(select(Article).where(Article.url == "https://example.com/a"))
         article = result.scalar_one()
         assert article.summary == "LLMによる要約"
+
+
+async def test_ac3_description_fallback_when_no_summary(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC3: summaryが無くdescriptionのみの場合、descriptionがSummarizerに渡される."""
+    summarizer = AsyncMock(spec=Summarizer)
+    summarizer.summarize.return_value = "LLMによる要約"
+
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    # summaryキーなし、descriptionのみ
+    parsed = _make_parsed_feed([
+        {"link": "https://example.com/desc", "title": "Desc Test", "description": "descriptionの内容"},
+    ])
+
+    with patch("src.services.feed_collector.feedparser.parse", return_value=parsed):
+        with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
+            await collector.collect_all()
+
+    summarizer.summarize.assert_called_once_with("Desc Test", "https://example.com/desc", "descriptionの内容")
 
 
 async def test_ac8_rss_failure_continues_other_feeds(db_factory) -> None:  # type: ignore[no-untyped-def]

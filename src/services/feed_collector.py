@@ -81,13 +81,14 @@ class FeedCollector:
                     continue
 
                 title = entry.get("title", "")
+                description = entry.get("summary", "") or entry.get("description", "")
                 published_at = None
                 if hasattr(entry, "published_parsed") and entry.published_parsed:
                     published_at = datetime.fromtimestamp(
                         mktime(entry.published_parsed), tz=timezone.utc
                     )
 
-                summary = await self._summarizer.summarize(title, url)
+                summary = await self._summarizer.summarize(title, url, description)
 
                 image_url = None
                 if self._ogp_extractor:
