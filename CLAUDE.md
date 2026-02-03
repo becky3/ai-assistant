@@ -136,3 +136,45 @@ PRに対するレビュー指摘（Copilot、人間問わず）を修正した�
 ## 環境メモ（必要に応じて）
 - 特殊な環境設定やローカル固有の情報
 ```
+
+## Claude Code Hooks
+
+プロジェクトには Claude Code の hooks 機能を使った通知システムが設定されています。
+
+### 設定ファイル
+
+- **`.claude/hooks.json`**: イベント駆動の通知設定
+- **`.claude/scripts/notify.sh`**: クロスプラットフォーム対応の通知スクリプト
+
+### 対応イベント
+
+1. **`user-prompt-submit`**: ユーザーの確認が必要な時（最優先）
+2. **`task-completed`**: タスク完了時
+3. **`tool-call-approved`**: ツール実行承認時
+
+### 通知方式
+
+- **macOS**: `osascript` によるネイティブ通知 + サウンド
+- **Linux**: `notify-send` (libnotify) + オプションでサウンド
+- **Windows**: PowerShell によるバルーン通知
+- **フォールバック**: コンソールへのテキスト出力
+
+### カスタマイズ方法
+
+`.claude/hooks.json` を編集してイベントや通知内容を変更できます:
+
+```json
+{
+  "hooks": {
+    "user-prompt-submit": {
+      "command": ".claude/scripts/notify.sh",
+      "args": ["カスタムタイトル", "カスタムメッセージ"]
+    }
+  }
+}
+```
+
+### 参考資料
+
+- [Zenn記事: Claude Codeのhooks機能について](https://zenn.dev/is0383kk/articles/5d66a34b0a89be)
+- Issue #35: Hooks使って、確認時に音を鳴らす
