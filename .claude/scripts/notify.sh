@@ -1,5 +1,4 @@
 #!/bin/bash
-set -euo pipefail
 # Claude Code 通知スクリプト
 # 使用法: notify.sh <タイトル> <メッセージ>
 
@@ -57,4 +56,4 @@ if command -v powershell.exe &> /dev/null; then
 fi
 
 # フォールバック
-echo "🔔 [$TITLE] $MESSAGE" >&2
+echo "[$TITLE] $MESSAGE" >&2
