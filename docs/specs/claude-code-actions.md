@@ -53,7 +53,9 @@ GitHub PRやIssueで `@claude` メンションすることでClaude Codeを呼�
 ### セットアップ手順
 1. [Claude GitHub App](https://github.com/apps/claude) をリポジトリにインストール
 2. `claude setup-token` でOAuthトークンを取得
-3. リポジトリシークレット `CLAUDE_CODE_OAUTH_TOKEN` に登録
+3. **リポジトリシークレット**に `CLAUDE_CODE_OAUTH_TOKEN` を登録
+   - Settings → Secrets and variables → Actions → **Repository secrets**
+   - ⚠️ Environment secrets ではなく Repository secrets に設定すること
 
 ## セキュリティガード
 
