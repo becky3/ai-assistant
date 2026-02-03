@@ -44,6 +44,7 @@ GitHub PRやIssueで `@claude` メンションすることでClaude Codeを呼�
 - [x] AC2: becky3ユーザーのみ実行可能（セキュリティガード）
 - [x] AC3: OAuth認証でAPIアクセスする
 - [x] AC4: `--max-turns 30` でターン数を制限する
+- [x] AC6: `--dangerously-skip-permissions` でツール実行確認をスキップする
 - [x] AC5: ワークフローファイルが `.github/workflows/claude.yml` に配置される
 
 ## 認証方式
@@ -65,6 +66,7 @@ GitHub PRやIssueで `@claude` メンションすることでClaude Codeを呼�
 | イベントフィルタリング | `@claude` メンションがある場合のみ実行 |
 | トークン保護 | シークレット経由で参照（ハードコードしない） |
 | ターン制限 | `--max-turns 30` で無限ループ防止 |
+| フル権限 | `--dangerously-skip-permissions` で確認スキップ（ユーザー制限があるため許容） |
 
 ## 関連ファイル
 
