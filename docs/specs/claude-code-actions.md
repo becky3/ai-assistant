@@ -71,6 +71,13 @@ GitHub PRやIssueで `@claude` メンションすることでClaude Codeを呼�
 | `.github/workflows/claude.yml` | GitHub Actionsワークフロー定義 |
 | `CLAUDE.md` | プロジェクト固有のガイドライン（Claudeが参照） |
 
+## テスト方針
+
+- デプロイ後、テスト用Issueを作成して `@claude このリポジトリの概要を教えて` とコメント
+- Claudeがコメントで応答することを確認
+- GitHub Actions のログでワークフロー実行を確認
+- 許可されていないユーザー（becky3以外）からのメンションでワークフローがスキップされることを確認
+
 ## 参考資料
 
 - [Claude Code GitHub Actions 公式ドキュメント](https://code.claude.com/docs/en/github-actions)
