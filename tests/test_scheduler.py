@@ -204,3 +204,140 @@ def test_ac10_build_category_blocks_with_image() -> None:
     # 画像なし記事にはimageブロックなし（タイトル+要約の2 section）
     no_img_sections = [s for s in sections if "No Image" in s["text"]["text"]]
     assert len(no_img_sections) >= 1
+
+
+async def test_ac11_1_article_model_has_delivered_column(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC11.1: Article モデルに delivered カラムが追加されている."""
+    async with db_factory() as session:
+        result = await session.execute(select(Article))
+        article = result.scalar_one_or_none()
+        assert article is not None
+        assert hasattr(article, "delivered")
+        assert article.delivered is False  # デフォルト値
+
+
+async def test_ac11_2_query_retrieves_only_undelivered_articles(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC11.2: 配信対象クエリが delivered == False の記事のみを取得する."""
+    async with db_factory() as session:
+        feed_result = await session.execute(select(Feed))
+        feed = feed_result.scalar_one()
+
+        # 未配信記事を追加
+        undelivered = Article(
+            feed_id=feed.id,
+            title="Undelivered",
+            url="https://example.com/undelivered",
+            summary="undelivered summary",
+            delivered=False,
+        )
+        # 配信済み記事を追加
+        delivered = Article(
+            feed_id=feed.id,
+            title="Delivered",
+            url="https://example.com/delivered",
+            summary="delivered summary",
+            delivered=True,
+        )
+        session.add_all([undelivered, delivered])
+        await session.commit()
+
+        # 未配信記事のみ取得
+        result = await session.execute(
+            select(Article).where(Article.delivered == False)  # noqa: E712
+        )
+        articles = list(result.scalars().all())
+        titles = [a.title for a in articles]
+
+        assert "Undelivered" in titles
+        assert "Delivered" not in titles
+
+
+async def test_ac11_3_delivered_flag_updated_after_posting(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC11.3: Slack配信完了後、配信された記事の delivered が True に更新される."""
+    collector = AsyncMock()
+    collector.collect_all.return_value = []
+    slack_client = AsyncMock()
+
+    await daily_collect_and_deliver(
+        collector=collector,
+        session_factory=db_factory,
+        slack_client=slack_client,
+        channel_id="C123",
+    )
+
+    # 配信後、記事の delivered フラグが True になっていることを確認
+    async with db_factory() as session:
+        result = await session.execute(select(Article))
+        articles = list(result.scalars().all())
+        assert all(a.delivered is True for a in articles)
+
+
+async def test_ac11_4_no_redelivery_on_multiple_executions(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC11.4: deliver を複数回実行しても、既に配信済みの記事は再配信されない."""
+    collector = AsyncMock()
+    collector.collect_all.return_value = []
+    slack_client = AsyncMock()
+
+    # 1回目の配信
+    await daily_collect_and_deliver(
+        collector=collector,
+        session_factory=db_factory,
+        slack_client=slack_client,
+        channel_id="C123",
+    )
+    first_call_count = slack_client.chat_postMessage.call_count
+
+    # 2回目の配信（新規記事がない場合）
+    await daily_collect_and_deliver(
+        collector=collector,
+        session_factory=db_factory,
+        slack_client=slack_client,
+        channel_id="C123",
+    )
+    second_call_count = slack_client.chat_postMessage.call_count
+
+    # 1回目は配信されるが、2回目は配信されない
+    assert first_call_count == 3  # ヘッダー + カテゴリ + フッター
+    assert second_call_count == 3  # 増えない（新規投稿なし）
+
+
+async def test_ac11_5_new_articles_are_delivered(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC11.5: 新規収集された記事（delivered == False）は次回配信対象になる."""
+    collector = AsyncMock()
+    collector.collect_all.return_value = []
+    slack_client = AsyncMock()
+
+    # 1回目の配信
+    await daily_collect_and_deliver(
+        collector=collector,
+        session_factory=db_factory,
+        slack_client=slack_client,
+        channel_id="C123",
+    )
+    first_call_count = slack_client.chat_postMessage.call_count
+
+    # 新規記事を追加
+    async with db_factory() as session:
+        feed_result = await session.execute(select(Feed))
+        feed = feed_result.scalar_one()
+        new_article = Article(
+            feed_id=feed.id,
+            title="New Article",
+            url="https://example.com/new",
+            summary="new summary",
+            delivered=False,
+        )
+        session.add(new_article)
+        await session.commit()
+
+    # 2回目の配信（新規記事あり）
+    await daily_collect_and_deliver(
+        collector=collector,
+        session_factory=db_factory,
+        slack_client=slack_client,
+        channel_id="C123",
+    )
+    second_call_count = slack_client.chat_postMessage.call_count
+
+    # 新規記事が配信される
+    assert second_call_count > first_call_count

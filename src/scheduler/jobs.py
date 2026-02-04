@@ -10,7 +10,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.db.models import Article, Feed
@@ -125,23 +125,22 @@ async def daily_collect_and_deliver(
     try:
         await collector.collect_all()
 
-        since = datetime.now(tz=timezone.utc) - timedelta(hours=24)
         async with session_factory() as session:
             result = await session.execute(
-                select(Article).where(Article.collected_at >= since)
+                select(Article).where(Article.delivered == False)  # noqa: E712
             )
-            recent_articles = list(result.scalars().all())
+            undelivered_articles = list(result.scalars().all())
 
             feed_result = await session.execute(select(Feed))
             feeds = {f.id: f for f in feed_result.scalars().all()}
 
-        if not recent_articles:
+        if not undelivered_articles:
             logger.info("No new articles to deliver")
             return
 
         today = datetime.now(tz=DEFAULT_TZ).strftime("%Y-%m-%d")
         digest = format_daily_digest(
-            recent_articles, feeds, max_articles_per_category=max_articles_per_category
+            undelivered_articles, feeds, max_articles_per_category=max_articles_per_category
         )
         if not digest:
             return
@@ -202,7 +201,16 @@ async def daily_collect_and_deliver(
             ],
         )
 
-        logger.info("Delivered %d articles to %s", len(recent_articles), channel_id)
+        # 配信完了後、配信済みフラグを更新
+        async with session_factory() as session:
+            await session.execute(
+                update(Article)
+                .where(Article.id.in_([a.id for a in undelivered_articles]))
+                .values(delivered=True)
+            )
+            await session.commit()
+
+        logger.info("Delivered %d articles to %s", len(undelivered_articles), channel_id)
     except Exception:
         logger.exception("Error in daily_collect_and_deliver job")
 
