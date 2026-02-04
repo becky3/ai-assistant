@@ -24,7 +24,7 @@ class Feed(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
-    articles: Mapped[list[Article]] = relationship(back_populates="feed")
+    articles: Mapped[list[Article]] = relationship(back_populates="feed", cascade="all, delete-orphan")
 
 
 class Article(Base):

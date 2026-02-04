@@ -203,3 +203,213 @@ async def test_ac10_no_ogp_extractor_backward_compat(db_factory) -> None:  # typ
 
     assert len(articles) == 1
     assert articles[0].image_url is None
+
+
+# ===== AC7: フィード管理機能のテスト =====
+
+
+async def test_ac7_1_add_feed_with_category(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC7.1: フィードを追加できる（カテゴリ指定あり）."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    feed = await collector.add_feed("https://new.example.com/rss", "New Feed", "Python")
+
+    assert feed.url == "https://new.example.com/rss"
+    assert feed.name == "New Feed"
+    assert feed.category == "Python"
+    assert feed.enabled is True
+
+    # DB確認
+    async with db_factory() as session:
+        result = await session.execute(select(Feed).where(Feed.url == "https://new.example.com/rss"))
+        saved = result.scalar_one()
+        assert saved.category == "Python"
+
+
+async def test_ac7_2_add_multiple_feeds(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC7.2: 複数フィードを一括追加できる（複数add_feed呼び出し想定）."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    feed1 = await collector.add_feed("https://feed1.com/rss", "Feed 1", "Python")
+    feed2 = await collector.add_feed("https://feed2.com/rss", "Feed 2", "Python")
+
+    assert feed1.url == "https://feed1.com/rss"
+    assert feed2.url == "https://feed2.com/rss"
+
+    async with db_factory() as session:
+        result = await session.execute(select(Feed))
+        all_feeds = list(result.scalars().all())
+        # 初期フィード(Test Feed) + feed1 + feed2 = 3件
+        assert len(all_feeds) == 3
+
+
+async def test_ac7_3_list_feeds_classified(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC7.3: フィード一覧を有効/無効で分類表示できる."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    # 無効フィードを追加
+    async with db_factory() as session:
+        session.add(Feed(url="https://disabled.com/rss", name="Disabled", enabled=False))
+        await session.commit()
+
+    enabled, disabled = await collector.list_feeds()
+
+    assert len(enabled) == 1  # 初期の Test Feed
+    assert enabled[0].url == "https://example.com/rss"
+    assert len(disabled) == 1
+    assert disabled[0].url == "https://disabled.com/rss"
+
+
+async def test_ac7_4_delete_feed_cascades_articles(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC7.4: フィード削除時に関連記事もCASCADE削除される."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    # 記事を追加
+    async with db_factory() as session:
+        feed_result = await session.execute(select(Feed))
+        feed = feed_result.scalar_one()
+        session.add(Article(feed_id=feed.id, title="Test Article", url="https://example.com/a"))
+        await session.commit()
+
+    # フィードを削除
+    await collector.delete_feed("https://example.com/rss")
+
+    # フィードが削除されたことを確認
+    async with db_factory() as session:
+        feed_result = await session.execute(select(Feed).where(Feed.url == "https://example.com/rss"))
+        assert feed_result.scalar_one_or_none() is None
+
+        # 関連記事も削除されたことを確認
+        article_result = await session.execute(select(Article))
+        articles = list(article_result.scalars().all())
+        assert len(articles) == 0
+
+
+async def test_ac7_5_delete_multiple_feeds(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC7.5: 複数フィードを一括削除できる（複数delete_feed呼び出し想定）."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    # 複数フィードを追加
+    await collector.add_feed("https://feed1.com/rss", "Feed 1")
+    await collector.add_feed("https://feed2.com/rss", "Feed 2")
+
+    # 複数削除
+    await collector.delete_feed("https://feed1.com/rss")
+    await collector.delete_feed("https://feed2.com/rss")
+
+    async with db_factory() as session:
+        result = await session.execute(select(Feed))
+        all_feeds = list(result.scalars().all())
+        # 初期フィード(Test Feed)のみ残る
+        assert len(all_feeds) == 1
+        assert all_feeds[0].url == "https://example.com/rss"
+
+
+async def test_ac7_6_enable_feed(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC7.6: フィードを有効化できる."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    # 無効フィードを追加
+    async with db_factory() as session:
+        session.add(Feed(url="https://disabled.com/rss", name="Disabled", enabled=False))
+        await session.commit()
+
+    await collector.enable_feed("https://disabled.com/rss")
+
+    async with db_factory() as session:
+        result = await session.execute(select(Feed).where(Feed.url == "https://disabled.com/rss"))
+        feed = result.scalar_one()
+        assert feed.enabled is True
+
+
+async def test_ac7_7_disable_feed(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC7.7: フィードを無効化できる."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    await collector.disable_feed("https://example.com/rss")
+
+    async with db_factory() as session:
+        result = await session.execute(select(Feed).where(Feed.url == "https://example.com/rss"))
+        feed = result.scalar_one()
+        assert feed.enabled is False
+
+
+async def test_ac7_8_enable_disable_multiple_feeds(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC7.8: 複数フィードを一括で有効化/無効化できる."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    # 複数フィードを追加
+    await collector.add_feed("https://feed1.com/rss", "Feed 1")
+    await collector.add_feed("https://feed2.com/rss", "Feed 2")
+
+    # 複数無効化
+    await collector.disable_feed("https://feed1.com/rss")
+    await collector.disable_feed("https://feed2.com/rss")
+
+    async with db_factory() as session:
+        result = await session.execute(select(Feed).where(Feed.url.in_(["https://feed1.com/rss", "https://feed2.com/rss"])))
+        feeds = list(result.scalars().all())
+        assert all(not f.enabled for f in feeds)
+
+    # 複数有効化
+    await collector.enable_feed("https://feed1.com/rss")
+    await collector.enable_feed("https://feed2.com/rss")
+
+    async with db_factory() as session:
+        result = await session.execute(select(Feed).where(Feed.url.in_(["https://feed1.com/rss", "https://feed2.com/rss"])))
+        feeds = list(result.scalars().all())
+        assert all(f.enabled for f in feeds)
+
+
+async def test_ac7_9_duplicate_url_error(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC7.9: 重複URLの追加時にValueErrorが発生する."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    with pytest.raises(ValueError, match="既に登録されています"):
+        await collector.add_feed("https://example.com/rss", "Duplicate")
+
+
+async def test_ac7_10_nonexistent_feed_delete_error(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC7.10: 存在しないフィードの削除時にValueErrorが発生する."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    with pytest.raises(ValueError, match="登録されていません"):
+        await collector.delete_feed("https://nonexistent.com/rss")
+
+
+async def test_ac7_11_nonexistent_feed_enable_error(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC7.11: 存在しないフィードの有効化時にValueErrorが発生する."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    with pytest.raises(ValueError, match="登録されていません"):
+        await collector.enable_feed("https://nonexistent.com/rss")
+
+
+async def test_ac7_12_nonexistent_feed_disable_error(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC7.12: 存在しないフィードの無効化時にValueErrorが発生する."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    with pytest.raises(ValueError, match="登録されていません"):
+        await collector.disable_feed("https://nonexistent.com/rss")
+
+
+async def test_ac7_13_add_feed_default_category(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC7.13: カテゴリ省略時はデフォルトカテゴリ「一般」が設定される."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    feed = await collector.add_feed("https://default.com/rss", "Default Feed")
+
+    assert feed.category == "一般"

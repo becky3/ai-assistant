@@ -115,3 +115,98 @@ class FeedCollector:
             articles.extend(new_articles)
 
         return articles
+
+    async def add_feed(self, url: str, name: str, category: str = "一般") -> Feed:
+        """フィードを追加する.
+
+        Args:
+            url: RSSフィードのURL
+            name: フィード名
+            category: カテゴリ名（デフォルト: "一般"）
+
+        Returns:
+            追加されたFeedオブジェクト
+
+        Raises:
+            ValueError: URLが既に登録されている場合
+        """
+        async with self._session_factory() as session:
+            # 重複チェック
+            result = await session.execute(select(Feed).where(Feed.url == url))
+            existing = result.scalar_one_or_none()
+            if existing:
+                raise ValueError("既に登録されています")
+
+            feed = Feed(url=url, name=name, category=category, enabled=True)
+            session.add(feed)
+            await session.commit()
+            await session.refresh(feed)
+            return feed
+
+    async def delete_feed(self, url: str) -> None:
+        """フィードを削除する（関連記事も CASCADE 削除される）.
+
+        Args:
+            url: 削除するRSSフィードのURL
+
+        Raises:
+            ValueError: URLが見つからない場合
+        """
+        async with self._session_factory() as session:
+            result = await session.execute(select(Feed).where(Feed.url == url))
+            feed = result.scalar_one_or_none()
+            if not feed:
+                raise ValueError("登録されていません")
+
+            await session.delete(feed)
+            await session.commit()
+
+    async def enable_feed(self, url: str) -> None:
+        """フィードを有効化する.
+
+        Args:
+            url: 有効化するRSSフィードのURL
+
+        Raises:
+            ValueError: URLが見つからない場合
+        """
+        async with self._session_factory() as session:
+            result = await session.execute(select(Feed).where(Feed.url == url))
+            feed = result.scalar_one_or_none()
+            if not feed:
+                raise ValueError("登録されていません")
+
+            feed.enabled = True
+            await session.commit()
+
+    async def disable_feed(self, url: str) -> None:
+        """フィードを無効化する.
+
+        Args:
+            url: 無効化するRSSフィードのURL
+
+        Raises:
+            ValueError: URLが見つからない場合
+        """
+        async with self._session_factory() as session:
+            result = await session.execute(select(Feed).where(Feed.url == url))
+            feed = result.scalar_one_or_none()
+            if not feed:
+                raise ValueError("登録されていません")
+
+            feed.enabled = False
+            await session.commit()
+
+    async def list_feeds(self) -> tuple[list[Feed], list[Feed]]:
+        """全フィードを有効/無効で分類して取得する.
+
+        Returns:
+            (有効フィードリスト, 無効フィードリスト) のタプル
+        """
+        async with self._session_factory() as session:
+            result = await session.execute(select(Feed))
+            all_feeds = list(result.scalars().all())
+
+        enabled = [f for f in all_feeds if f.enabled]
+        disabled = [f for f in all_feeds if not f.enabled]
+        return (enabled, disabled)

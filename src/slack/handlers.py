@@ -8,6 +8,7 @@ import asyncio
 import logging
 import re
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
 
 from slack_bolt.async_app import AsyncApp
 
@@ -25,11 +26,149 @@ logger = logging.getLogger(__name__)
 _PROFILE_KEYWORDS = ("プロファイル", "プロフィール", "profile")
 _TOPIC_KEYWORDS = ("おすすめ", "トピック", "何を学ぶ", "何学ぶ", "学習提案", "recommend")
 _DELIVER_KEYWORDS = ("deliver",)
+_FEED_KEYWORDS = ("feed",)
 
 
 def strip_mention(text: str) -> str:
     """メンション部分 (<@U...>) を除去する."""
     return re.sub(r"<@[A-Za-z0-9]+>\s*", "", text).strip()
+
+
+def _parse_feed_command(text: str) -> tuple[str, list[str], str]:
+    """feedコマンドを解析する.
+
+    Args:
+        text: "feed add https://example.com/rss Python" のようなコマンド文字列
+
+    Returns:
+        (サブコマンド, URLリスト, カテゴリ名) のタプル
+        カテゴリ名は add の場合のみ使用されるが、全コマンドで解析される。カテゴリトークンが無い場合は「一般」となる。
+    """
+    tokens = text.split()
+    if len(tokens) < 2:
+        return ("", [], "")
+
+    subcommand = tokens[1].lower()
+    urls: list[str] = []
+    category_tokens: list[str] = []
+
+    for token in tokens[2:]:
+        # Slackは URL を <https://...|label> 形式に変換するため除去
+        cleaned = token.strip("<>")
+        if "|" in cleaned:
+            cleaned = cleaned.split("|")[0]
+
+        if cleaned.startswith("http://") or cleaned.startswith("https://"):
+            parsed_url = urlparse(cleaned)
+            if parsed_url.netloc:
+                urls.append(cleaned)
+            # ドメインなしの不正URLは無視（カテゴリにも追加しない）
+        else:
+            category_tokens.append(token)
+
+    category = " ".join(category_tokens) if category_tokens else "一般"
+    return (subcommand, urls, category)
+
+
+async def _handle_feed_add(
+    collector: FeedCollector, urls: list[str], category: str
+) -> str:
+    """フィード追加処理."""
+    if not urls:
+        return "エラー: URLを指定してください。\n例: `@bot feed add https://example.com/rss Python`"
+
+    results: list[str] = []
+    for url in urls:
+        try:
+            feed = await collector.add_feed(url, url, category)
+            results.append(f"✅ {feed.url} を追加しました（カテゴリ: {feed.category}）")
+        except ValueError as e:
+            results.append(f"❌ {url}: {e}")
+        except Exception:
+            logger.exception("Failed to add feed: %s", url)
+            results.append(f"❌ {url}: 追加中にエラーが発生しました")
+
+    return "\n".join(results)
+
+
+async def _handle_feed_list(collector: FeedCollector) -> str:
+    """フィード一覧表示処理."""
+    enabled, disabled = await collector.list_feeds()
+
+    if not enabled and not disabled:
+        return "フィードが登録されていません"
+
+    lines: list[str] = []
+    if enabled:
+        lines.append("*有効なフィード*")
+        for feed in enabled:
+            lines.append(f"• {feed.url} — {feed.category}")
+    else:
+        lines.append("有効なフィードはありません")
+
+    if disabled:
+        lines.append("\n*無効なフィード*")
+        for feed in disabled:
+            lines.append(f"• {feed.url} — {feed.category}")
+
+    return "\n".join(lines)
+
+
+async def _handle_feed_delete(collector: FeedCollector, urls: list[str]) -> str:
+    """フィード削除処理."""
+    if not urls:
+        return "エラー: URLを指定してください。\n例: `@bot feed delete https://example.com/rss`"
+
+    results: list[str] = []
+    for url in urls:
+        try:
+            await collector.delete_feed(url)
+            results.append(f"✅ {url} を削除しました")
+        except ValueError as e:
+            results.append(f"❌ {url}: {e}")
+        except Exception:
+            logger.exception("Failed to delete feed: %s", url)
+            results.append(f"❌ {url}: 削除中にエラーが発生しました")
+
+    return "\n".join(results)
+
+
+async def _handle_feed_enable(collector: FeedCollector, urls: list[str]) -> str:
+    """フィード有効化処理."""
+    if not urls:
+        return "エラー: URLを指定してください。\n例: `@bot feed enable https://example.com/rss`"
+
+    results: list[str] = []
+    for url in urls:
+        try:
+            await collector.enable_feed(url)
+            results.append(f"✅ {url} を有効化しました")
+        except ValueError as e:
+            results.append(f"❌ {url}: {e}")
+        except Exception:
+            logger.exception("Failed to enable feed: %s", url)
+            results.append(f"❌ {url}: 有効化中にエラーが発生しました")
+
+    return "\n".join(results)
+
+
+async def _handle_feed_disable(collector: FeedCollector, urls: list[str]) -> str:
+    """フィード無効化処理."""
+    if not urls:
+        return "エラー: URLを指定してください。\n例: `@bot feed disable https://example.com/rss`"
+
+    results: list[str] = []
+    for url in urls:
+        try:
+            await collector.disable_feed(url)
+            results.append(f"✅ {url} を無効化しました")
+        except ValueError as e:
+            results.append(f"❌ {url}: {e}")
+        except Exception:
+            logger.exception("Failed to disable feed: %s", url)
+            results.append(f"❌ {url}: 無効化中にエラーが発生しました")
+
+    return "\n".join(results)
 
 
 def register_handlers(
@@ -67,6 +206,37 @@ def register_handlers(
                     text="まだプロファイル情報がありません。会話を続けると自動的に記録されます！",
                     thread_ts=thread_ts,
                 )
+            return
+
+        # feedコマンド (F2 - AC7)
+        lower_text = cleaned_text.lower().lstrip()
+        if collector is not None and any(
+            re.match(rf"^{re.escape(kw)}\b", lower_text) for kw in _FEED_KEYWORDS
+        ):
+            subcommand, urls, category = _parse_feed_command(cleaned_text)
+
+            if subcommand == "add":
+                response_text = await _handle_feed_add(collector, urls, category)
+            elif subcommand == "list":
+                response_text = await _handle_feed_list(collector)
+            elif subcommand == "delete":
+                response_text = await _handle_feed_delete(collector, urls)
+            elif subcommand == "enable":
+                response_text = await _handle_feed_enable(collector, urls)
+            elif subcommand == "disable":
+                response_text = await _handle_feed_disable(collector, urls)
+            else:
+                response_text = (
+                    "使用方法:\n"
+                    "• `@bot feed add <URL> [カテゴリ]` — フィード追加\n"
+                    "• `@bot feed list` — フィード一覧\n"
+                    "• `@bot feed delete <URL>` — フィード削除\n"
+                    "• `@bot feed enable <URL>` — フィード有効化\n"
+                    "• `@bot feed disable <URL>` — フィード無効化\n"
+                    "※ URL・カテゴリは複数指定可能（スペース区切り）"
+                )
+
+            await say(text=response_text, thread_ts=thread_ts)  # type: ignore[operator]
             return
 
         # 配信テストキーワード (F2)
