@@ -161,3 +161,17 @@ PRに対するレビュー指摘（Copilot、人間問わず）を修正した�
 **Windows環境での注意点**:
 - シェルスクリプト（`.sh`）は **LF 改行コード** で保存すること（CRLF だとエラー）
 - 改行コード変換: `cat file.sh | tr -d '\r' > file_tmp.sh && mv file_tmp.sh file.sh`
+
+## Claude Code サブエージェント
+
+プロジェクトには専門的なタスクを処理するサブエージェントが定義されています。
+
+**詳細な仕様**: 各サブエージェントの仕様書を参照してください。
+
+**利用可能なサブエージェント**:
+- **doc-reviewer**: 仕様書（`docs/specs/*.md`）の品質レビュー
+  - 仕様: `docs/specs/doc-review-agent.md`
+  - 使用例: `doc-reviewerサブエージェントを使用して docs/specs/f1-chat.md をレビューしてください`
+
+**サブエージェント定義ファイル**:
+- `.claude/agents/doc-reviewer.md`: doc-reviewerサブエージェント定義
