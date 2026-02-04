@@ -38,6 +38,7 @@ class Article(Base):
     published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     image_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     collected_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    delivered: Mapped[bool] = mapped_column(Boolean, default=False)
 
     feed: Mapped[Feed] = relationship(back_populates="articles")
 
