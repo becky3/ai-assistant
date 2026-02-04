@@ -181,6 +181,7 @@ def register_handlers(
     slack_client: object | None = None,
     channel_id: str | None = None,
     max_articles_per_category: int = 10,
+    feed_card_layout: str = "horizontal",
 ) -> None:
     """app_mention ハンドラを登録する."""
 
@@ -254,6 +255,7 @@ def register_handlers(
                 await daily_collect_and_deliver(
                     collector, session_factory, slack_client, channel_id,
                     max_articles_per_category=max_articles_per_category,
+                    layout=feed_card_layout,  # type: ignore[arg-type]
                 )
                 await say(text="配信が完了しました", thread_ts=thread_ts)  # type: ignore[operator]
             except Exception:

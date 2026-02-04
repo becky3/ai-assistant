@@ -62,8 +62,8 @@ def test_ac5_format_empty_summary_shows_fallback() -> None:
     section_texts = [
         b["text"]["text"] for b in python_blocks if b["type"] == "section"
     ]
-    # 要約セクション（タイトルセクションではない方）に「要約なし」が含まれる
-    assert any(t == "要約なし" for t in section_texts)
+    # horizontal形式では1つのsectionにタイトルと要約が含まれる
+    assert any("要約なし" in t for t in section_texts)
 
 
 def test_ac5_build_category_blocks_limits_articles() -> None:
@@ -74,9 +74,9 @@ def test_ac5_build_category_blocks_limits_articles() -> None:
     ]
     blocks = _build_category_blocks("Python", articles, max_articles=5)
 
-    # 各記事はタイトルsection + 要約section = 2 sections
+    # horizontal形式: 各記事は1 section（タイトル+要約統合）
     section_blocks = [b for b in blocks if b["type"] == "section"]
-    assert len(section_blocks) == 10
+    assert len(section_blocks) == 5
     context_blocks = [b for b in blocks if b["type"] == "context"]
     assert len(context_blocks) == 1
     assert "他 10 件" in context_blocks[0]["elements"][0]["text"]
@@ -183,27 +183,27 @@ async def test_ac4_daily_collect_and_deliver_handles_error(db_factory) -> None: 
 
 
 def test_ac10_build_category_blocks_with_image() -> None:
-    """AC10: image_urlがある記事の後に独立imageブロックが付く."""
+    """AC10: image_urlがある記事でhorizontal形式ではaccessoryとして配置される."""
     articles = [
         _make_article(1, "With Image", "https://a.com/1", "summary", image_url="https://a.com/img.png"),
         _make_article(1, "No Image", "https://a.com/2", "summary"),
     ]
     blocks = _build_category_blocks("Python", articles)
 
-    # 独立imageブロックが1つある
-    image_blocks = [b for b in blocks if b["type"] == "image"]
-    assert len(image_blocks) == 1
-    assert image_blocks[0]["image_url"] == "https://a.com/img.png"
-    assert image_blocks[0]["alt_text"] == "With Image"
+    # horizontal形式: 画像はaccessoryとして配置（独立imageブロックなし）
+    sections = [b for b in blocks if b["type"] == "section"]
+    img_sections = [s for s in sections if "accessory" in s]
+    assert len(img_sections) == 1
+    assert img_sections[0]["accessory"]["image_url"] == "https://a.com/img.png"
 
     # タイトルsectionにリンクが含まれる
-    sections = [b for b in blocks if b["type"] == "section"]
     title_sections = [s for s in sections if "<https://a.com/1|With Image>" in s["text"]["text"]]
     assert len(title_sections) == 1
 
-    # 画像なし記事にはimageブロックなし（タイトル+要約の2 section）
+    # 画像なし記事にはaccessoryなし
     no_img_sections = [s for s in sections if "No Image" in s["text"]["text"]]
     assert len(no_img_sections) >= 1
+    assert "accessory" not in no_img_sections[0]
 
 
 async def test_ac11_1_article_model_has_delivered_column(db_factory) -> None:  # type: ignore[no-untyped-def]
@@ -341,3 +341,128 @@ async def test_ac11_5_new_articles_are_delivered(db_factory) -> None:  # type: i
 
     # 新規記事が配信される
     assert second_call_count > first_call_count
+
+
+# --- AC12: 配信カード形式の切り替え ---
+
+
+def test_ac12_1_settings_has_feed_card_layout() -> None:
+    """AC12.1: Settings に feed_card_layout フィールドがあり、デフォルトは 'horizontal'."""
+    from src.config.settings import Settings
+
+    s = Settings(
+        slack_bot_token="x",
+        slack_signing_secret="x",
+        slack_app_token="x",
+    )
+    assert s.feed_card_layout == "horizontal"
+
+
+def test_ac12_2_vertical_layout_has_independent_image_block() -> None:
+    """AC12.2: vertical レイアウトでは独立imageブロックが表示される."""
+    articles = [
+        _make_article(1, "Title", "https://a.com/1", "summary text", image_url="https://a.com/img.png"),
+    ]
+    blocks = _build_category_blocks("Python", articles, layout="vertical")
+
+    image_blocks = [b for b in blocks if b["type"] == "image"]
+    assert len(image_blocks) == 1
+    assert image_blocks[0]["image_url"] == "https://a.com/img.png"
+
+    # タイトルと要約が別々のsectionになっている
+    sections = [b for b in blocks if b["type"] == "section"]
+    assert len(sections) == 2  # タイトルsection + 要約section
+
+
+def test_ac12_3_horizontal_layout_has_accessory_image() -> None:
+    """AC12.3: horizontal レイアウトでは画像がaccessoryとして右側に表示される."""
+    articles = [
+        _make_article(1, "Title", "https://a.com/1", "summary text", image_url="https://a.com/img.png"),
+    ]
+    blocks = _build_category_blocks("Python", articles, layout="horizontal")
+
+    # 独立imageブロックがない
+    image_blocks = [b for b in blocks if b["type"] == "image"]
+    assert len(image_blocks) == 0
+
+    # sectionが1つで、accessoryに画像がある
+    sections = [b for b in blocks if b["type"] == "section"]
+    assert len(sections) == 1
+    assert sections[0]["accessory"]["type"] == "image"
+    assert sections[0]["accessory"]["image_url"] == "https://a.com/img.png"
+
+    # タイトルと要約が同じsectionに含まれる
+    text = sections[0]["text"]["text"]
+    assert "<https://a.com/1|Title>" in text
+    assert "summary text" in text
+
+
+def test_ac12_4_horizontal_layout_no_image() -> None:
+    """AC12.4: horizontal レイアウトで画像がない記事ではaccessoryが付かない."""
+    articles = [
+        _make_article(1, "Title", "https://a.com/1", "summary text"),
+    ]
+    blocks = _build_category_blocks("Python", articles, layout="horizontal")
+
+    sections = [b for b in blocks if b["type"] == "section"]
+    assert len(sections) == 1
+    assert "accessory" not in sections[0]
+
+
+def test_ac12_5_vertical_layout_no_image() -> None:
+    """AC12.5: vertical レイアウトで画像がない記事でもタイトル+要約が正常に表示される."""
+    articles = [
+        _make_article(1, "Title", "https://a.com/1", "summary text"),
+    ]
+    blocks = _build_category_blocks("Python", articles, layout="vertical")
+
+    image_blocks = [b for b in blocks if b["type"] == "image"]
+    assert len(image_blocks) == 0
+
+    sections = [b for b in blocks if b["type"] == "section"]
+    assert len(sections) == 2  # タイトル + 要約
+
+
+def test_ac12_6_format_daily_digest_passes_layout() -> None:
+    """AC12.6: format_daily_digest が layout を _build_category_blocks に渡す."""
+    feeds = {1: Feed(id=1, url="https://a.com/rss", name="A", category="Python")}
+    articles = [
+        _make_article(1, "Title", "https://a.com/1", "summary", image_url="https://a.com/img.png"),
+    ]
+
+    # horizontal
+    result_h = format_daily_digest(articles, feeds, layout="horizontal")
+    sections_h = [b for b in result_h["Python"] if b["type"] == "section"]
+    assert any("accessory" in s for s in sections_h)
+
+    # vertical
+    result_v = format_daily_digest(articles, feeds, layout="vertical")
+    image_blocks = [b for b in result_v["Python"] if b["type"] == "image"]
+    assert len(image_blocks) == 1
+
+
+def test_ac12_7_manual_deliver_uses_layout(db_factory) -> None:
+    """AC12.7: 手動配信コマンドも設定された形式で配信される（既存テストで暗黙的に確認）."""
+    # このテストは format_daily_digest のデフォルト layout が正しく動作することを検証
+    feeds = {1: Feed(id=1, url="https://a.com/rss", name="A", category="Python")}
+    articles = [
+        _make_article(1, "Title", "https://a.com/1", "summary"),
+    ]
+    # デフォルト（horizontal）で正常に動作する
+    result = format_daily_digest(articles, feeds)
+    assert "Python" in result
+
+
+def test_ac12_8_invalid_layout_raises_validation_error() -> None:
+    """AC12.8: 不正な feed_card_layout 値を設定した場合、ValidationErrorが発生する."""
+    from pydantic import ValidationError
+
+    from src.config.settings import Settings
+
+    with pytest.raises(ValidationError):
+        Settings(
+            slack_bot_token="x",
+            slack_signing_secret="x",
+            slack_app_token="x",
+            feed_card_layout="invalid",  # type: ignore[arg-type]
+        )

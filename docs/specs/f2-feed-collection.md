@@ -55,10 +55,18 @@ asyncioにTaskGroupが正式導入され...（要約全文）
 Python 3.12以降の型ヒント...（要約全文）
 ```
 
-**カード構成:**
+**カード構成（`FEED_CARD_LAYOUT` で切り替え可能）:**
+
+横長形式 (`horizontal`, デフォルト):
+- タイトル+要約を1つのsectionにまとめ、OGP画像がある場合のみaccessoryとして右側に配置
+- 画像がない場合はテキストのみのsectionとして表示（画像取得失敗時も同様）
+
+縦長形式 (`vertical`):
 - タイトルはリンク付き太字で表示（`:newspaper:` アイコン付き）
 - OGP画像がある場合は独立imageブロックとして表示（画像取得失敗時はスキップ）
 - 要約は全文表示（切り詰めなし）
+
+共通:
 - 記事間はdividerで区切り
 
 3. フッターメッセージ（1通）:
@@ -68,6 +76,7 @@ Python 3.12以降の型ヒント...（要約全文）
 
 **設定値:**
 - `FEED_ARTICLES_PER_CATEGORY`: カテゴリあたりの最大表示件数（デフォルト10）
+- `FEED_CARD_LAYOUT`: 配信カードの表示形式（`"horizontal"` or `"vertical"`, デフォルト `"horizontal"`）
 
 ### 手動配信テスト
 
@@ -144,6 +153,15 @@ Python 3.12以降の型ヒント...（要約全文）
   - [ ] AC11.3: Slack配信完了後に対象記事の `delivered` を `True` に更新する
   - [ ] AC11.4: 複数回配信を実行しても配信済み記事は再配信されない
   - [ ] AC11.5: 新規収集された記事（`delivered == False`）は次回の配信対象になる
+- [ ] AC12: 配信カード形式を環境変数で切り替え可能にする
+  - [ ] AC12.1: `Settings` に `feed_card_layout` フィールドが追加され、デフォルトは `"horizontal"`
+  - [ ] AC12.2: `FEED_CARD_LAYOUT=vertical` の場合、縦長形式（タイトル→独立imageブロック→要約）で配信される
+  - [ ] AC12.3: `FEED_CARD_LAYOUT=horizontal` の場合、横長形式（タイトル+要約を1section、画像をaccessory）で配信される
+  - [ ] AC12.4: 横長形式では画像がない記事もaccessoryなしで正常に表示される
+  - [ ] AC12.5: 縦長形式では画像がない記事もタイトル+要約で正常に表示される
+  - [ ] AC12.6: `format_daily_digest` が layout を `_build_category_blocks` に渡す
+  - [ ] AC12.7: 手動配信コマンド（`deliver`）も設定された形式で配信される
+  - [ ] AC12.8: 不正な値を設定した場合、起動時にValidationErrorが発生する
 
 ## 使用LLMプロバイダー
 
@@ -156,6 +174,7 @@ Python 3.12以降の型ヒント...（要約全文）
 
 | ファイル | 役割 |
 |---------|------|
+| `src/config/settings.py` | `feed_card_layout` 設定フィールド |
 | `src/services/ogp_extractor.py` | OGP画像URL抽出 |
 | `src/services/feed_collector.py` | RSS取得・新規記事判定・OGP画像取得統合 |
 | `src/services/summarizer.py` | ローカルLLMによる記事要約 |
@@ -174,3 +193,4 @@ Python 3.12以降の型ヒント...（要約全文）
 - フィード管理CRUD操作のユニットテスト（追加・削除・有効化・無効化・一覧）
 - 配信済みフラグのユニットテスト: 記事作成時に delivered==False、配信後に delivered==True に更新されることを確認
 - 重複配信防止のエンドツーエンドテスト: 同じ記事セットで2回配信実行し、再配信が防止されることを確認
+- 配信カード形式テスト: vertical/horizontal 両形式のBlock Kit構造検証、画像あり/なしの検証、不正値のバリデーションエラー検証
