@@ -29,10 +29,86 @@ cp .env.example .env  # 各種トークン・APIキーを設定
 uv run python -m src.main
 ```
 
+## プロジェクト構造
+
+```
+src/
+  main.py           # エントリーポイント
+  config/settings.py # pydantic-settings による環境変数管理
+  db/models.py       # SQLAlchemy モデル (feeds, articles, user_profiles, conversations)
+  db/session.py      # DB接続・セッション管理
+  slack/app.py       # Slack Bolt AsyncApp 初期化
+  slack/handlers.py  # イベントハンドラ
+  llm/base.py        # LLMProvider ABC (全プロバイダーの共通インターフェース)
+  llm/openai_provider.py
+  llm/anthropic_provider.py
+  llm/lmstudio_provider.py  # OpenAI SDK で base_url を localhost:1234 に向ける
+  llm/factory.py     # プロバイダー生成ファクトリ
+  services/chat.py           # チャット応答 (オンラインLLM)
+  services/feed_collector.py # RSS収集
+  services/summarizer.py     # 記事要約 (ローカルLLM)
+  services/user_profiler.py  # 会話からユーザー情報抽出 (ローカルLLM)
+  services/topic_recommender.py # 学習トピック提案 (オンラインLLM)
+  scheduler/jobs.py  # APScheduler 毎朝の収集・配信ジョブ
+config/
+  assistant.yaml     # アシスタントの名前・性格・口調 (システムプロンプトに反映)
+docs/
+  specs/             # 機能仕様書 (実装の根拠)
+  retro/             # レトロスペクティブ記録
+  handover/          # 引き継ぎドキュメント
+.claude/
+  settings.json      # Claude Code 設定（hooks、サブエージェント定義など）
+  agents/            # サブエージェント定義ファイル
+  scripts/           # hooks用スクリプト
+```
+
+## 開発ガイドライン
+
+**開発を始める前に必ず [CLAUDE.md](CLAUDE.md) を読んでください。**
+
+CLAUDE.mdには以下の重要な情報が含まれています：
+- 仕様駆動開発のルール
+- コーディング規約
+- Git運用フロー
+- LLM使い分けルール
+- サブエージェントの使用方法
+- 引き継ぎドキュメントの運用
+
+### 開発フロー概要
+
+1. Issue・Milestoneの確認 (`gh milestone list`, `gh issue list`)
+2. 対象Issueの仕様書を読む (`docs/specs/`)
+3. ブランチ作成 (`feature/f{N}-{機能名}-#{Issue番号}`)
+4. 実装・テスト
+5. コミット (`feat(f{N}): 説明 (#{Issue番号})`)
+6. PR作成 (`gh pr create`)
+
+### テストと lint
+
+```bash
+# テスト実行
+uv run pytest
+
+# lint
+uv run ruff check .
+
+# 型チェック
+uv run mypy src
+```
+
 ## ドキュメント
 
+### 機能仕様
 - [全体仕様概要](docs/specs/overview.md)
 - [F1: チャット応答](docs/specs/f1-chat.md)
 - [F2: 情報収集・配信](docs/specs/f2-feed-collection.md)
 - [F3: ユーザー情報抽出](docs/specs/f3-user-profiling.md)
 - [F4: トピック提案](docs/specs/f4-topic-recommend.md)
+
+### Claude Code 関連
+- [Claude Code Hooks](docs/specs/claude-code-hooks.md)
+- [Claude Code Actions](docs/specs/claude-code-actions.md)
+- [Planner サブエージェント](docs/specs/planner-agent.md)
+- [Doc Reviewer サブエージェント](docs/specs/doc-review-agent.md)
+- [Test Runner サブエージェント](docs/specs/test-runner-agent.md)
+- [Doc Gen スキル](docs/specs/doc-gen-skill.md)
