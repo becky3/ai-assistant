@@ -39,44 +39,15 @@ permissionMode: default
 
 ### テスト実行パターン
 
-#### 1. 全テスト実行
+以下の実行パターンをサポートする。具体的なコマンド例はサブエージェント定義（`.claude/agents/test-runner.md`）を参照。
 
-すべてのテストケースを実行:
-```bash
-uv run pytest
-```
-
-#### 2. 特定ファイルのテスト実行
-
-指定されたテストファイルのみ実行:
-```bash
-uv run pytest tests/test_feed_collector.py
-```
-
-#### 3. 特定テストケースの実行
-
-関数名やパターンでテストを絞り込み:
-```bash
-uv run pytest tests/test_feed_collector.py::test_ac1_rss_feed_is_fetched_and_parsed
-uv run pytest -k "ac1"
-```
-
-#### 4. 詳細出力モード
-
-失敗時の詳細情報を表示:
-```bash
-uv run pytest -v
-uv run pytest -vv  # さらに詳細
-```
-
-#### 5. カバレッジ測定
-
-pytest-cov によるカバレッジレポート生成:
-```bash
-uv run pytest --cov=src --cov-report=term-missing
-```
-
-> **前提**: `pyproject.toml` の dev 依存に `pytest-cov>=5.0,<6` が含まれていること。
+| パターン | 説明 |
+|---------|------|
+| 全テスト実行 | すべてのテストケースを実行 |
+| 特定ファイル実行 | 指定されたテストファイルのみ実行 |
+| 特定テストケース実行 | 関数名やパターンでテストを絞り込み実行 |
+| 詳細出力モード | 失敗時の詳細情報を表示 |
+| カバレッジ測定 | pytest-cov によるカバレッジレポート生成（dev 依存に `pytest-cov>=5.0,<6` が必要） |
 
 ### 処理フロー
 
@@ -145,53 +116,24 @@ test-runnerサブエージェントでカバレッジを測定してください
 ```markdown
 ### テスト実行結果 ❌
 
-- **成功**: 33 passed
-- **失敗**: 2 failed
-- **実行時間**: 2.67s
+- **成功**: {N} passed
+- **失敗**: {M} failed
+- **実行時間**: {X.XX}s
 
 #### 失敗したテスト
 
-**1. tests/test_feed_collector.py::test_ac3_articles_are_summarized_by_local_llm**
+**{番号}. {テストファイル}::{テストケース名}**
 
-**エラー内容:**
-```
-AssertionError: assert 'mock summary' == '要約テスト'
-```
-
-**原因:**
-- テストでは `summarizer.summarize()` が "要約テスト" を返すことを期待しているが、実際には "mock summary" が返されている
-- モックの戻り値設定が誤っている可能性
-
-**修正案:**
-```python
-# tests/test_feed_collector.py:47
-summarizer.summarize.return_value = "要約テスト"  # 期待値に合わせる
-```
-
-**2. tests/test_chat_service.py::test_ac2_conversation_history_maintained**
-
-**エラー内容:**
-```
-TypeError: ChatService.__init__() missing 1 required positional argument: 'session_factory'
-```
-
-**原因:**
-- ChatService の初期化に `session_factory` 引数が必要だが、テストで渡していない
-- ChatService の仕様変更に対応していない
-
-**修正案:**
-```python
-# tests/test_chat_service.py:31
-service = ChatService(
-    llm=mock_provider,
-    session_factory=db_factory  # 追加
-)
-```
+**エラー内容:** エラーメッセージの引用
+**原因:** エラーの根本原因の分析
+**修正案:** ファイルパス・行番号付きの具体的な修正コード
 
 #### 次のステップ
 
-上記の修正を適用しますか？修正後に再度テストを実行します。
+修正を適用するかユーザーに確認
 ```
+
+> **注**: 失敗時レポートの詳細なフォーマットとサンプルはサブエージェント定義（`.claude/agents/test-runner.md`）を参照。
 
 ## 使用LLMプロバイダー
 
