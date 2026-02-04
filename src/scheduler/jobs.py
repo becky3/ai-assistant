@@ -10,7 +10,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.db.models import Article, Feed
@@ -203,9 +203,11 @@ async def daily_collect_and_deliver(
 
         # 配信完了後、配信済みフラグを更新
         async with session_factory() as session:
-            for article in undelivered_articles:
-                article.delivered = True
-                session.add(article)
+            await session.execute(
+                update(Article)
+                .where(Article.id.in_([a.id for a in undelivered_articles]))
+                .values(delivered=True)
+            )
             await session.commit()
 
         logger.info("Delivered %d articles to %s", len(undelivered_articles), channel_id)
