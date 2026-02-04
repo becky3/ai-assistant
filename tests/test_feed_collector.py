@@ -383,7 +383,7 @@ async def test_ac7_10_nonexistent_feed_delete_error(db_factory) -> None:  # type
     summarizer = AsyncMock(spec=Summarizer)
     collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
 
-    with pytest.raises(ValueError, match="が見つかりません"):
+    with pytest.raises(ValueError, match="登録されていません"):
         await collector.delete_feed("https://nonexistent.com/rss")
 
 
@@ -392,7 +392,7 @@ async def test_ac7_11_nonexistent_feed_enable_error(db_factory) -> None:  # type
     summarizer = AsyncMock(spec=Summarizer)
     collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
 
-    with pytest.raises(ValueError, match="が見つかりません"):
+    with pytest.raises(ValueError, match="登録されていません"):
         await collector.enable_feed("https://nonexistent.com/rss")
 
 
@@ -401,7 +401,7 @@ async def test_ac7_12_nonexistent_feed_disable_error(db_factory) -> None:  # typ
     summarizer = AsyncMock(spec=Summarizer)
     collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
 
-    with pytest.raises(ValueError, match="が見つかりません"):
+    with pytest.raises(ValueError, match="登録されていません"):
         await collector.disable_feed("https://nonexistent.com/rss")
 
 

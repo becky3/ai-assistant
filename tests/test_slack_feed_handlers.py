@@ -95,6 +95,26 @@ def test_parse_feed_command_invalid_url_no_domain() -> None:
     assert urls == []
 
 
+def test_parse_feed_command_slack_url_format() -> None:
+    """feedコマンド解析: Slack形式の<URL>を正しく解析する."""
+    subcommand, urls, category = _parse_feed_command(
+        "feed add <https://example.com/rss> Python"
+    )
+    assert subcommand == "add"
+    assert urls == ["https://example.com/rss"]
+    assert category == "Python"
+
+
+def test_parse_feed_command_slack_url_with_label() -> None:
+    """feedコマンド解析: Slack形式の<URL|label>を正しく解析する."""
+    subcommand, urls, category = _parse_feed_command(
+        "feed add <https://example.com/rss|example.com/rss>"
+    )
+    assert subcommand == "add"
+    assert urls == ["https://example.com/rss"]
+    assert category == "一般"
+
+
 @pytest.mark.asyncio
 async def test_handle_feed_add_success() -> None:
     """feedハンドラ: add成功."""
@@ -107,7 +127,7 @@ async def test_handle_feed_add_success() -> None:
     result = await _handle_feed_add(collector, ["https://example.com/rss"], "Python")
 
     collector.add_feed.assert_called_once_with("https://example.com/rss", "https://example.com/rss", "Python")
-    assert "✓" in result
+    assert "✅" in result
     assert "https://example.com/rss" in result
 
 
@@ -119,7 +139,7 @@ async def test_handle_feed_add_duplicate_error() -> None:
 
     result = await _handle_feed_add(collector, ["https://example.com/rss"], "Python")
 
-    assert "✗" in result
+    assert "❌" in result
     assert "既に登録されています" in result
 
 
@@ -136,7 +156,7 @@ async def test_handle_feed_add_multiple() -> None:
     )
 
     assert collector.add_feed.call_count == 2
-    assert result.count("✓") == 2
+    assert result.count("✅") == 2
 
 
 @pytest.mark.asyncio
@@ -181,19 +201,19 @@ async def test_handle_feed_delete_success() -> None:
     result = await _handle_feed_delete(collector, ["https://example.com/rss"])
 
     collector.delete_feed.assert_called_once_with("https://example.com/rss")
-    assert "✓" in result
+    assert "✅" in result
 
 
 @pytest.mark.asyncio
 async def test_handle_feed_delete_not_found() -> None:
     """feedハンドラ: delete存在しないURL."""
     collector = AsyncMock(spec=FeedCollector)
-    collector.delete_feed.side_effect = ValueError("が見つかりません")
+    collector.delete_feed.side_effect = ValueError("登録されていません")
 
     result = await _handle_feed_delete(collector, ["https://nonexistent.com/rss"])
 
-    assert "✗" in result
-    assert "が見つかりません" in result
+    assert "❌" in result
+    assert "登録されていません" in result
 
 
 @pytest.mark.asyncio
@@ -211,7 +231,7 @@ async def test_handle_feed_enable_success() -> None:
     result = await _handle_feed_enable(collector, ["https://example.com/rss"])
 
     collector.enable_feed.assert_called_once_with("https://example.com/rss")
-    assert "✓" in result
+    assert "✅" in result
 
 
 @pytest.mark.asyncio
@@ -229,7 +249,7 @@ async def test_handle_feed_disable_success() -> None:
     result = await _handle_feed_disable(collector, ["https://example.com/rss"])
 
     collector.disable_feed.assert_called_once_with("https://example.com/rss")
-    assert "✓" in result
+    assert "✅" in result
 
 
 @pytest.mark.asyncio

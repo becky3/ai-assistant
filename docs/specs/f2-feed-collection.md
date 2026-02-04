@@ -154,7 +154,7 @@ Python 3.12以降の型ヒント...（要約全文）
 | `src/services/feed_collector.py` | RSS取得・新規記事判定・OGP画像取得統合 |
 | `src/services/summarizer.py` | ローカルLLMによる記事要約 |
 | `src/scheduler/jobs.py` | 毎朝の定期実行ジョブ |
-| `src/slack/handlers.py` | 情報源追加リクエストのハンドリング |
+| `src/slack/handlers.py` | 情報源追加リクエスト・フィード管理コマンドのハンドリング |
 | `src/db/models.py` | feeds, articlesモデル |
 
 ## テスト方針
@@ -164,3 +164,5 @@ Python 3.12以降の型ヒント...（要約全文）
 - 重複排除ロジックのユニットテスト
 - スケジューラの起動・ジョブ登録をテスト
 - Slackメッセージフォーマットのスナップショットテスト
+- フィード管理コマンドのパース処理・ハンドラテスト
+- フィード管理CRUD操作のユニットテスト（追加・削除・有効化・無効化・一覧）

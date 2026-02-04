@@ -53,10 +53,15 @@ def _parse_feed_command(text: str) -> tuple[str, list[str], str]:
     category_tokens: list[str] = []
 
     for token in tokens[2:]:
-        if token.startswith("http://") or token.startswith("https://"):
-            parsed = urlparse(token)
-            if parsed.netloc:
-                urls.append(token)
+        # Slackは URL を <https://...|label> 形式に変換するため除去
+        cleaned = token.strip("<>")
+        if "|" in cleaned:
+            cleaned = cleaned.split("|")[0]
+
+        if cleaned.startswith("http://") or cleaned.startswith("https://"):
+            parsed_url = urlparse(cleaned)
+            if parsed_url.netloc:
+                urls.append(cleaned)
             else:
                 category_tokens.append(token)
         else:
@@ -77,12 +82,12 @@ async def _handle_feed_add(
     for url in urls:
         try:
             feed = await collector.add_feed(url, url, category)
-            results.append(f"✓ {feed.url} を追加しました（カテゴリ: {feed.category}）")
+            results.append(f"✅ {feed.url} を追加しました（カテゴリ: {feed.category}）")
         except ValueError as e:
-            results.append(f"✗ {url}: {e}")
+            results.append(f"❌ {url}: {e}")
         except Exception:
             logger.exception("Failed to add feed: %s", url)
-            results.append(f"✗ {url}: 追加中にエラーが発生しました")
+            results.append(f"❌ {url}: 追加中にエラーが発生しました")
 
     return "\n".join(results)
 
@@ -96,14 +101,14 @@ async def _handle_feed_list(collector: FeedCollector) -> str:
 
     lines: list[str] = []
     if enabled:
-        lines.append("**有効なフィード:**")
+        lines.append("*有効なフィード*")
         for feed in enabled:
             lines.append(f"• {feed.url} — {feed.category}")
     else:
         lines.append("有効なフィードはありません")
 
     if disabled:
-        lines.append("\n**無効なフィード:**")
+        lines.append("\n*無効なフィード*")
         for feed in disabled:
             lines.append(f"• {feed.url} — {feed.category}")
 
@@ -119,12 +124,12 @@ async def _handle_feed_delete(collector: FeedCollector, urls: list[str]) -> str:
     for url in urls:
         try:
             await collector.delete_feed(url)
-            results.append(f"✓ {url} を削除しました")
+            results.append(f"✅ {url} を削除しました")
         except ValueError as e:
-            results.append(f"✗ {url}: {e}")
+            results.append(f"❌ {url}: {e}")
         except Exception:
             logger.exception("Failed to delete feed: %s", url)
-            results.append(f"✗ {url}: 削除中にエラーが発生しました")
+            results.append(f"❌ {url}: 削除中にエラーが発生しました")
 
     return "\n".join(results)
 
@@ -138,12 +143,12 @@ async def _handle_feed_enable(collector: FeedCollector, urls: list[str]) -> str:
     for url in urls:
         try:
             await collector.enable_feed(url)
-            results.append(f"✓ {url} を有効化しました")
+            results.append(f"✅ {url} を有効化しました")
         except ValueError as e:
-            results.append(f"✗ {url}: {e}")
+            results.append(f"❌ {url}: {e}")
         except Exception:
             logger.exception("Failed to enable feed: %s", url)
-            results.append(f"✗ {url}: 有効化中にエラーが発生しました")
+            results.append(f"❌ {url}: 有効化中にエラーが発生しました")
 
     return "\n".join(results)
 
@@ -157,12 +162,12 @@ async def _handle_feed_disable(collector: FeedCollector, urls: list[str]) -> str
     for url in urls:
         try:
             await collector.disable_feed(url)
-            results.append(f"✓ {url} を無効化しました")
+            results.append(f"✅ {url} を無効化しました")
         except ValueError as e:
-            results.append(f"✗ {url}: {e}")
+            results.append(f"❌ {url}: {e}")
         except Exception:
             logger.exception("Failed to disable feed: %s", url)
-            results.append(f"✗ {url}: 無効化中にエラーが発生しました")
+            results.append(f"❌ {url}: 無効化中にエラーが発生しました")
 
     return "\n".join(results)
 

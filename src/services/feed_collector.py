@@ -135,7 +135,7 @@ class FeedCollector:
             result = await session.execute(select(Feed).where(Feed.url == url))
             existing = result.scalar_one_or_none()
             if existing:
-                raise ValueError(f"フィード {url} は既に登録されています")
+                raise ValueError("既に登録されています")
 
             feed = Feed(url=url, name=name, category=category, enabled=True)
             session.add(feed)
@@ -156,7 +156,7 @@ class FeedCollector:
             result = await session.execute(select(Feed).where(Feed.url == url))
             feed = result.scalar_one_or_none()
             if not feed:
-                raise ValueError(f"フィード {url} が見つかりません")
+                raise ValueError("登録されていません")
 
             await session.delete(feed)
             await session.commit()
@@ -174,7 +174,7 @@ class FeedCollector:
             result = await session.execute(select(Feed).where(Feed.url == url))
             feed = result.scalar_one_or_none()
             if not feed:
-                raise ValueError(f"フィード {url} が見つかりません")
+                raise ValueError("登録されていません")
 
             feed.enabled = True
             await session.commit()
@@ -192,7 +192,7 @@ class FeedCollector:
             result = await session.execute(select(Feed).where(Feed.url == url))
             feed = result.scalar_one_or_none()
             if not feed:
-                raise ValueError(f"フィード {url} が見つかりません")
+                raise ValueError("登録されていません")
 
             feed.enabled = False
             await session.commit()
