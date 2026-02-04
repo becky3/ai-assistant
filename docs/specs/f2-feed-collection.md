@@ -91,6 +91,20 @@ Python 3.12以降の型ヒント...（要約全文）
 **出力:**
 - 毎朝配信と同じBlock Kitメッセージが `SLACK_NEWS_CHANNEL_ID` に投稿される
 
+### 配信カード表示テスト（スクリプト）
+
+ダミー記事5件を使って配信カードの表示を確認するテストスクリプト。
+テスト後にダミーデータは自動でクリーンアップされる。
+
+```bash
+uv run python scripts/test_delivery.py              # .env の FEED_CARD_LAYOUT を使用
+uv run python scripts/test_delivery.py horizontal   # 横長形式を指定
+uv run python scripts/test_delivery.py vertical     # 縦長形式を指定
+```
+
+- 3カテゴリ（Python / 機械学習 / Web開発）のダミー記事5件（画像あり3件・なし2件）
+- 画像ダウンロードエラー時は画像なしで自動リトライ
+
 ### フィード管理（Slackコマンド）
 
 **入力:**
@@ -174,6 +188,7 @@ Python 3.12以降の型ヒント...（要約全文）
 
 | ファイル | 役割 |
 |---------|------|
+| `scripts/test_delivery.py` | 配信カード表示テスト用スクリプト |
 | `src/config/settings.py` | `feed_card_layout` 設定フィールド |
 | `src/services/ogp_extractor.py` | OGP画像URL抽出 |
 | `src/services/feed_collector.py` | RSS取得・新規記事判定・OGP画像取得統合 |

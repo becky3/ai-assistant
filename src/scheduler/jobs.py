@@ -191,6 +191,8 @@ async def daily_collect_and_deliver(
                     channel=channel_id,
                     text=f"【{category}】",
                     blocks=blocks,
+                    unfurl_links=False,
+                    unfurl_media=False,
                 )
             except Exception as exc:
                 error_msg = str(exc)
@@ -205,6 +207,8 @@ async def daily_collect_and_deliver(
                         channel=channel_id,
                         text=f"【{category}】",
                         blocks=blocks_without_images,
+                        unfurl_links=False,
+                        unfurl_media=False,
                     )
                 else:
                     logger.error("Failed to post %s: %s", category, error_msg)
