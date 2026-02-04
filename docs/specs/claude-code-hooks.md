@@ -38,6 +38,7 @@ Claude Code の hooks 機能を使用して、ツール実行時やタスク完�
     ],
     "PermissionRequest": [
       {
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
@@ -48,6 +49,7 @@ Claude Code の hooks 機能を使用して、ツール実行時やタスク完�
     ],
     "Stop": [
       {
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
