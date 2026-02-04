@@ -29,12 +29,6 @@ cp .env.example .env  # 各種トークン・APIキーを設定
 uv run python -m src.main
 ```
 
-## テスト
-
-```bash
-uv run pytest
-```
-
 ## プロジェクト構造
 
 ```
@@ -89,7 +83,7 @@ CLAUDE.mdには以下の重要な情報が含まれています：
 5. コミット (`feat(f{N}): 説明 (#{Issue番号})`)
 6. PR作成 (`gh pr create`)
 
-### テストとリント
+### テストと lint
 
 ```bash
 # テスト実行
