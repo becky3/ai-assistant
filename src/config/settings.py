@@ -50,6 +50,7 @@ class Settings(BaseSettings):
 
     # Feed delivery
     feed_articles_per_category: int = Field(default=10, ge=1)
+    feed_card_layout: Literal["vertical", "horizontal"] = "horizontal"
 
     # Database
     database_url: str = "sqlite+aiosqlite:///./learning_companion.db"

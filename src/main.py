@@ -82,6 +82,7 @@ async def main() -> None:
         slack_client=slack_client,
         channel_id=settings.slack_news_channel_id,
         max_articles_per_category=settings.feed_articles_per_category,
+        feed_card_layout=settings.feed_card_layout,
     )
 
     # Socket Mode で起動

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
@@ -25,8 +25,12 @@ def _build_category_blocks(
     category: str,
     articles: list[Article],
     max_articles: int = 10,
+    layout: Literal["vertical", "horizontal"] = "horizontal",
 ) -> list[dict[str, Any]]:
     """1カテゴリ分の Block Kit blocks を構築する."""
+    if layout not in ("vertical", "horizontal"):
+        msg = f"Invalid layout: {layout!r}. Must be 'vertical' or 'horizontal'."
+        raise ValueError(msg)
     display_articles = articles[:max_articles]
     blocks: list[dict[str, Any]] = [
         {
@@ -43,31 +47,53 @@ def _build_category_blocks(
         summary = (a.summary or "").strip()
         if not summary:
             summary = "要約なし"
-        # Slack Block Kit mrkdwnテキスト上限 (3000文字)
-        if len(summary) > 2900:
-            summary = summary[:2900] + "..."
 
-        # 記事番号付きタイトル（リンク付き）
-        blocks.append({
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f":newspaper: *<{a.url}|{a.title}>*",
-            },
-        })
-        if a.image_url:
+        if layout == "horizontal":
+            # 横長形式: タイトル+要約を1つのsectionにまとめ、画像をaccessoryとして右側配置
+            # タイトル部分の長さも加味して mrkdwn 上限 (3000文字) を超えないようにする
+            title_part = f":newspaper: *<{a.url}|{a.title}>*\n\n"
+            max_summary = 3000 - len(title_part) - 10  # 余裕を持たせる
+            if len(summary) > max_summary:
+                summary = summary[:max_summary] + "..."
+            section: dict[str, Any] = {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"{title_part}{summary}",
+                },
+            }
+            if a.image_url:
+                section["accessory"] = {
+                    "type": "image",
+                    "image_url": a.image_url,
+                    "alt_text": a.title,
+                }
+            blocks.append(section)
+        else:
+            # 縦長形式: タイトル→独立imageブロック→要約
+            # Slack Block Kit mrkdwnテキスト上限 (3000文字)
+            if len(summary) > 2900:
+                summary = summary[:2900] + "..."
             blocks.append({
-                "type": "image",
-                "image_url": a.image_url,
-                "alt_text": a.title,
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f":newspaper: *<{a.url}|{a.title}>*",
+                },
             })
-        blocks.append({
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": summary,
-            },
-        })
+            if a.image_url:
+                blocks.append({
+                    "type": "image",
+                    "image_url": a.image_url,
+                    "alt_text": a.title,
+                })
+            blocks.append({
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": summary,
+                },
+            })
 
         if i < len(display_articles) - 1:
             blocks.append({"type": "divider"})
@@ -90,6 +116,7 @@ def format_daily_digest(
     articles: list[Article],
     feeds: dict[int, Feed],
     max_articles_per_category: int = 10,
+    layout: Literal["vertical", "horizontal"] = "horizontal",
 ) -> dict[str, list[dict[str, Any]]]:
     """カテゴリ別にBlock Kit blocksを生成する.
 
@@ -107,7 +134,9 @@ def format_daily_digest(
         by_category.setdefault(category, []).append(article)
 
     return {
-        category: _build_category_blocks(category, cat_articles, max_articles_per_category)
+        category: _build_category_blocks(
+            category, cat_articles, max_articles_per_category, layout=layout,
+        )
         for category, cat_articles in by_category.items()
     }
 
@@ -118,6 +147,7 @@ async def daily_collect_and_deliver(
     slack_client: object,
     channel_id: str,
     max_articles_per_category: int = 10,
+    layout: Literal["vertical", "horizontal"] = "horizontal",
 ) -> None:
     """毎朝の収集・配信ジョブ."""
     logger.info("Starting daily feed collection and delivery")
@@ -140,7 +170,9 @@ async def daily_collect_and_deliver(
 
         today = datetime.now(tz=DEFAULT_TZ).strftime("%Y-%m-%d")
         digest = format_daily_digest(
-            undelivered_articles, feeds, max_articles_per_category=max_articles_per_category
+            undelivered_articles, feeds,
+            max_articles_per_category=max_articles_per_category,
+            layout=layout,
         )
         if not digest:
             return
@@ -167,12 +199,21 @@ async def daily_collect_and_deliver(
                     channel=channel_id,
                     text=f"【{category}】",
                     blocks=blocks,
+                    unfurl_links=False,
+                    unfurl_media=False,
                 )
             except Exception as exc:
                 error_msg = str(exc)
                 if "invalid_blocks" in error_msg or "downloading image" in error_msg:
                     # 画像ダウンロード失敗の場合、画像を除去してリトライ
-                    blocks_without_images = [b for b in blocks if b.get("type") != "image"]
+                    # 独立imageブロック除去 + section accessory画像も除去
+                    blocks_without_images = []
+                    for b in blocks:
+                        if b.get("type") == "image":
+                            continue
+                        if "accessory" in b:
+                            b = {k: v for k, v in b.items() if k != "accessory"}
+                        blocks_without_images.append(b)
                     logger.warning(
                         "Failed to post %s with images, retrying without images: %s",
                         category, error_msg,
@@ -181,6 +222,8 @@ async def daily_collect_and_deliver(
                         channel=channel_id,
                         text=f"【{category}】",
                         blocks=blocks_without_images,
+                        unfurl_links=False,
+                        unfurl_media=False,
                     )
                 else:
                     logger.error("Failed to post %s: %s", category, error_msg)
@@ -224,6 +267,7 @@ def setup_scheduler(
     minute: int = 0,
     tz: str = "Asia/Tokyo",
     max_articles_per_category: int = 10,
+    layout: Literal["vertical", "horizontal"] = "horizontal",
 ) -> AsyncIOScheduler:
     """スケジューラを設定して返す."""
     scheduler = AsyncIOScheduler(timezone=tz)
@@ -238,6 +282,7 @@ def setup_scheduler(
             "slack_client": slack_client,
             "channel_id": channel_id,
             "max_articles_per_category": max_articles_per_category,
+            "layout": layout,
         },
         id="daily_feed_job",
     )
