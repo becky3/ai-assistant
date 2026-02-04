@@ -91,7 +91,7 @@ Claude Code の hooks 機能を使用して、ツール実行時やタスク完�
 
 - **macOS**: `osascript` によるネイティブ通知 + サウンド
 - **Linux**: `notify-send` (libnotify) + オプションでサウンド
-- **Windows**: PowerShell によるバルーン通知
+- **Windows**: PowerShell によるバルーン通知（`pwsh` 優先、`powershell.exe` フォールバック）
 - **フォールバック**: 通知コマンドがない環境では `stderr` にテキスト出力
 
 **セキュリティ対策:**
@@ -132,6 +132,11 @@ Claude Code の hooks 機能を使用して、ツール実行時やタスク完�
 
 - **セキュリティ**: フックスクリプトは任意コマンド実行可能なため、信頼できるスクリプトのみ設定
 - **パフォーマンス**: 通知は非同期実行、Claude Code の動作を阻害しない
+  - **Windows 高速化**:
+    - `-NoProfile -NonInteractive` フラグで PowerShell の起動を高速化
+    - `pwsh`（PowerShell Core）を優先利用し、未インストール時は `powershell.exe` にフォールバック
+    - `ShowBalloonTip(3000)` は OS 側の表示タイムアウト（3秒）を設定
+    - `Start-Sleep` は 1 秒に短縮（`Dispose()` 前の最小待機時間）
 - **環境依存**: 各環境での通知コマンド存在確認とフォールバック処理が必須
 - **設定の配置**: プロジェクト固有は `.claude/settings.json`、グローバルは `~/.claude/settings.json`
 - **Windows環境**: シェルスクリプトは LF 改行コードで保存すること（CRLF だとエラー）
@@ -149,6 +154,12 @@ Claude Code の hooks 機能を使用して、ツール実行時やタスク完�
 - Windows対応
 - `Stop` イベント対応
 - 音による通知追加
+
+**Phase 2.1 (Windows 高速化)** — 完了:
+- PowerShell 起動オプション最適化
+- `Start-Sleep` 時間短縮
+- PowerShell Core 優先利用
+- ※詳細は「技術的な注意点」のパフォーマンスセクションを参照
 
 **Phase 3 (最適化)** — 未実装:
 - 通知のカスタマイズ設定

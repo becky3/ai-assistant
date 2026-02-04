@@ -27,12 +27,21 @@ if command -v notify-send &> /dev/null; then
 fi
 
 # Windows
-if command -v powershell.exe &> /dev/null; then
+# pwsh (PowerShell Core) を優先、なければ powershell.exe にフォールバック
+if command -v pwsh.exe &> /dev/null; then
+    PS_CMD="pwsh.exe"
+elif command -v powershell.exe &> /dev/null; then
+    PS_CMD="powershell.exe"
+fi
+
+if [ -n "${PS_CMD:-}" ]; then
     # Base64エンコードで引数を安全に渡す（インジェクション対策）
     TITLE_B64=$(echo -n "$TITLE" | base64)
     MESSAGE_B64=$(echo -n "$MESSAGE" | base64)
 
-    powershell.exe -Command "
+    # -NoProfile: プロファイル読み込みスキップで起動高速化
+    # -NonInteractive: 対話モード無効化
+    "$PS_CMD" -NoProfile -NonInteractive -Command "
         \$title = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('$TITLE_B64'))
         \$message = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('$MESSAGE_B64'))
         Add-Type -AssemblyName System.Windows.Forms
@@ -42,7 +51,7 @@ if command -v powershell.exe &> /dev/null; then
         \$notification.BalloonTipText = \$message
         \$notification.Visible = \$true
         \$notification.ShowBalloonTip(3000)
-        Start-Sleep -Seconds 3
+        Start-Sleep -Seconds 1
         \$notification.Dispose()
     " || echo "Warning: Windows notification failed" >&2
     exit 0
