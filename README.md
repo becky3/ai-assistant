@@ -89,7 +89,7 @@ CLAUDE.mdには以下の重要な情報が含まれています：
 # テスト実行
 uv run pytest
 
-# リント
+# lint
 uv run ruff check .
 
 # 型チェック
