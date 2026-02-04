@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import datetime, timezone
+from html import unescape
 from time import mktime
 
 import feedparser  # type: ignore[import-untyped]
@@ -18,6 +20,14 @@ from src.services.ogp_extractor import OgpExtractor
 from src.services.summarizer import Summarizer
 
 logger = logging.getLogger(__name__)
+
+
+def strip_html(text: str) -> str:
+    """HTMLタグを除去してプレーンテキストに変換する."""
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = unescape(text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
 
 
 class FeedCollector:
@@ -81,7 +91,9 @@ class FeedCollector:
                     continue
 
                 title = entry.get("title", "")
-                description = entry.get("summary", "") or entry.get("description", "")
+                description = strip_html(
+                    entry.get("summary", "") or entry.get("description", "")
+                )
                 published_at = None
                 if hasattr(entry, "published_parsed") and entry.published_parsed:
                     published_at = datetime.fromtimestamp(
