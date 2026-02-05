@@ -121,7 +121,8 @@ PRに対するレビュー指摘（Copilot、人間問わず）への対応は `
 | `/fix-copilot-reviews` | Copilotレビュー指摘の確認・修正対応 | `/fix-copilot-reviews` |
 
 **定義ファイル**: `.claude/skills/` 配下
-**仕様書**: `docs/specs/doc-gen-skill.md`（doc-gen, doc-edit 共通）
+**仕様書**: `docs/specs/doc-gen-skill.md`（`/doc-gen`, `/doc-edit` 用）
+**補足**: `/fix-copilot-reviews` は `.claude/skills/fix-copilot-reviews/SKILL.md` の定義のみで、`docs/specs/` 配下に専用の仕様書はありません。
 
 ### サブエージェント（自動委譲タスク）
 
