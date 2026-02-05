@@ -3,11 +3,11 @@
   "hooks": {
     "Notification": [
       {
-        "matcher": "*",
+        "matcher": "idle_prompt",
         "hooks": [
           {
             "type": "command",
-            "command": "./.claude/scripts/notify.sh 入力待ち 確認が必要です"
+            "command": "./.claude/scripts/notify.sh 入力待ち アイドル状態です"
           }
         ]
       }
