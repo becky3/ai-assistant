@@ -1,62 +1,6 @@
-# Learning Companion
+# Learning Companion — 開発ガイドライン
 
-Slack上で動作するAI学習支援アシスタント。ローカルLLMとオンラインLLMをタスクに応じて使い分け、コストを最適化する。
-
-## 技術スタック
-
-- Python 3.10+ / uv (パッケージ管理)
-- slack-bolt (AsyncApp, Socket Mode)
-- OpenAI SDK (OpenAI + LM Studio), Anthropic SDK
-- SQLite + SQLAlchemy (async: aiosqlite)
-- APScheduler, feedparser, pydantic-settings
-
-## セットアップ
-
-```bash
-uv sync
-cp .env.example .env  # 編集して各種トークン・APIキーを設定
-```
-
-## 起動
-
-```bash
-uv run python -m src.main
-```
-
-## テスト
-
-```bash
-uv run pytest
-```
-
-## プロジェクト構造
-
-```
-src/
-  main.py           # エントリーポイント
-  config/settings.py # pydantic-settings による環境変数管理
-  db/models.py       # SQLAlchemy モデル (feeds, articles, user_profiles, conversations)
-  db/session.py      # DB接続・セッション管理
-  slack/app.py       # Slack Bolt AsyncApp 初期化
-  slack/handlers.py  # イベントハンドラ
-  llm/base.py        # LLMProvider ABC (全プロバイダーの共通インターフェース)
-  llm/openai_provider.py
-  llm/anthropic_provider.py
-  llm/lmstudio_provider.py  # OpenAI SDK で base_url を localhost:1234 に向ける
-  llm/factory.py     # プロバイダー生成ファクトリ
-  services/chat.py           # チャット応答 (オンラインLLM)
-  services/feed_collector.py # RSS収集
-  services/summarizer.py     # 記事要約 (ローカルLLM)
-  services/user_profiler.py  # 会話からユーザー情報抽出 (ローカルLLM)
-  services/topic_recommender.py # 学習トピック提案 (オンラインLLM)
-  scheduler/jobs.py  # APScheduler 毎朝の収集・配信ジョブ
-config/
-  assistant.yaml     # アシスタントの名前・性格・口調 (システムプロンプトに反映)
-docs/
-  specs/             # 機能仕様書 (実装の根拠)
-  retro/             # レトロスペクティブ記録
-  handover/          # 引き継ぎドキュメント
-```
+> プロジェクトの概要・技術スタック・セットアップ手順・プロジェクト構造は [README.md](README.md) を参照してください。
 
 ## LLM使い分けルール
 
@@ -117,22 +61,24 @@ docs/
 6. **作成確認**: `gh pr view` でPRが正しく作成されたことを確認し、URLをユーザーに提示
 
 ### レビュー指摘対応
-PRに対するレビュー指摘（Copilot、人間問わず）を修正した場合、以下を確認すること:
+PRに対するレビュー指摘（Copilot、人間問わず）への対応は `/fix-copilot-reviews` スキルを使用する。
+手動対応する場合は以下を確認すること:
 1. **コード修正**: 指摘に対する修正を実施
 2. **テスト実行**: **test-runner サブエージェント** で全テストが通過することを確認
 3. **ドキュメント整合性チェック**: 修正内容が以下のドキュメントに影響しないか確認し、必要なら更新する
    - `docs/specs/` — 仕様・受け入れ条件に影響する変更の場合
-   - `docs/handover/` — 注意事項・判断メモに記載済みの内容が変わる場合（例: 手動手順が自動化された等）
+   - `docs/handover/` — 注意事項・判断メモに記載済みの内容が変わる場合
    - `CLAUDE.md` — 開発ルール・プロジェクト構造に影響する場合
-4. **ドキュメントレビュー**: `docs/specs/` に変更がある場合、**doc-reviewer サブエージェント** で変更した仕様書の品質レビューを実施
+4. **ドキュメントレビュー**: `docs/specs/` に変更がある場合、**doc-reviewer サブエージェント** で品質レビューを実施
 5. **コミット**: `fix: Copilotレビュー指摘対応 (PR #番号)` の形式でコミット
 
 ### レトロスペクティブ
-- 各機能の実装完了時に `docs/retro/f{N}-{機能名}.md` に振り返りを記録
+- 各機能の実装完了時に `/doc-gen retro <feature-name>` でレトロを生成
+- **ファイル命名**: `docs/retro/f{N}-{機能名}.md`
 - テンプレート・運用ルール自体の改善も行う
 
 ### 引き継ぎドキュメント (`docs/handover/`)
-作業を中断・交代する際に、次の作業者へ状況を伝えるためのドキュメントを残す。
+通常は `/doc-gen handover` で引き継ぎドキュメントを生成する。手動作成する場合は以下のルールに従うこと。
 
 **ファイル命名**: `YYYY-MM-DD-{内容}.md`（例: `2026-02-01-step1-complete.md`）
 
@@ -150,39 +96,49 @@ PRに対するレビュー指摘（Copilot、人間問わず）を修正した�
 - 特殊な環境設定やローカル固有の情報
 ```
 
-## Claude Code Hooks
+## Claude Code 拡張機能
+
+### Hooks
 
 プロジェクトには Claude Code の hooks 機能を使った通知システムが設定されています。
 
-**詳細な仕様**: `docs/specs/claude-code-hooks.md` を参照してください。
-
-**設定ファイル**:
-- `.claude/settings.json`: hooks 設定（イベント駆動の通知設定を含む）
-- `.claude/scripts/notify.sh`: クロスプラットフォーム対応の通知スクリプト
+- **仕様**: `docs/specs/claude-code-hooks.md`
+- **設定ファイル**: `.claude/settings.json`
+- **通知スクリプト**: `.claude/scripts/notify.sh`
 
 **Windows環境での注意点**:
 - シェルスクリプト（`.sh`）は **LF 改行コード** で保存すること（CRLF だとエラー）
 - 改行コード変換: `cat file.sh | tr -d '\r' > file_tmp.sh && mv file_tmp.sh file.sh`
 
-## Claude Code サブエージェント
+### スキル（ユーザー実行コマンド）
 
-プロジェクトには専門的なタスクを処理するサブエージェントが定義されています。
+スキルは `/スキル名` 形式でユーザーが直接呼び出すコマンドです。
 
-**詳細な仕様**: 各サブエージェントの仕様書を参照してください。
+| スキル | 用途 | 使用例 |
+|--------|------|--------|
+| `/doc-gen` | ドキュメント新規作成（仕様書・引き継ぎ・レトロ） | `/doc-gen spec feed-collection` |
+| `/doc-edit` | 既存ドキュメントの更新・修正 | `/doc-edit docs/specs/f2-feed-collection.md` |
+| `/fix-copilot-reviews` | Copilotレビュー指摘の確認・修正対応 | `/fix-copilot-reviews` |
 
-**利用可能なサブエージェント**:
-- **planner**: Issue・提案内容から実装計画を立案
-  - 仕様: `docs/specs/planner-agent.md`
-  - 使用例: `plannerサブエージェントを使用してIssue #42 の実装計画を立ててください`
-- **doc-reviewer**: 仕様書（`docs/specs/*.md`）と README.md の品質レビュー
-  - 仕様: `docs/specs/doc-review-agent.md`
-  - 使用例: `doc-reviewerサブエージェントを使用して docs/specs/f1-chat.md をレビューしてください`
-  - 使用例: `doc-reviewerサブエージェントを使用して README.md をレビューしてください`
-- **test-runner**: pytest による自動テスト実行・分析・修正提案
-  - 仕様: `docs/specs/test-runner-agent.md`
-  - 使用例: `test-runnerサブエージェントで全テストを実行してください`
+**定義ファイル**: `.claude/skills/` 配下
+**仕様書**: `docs/specs/doc-gen-skill.md`（doc-gen, doc-edit 共通）
 
-**サブエージェント定義ファイル**:
-- `.claude/agents/planner.md`: plannerサブエージェント定義
-- `.claude/agents/doc-reviewer.md`: doc-reviewerサブエージェント定義
-- `.claude/agents/test-runner.md`: test-runnerサブエージェント定義
+### サブエージェント（自動委譲タスク）
+
+サブエージェントは Claude が内部的に専門タスクを委譲する仕組みです。ユーザーから呼び出すこともできます。
+
+| サブエージェント | 用途 | 使用例 |
+|-----------------|------|--------|
+| **planner** | Issue・提案内容から実装計画を立案 | `plannerサブエージェントでIssue #42 の実装計画を立ててください` |
+| **doc-reviewer** | 仕様書・README.md の品質レビュー | `doc-reviewerサブエージェントで docs/specs/f1-chat.md をレビューしてください` |
+| **test-runner** | pytest によるテスト実行・分析・修正提案 | `test-runnerサブエージェントで全テストを実行してください` |
+
+**定義ファイル**: `.claude/agents/` 配下
+**仕様書**: `docs/specs/planner-agent.md`, `docs/specs/doc-review-agent.md`, `docs/specs/test-runner-agent.md`
+
+### スキルとサブエージェントの使い分け
+
+- **スキル**: ユーザーが `/コマンド名` で明示的に実行するワークフロー（ドキュメント生成、レビュー対応など）
+- **サブエージェント**: 実装作業中に Claude が自律的に呼び出す専門家（テスト実行、計画立案、品質レビューなど）
+
+例: レビュー指摘対応では `/fix-copilot-reviews` スキルが起動し、その中で **test-runner** や **doc-reviewer** サブエージェントが自動的に呼び出されます。
