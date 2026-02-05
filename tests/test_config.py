@@ -43,7 +43,11 @@ def test_ac2_all_config_sections_present() -> None:
 
 
 def test_ac3_assistant_yaml_loaded() -> None:
-    """AC3: assistant.yamlの読み込みユーティリティを含む."""
+    """AC3: assistant.yamlの読み込みユーティリティを含む.
+
+    assistant.yamlはユーザーが自由にカスタマイズするファイルのため、
+    具体的な値ではなく構造（必須キーの存在・型）のみ検証する。
+    """
     config = load_assistant_config(Path("config/assistant.yaml"))
-    assert config["name"] == "Manabu"
-    assert "personality" in config
+    assert isinstance(config["name"], str) and config["name"]
+    assert isinstance(config["personality"], str) and config["personality"]
