@@ -36,3 +36,4 @@ jobs:
           bot_name: "claude[bot]"
           bot_id: "209825114"
           claude_args: "--model claude-opus-4-5-20251101 --max-turns 30 --dangerously-skip-permissions"
+          show_full_output: true
