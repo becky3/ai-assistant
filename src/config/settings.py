@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,6 +27,19 @@ class Settings(BaseSettings):
     slack_signing_secret: str = ""
     slack_app_token: str = ""
     slack_news_channel_id: str = ""
+    slack_auto_reply_channels: list[str] = Field(default_factory=list)
+
+    @field_validator("slack_auto_reply_channels", mode="before")
+    @classmethod
+    def parse_auto_reply_channels(cls, v: Any) -> list[str]:
+        """カンマ区切りの文字列をリストに変換する."""
+        if isinstance(v, str):
+            if not v:
+                return []
+            return [ch.strip() for ch in v.split(",") if ch.strip()]
+        if isinstance(v, list):
+            return [str(item) for item in v]
+        return []
 
     # LLM Provider Selection (global online provider)
     online_llm_provider: Literal["openai", "anthropic"] = "openai"
