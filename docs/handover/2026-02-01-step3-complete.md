@@ -26,4 +26,4 @@
 - feedsテーブルのURL検証（SSRF対策）は管理者のみが登録する前提でスキップ。公開APIにする場合は要対応
 - `datetime` は全てUTC統一に修正済み。`format_daily_digest` のみ表示用に `ZoneInfo("Asia/Tokyo")` を使用
 - テストは全34件通過中
-- `/fix-copilot-reviews` スキルを `.claude/skills/` に追加済み（PR後のCopilotレビュー対応を自動化）
+- `/fix-reviews` スキルを `.claude/skills/` に追加済み（PR後のレビュー指摘対応を自動化）

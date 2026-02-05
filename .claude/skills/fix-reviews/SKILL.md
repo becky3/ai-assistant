@@ -1,6 +1,6 @@
 ---
-name: fix-copilot-reviews
-description: 現在のブランチのPRに対するCopilotの未解決レビュー指摘を確認し、妥当な指摘には修正対応する
+name: fix-reviews
+description: PRの未解決レビュー指摘を確認し、妥当な指摘には修正対応する
 user-invocable: true
 allowed-tools: Bash, Read, Edit, Write, Grep, Glob
 argument-hint: [pr-number]
@@ -8,7 +8,7 @@ argument-hint: [pr-number]
 
 ## タスク
 
-PRの未解決Copilotレビュー指摘を確認し、妥当な指摘に対応する。
+PRの未解決レビュー指摘を確認し、妥当な指摘に対応する。
 
 ## 手順
 
@@ -75,7 +75,7 @@ gh api graphql -f query='
    - Critical/Warning の指摘があれば修正し、再度 test-runner でテスト通過を確認
 
 10. 修正をコミット & push:
-   - コミットメッセージ: `fix: Copilotレビュー指摘対応 (PR #番号)`
+   - コミットメッセージ: `fix: レビュー指摘対応 (PR #番号)`
    - 変更内容を箇条書きでコミットメッセージに含める
    - ドキュメント更新がある場合はコミットメッセージにその旨も含める
 

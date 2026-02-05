@@ -61,7 +61,12 @@
 6. **作成確認**: `gh pr view` でPRが正しく作成されたことを確認し、URLをユーザーに提示
 
 ### レビュー指摘対応
-PRに対するレビュー指摘（Copilot、人間問わず）への対応は `/fix-copilot-reviews` スキルを使用する。
+PRに対するレビュー指摘（Copilot、人間問わず）への対応は `/fix-reviews` スキルを使用する。
+ユーザーが以下のような表現でレビュー対応を依頼した場合、自律的に `/fix-reviews` スキルを呼び出すこと:
+- 「指摘をチェックして」「レビューを確認して」「レビュー指摘に対応して」
+- 「コメントを修正して」「レビューコメントを直して」
+- 「Copilotの指摘を見て」「PRのフィードバックに対応して」
+
 手動対応する場合は以下を確認すること:
 1. **コード修正**: 指摘に対する修正を実施
 2. **テスト実行**: **test-runner サブエージェント** で全テストが通過することを確認
@@ -70,7 +75,7 @@ PRに対するレビュー指摘（Copilot、人間問わず）への対応は `
    - `docs/handover/` — 注意事項・判断メモに記載済みの内容が変わる場合
    - `CLAUDE.md` — 開発ルール・プロジェクト構造に影響する場合
 4. **ドキュメントレビュー**: `docs/specs/` に変更がある場合、**doc-reviewer サブエージェント** で品質レビューを実施
-5. **コミット**: `fix: Copilotレビュー指摘対応 (PR #番号)` の形式でコミット
+5. **コミット**: `fix: レビュー指摘対応 (PR #番号)` の形式でコミット
 
 ### レトロスペクティブ
 - 各機能の実装完了時に `/doc-gen retro <feature-name>` でレトロを生成
@@ -118,11 +123,11 @@ PRに対するレビュー指摘（Copilot、人間問わず）への対応は `
 |--------|------|--------|
 | `/doc-gen` | ドキュメント新規作成（仕様書・引き継ぎ・レトロ） | `/doc-gen spec feed-collection` |
 | `/doc-edit` | 既存ドキュメントの更新・修正 | `/doc-edit docs/specs/f2-feed-collection.md` |
-| `/fix-copilot-reviews` | Copilotレビュー指摘の確認・修正対応 | `/fix-copilot-reviews` |
+| `/fix-reviews` | PRレビュー指摘の確認・修正対応 | `/fix-reviews` |
 
 **定義ファイル**: `.claude/skills/` 配下
 **仕様書**: `docs/specs/doc-gen-skill.md`（`/doc-gen`, `/doc-edit` 用）
-**補足**: `/fix-copilot-reviews` は `.claude/skills/fix-copilot-reviews/SKILL.md` の定義のみで、`docs/specs/` 配下に専用の仕様書はありません。
+**補足**: `/fix-reviews` は `.claude/skills/fix-reviews/SKILL.md` の定義のみで、`docs/specs/` 配下に専用の仕様書はありません。
 
 ### サブエージェント（自動委譲タスク）
 
@@ -142,4 +147,4 @@ PRに対するレビュー指摘（Copilot、人間問わず）への対応は `
 - **スキル**: ユーザーが `/コマンド名` で明示的に実行するワークフロー（ドキュメント生成、レビュー対応など）
 - **サブエージェント**: 実装作業中に Claude が自律的に呼び出す専門家（テスト実行、計画立案、品質レビューなど）
 
-例: レビュー指摘対応では `/fix-copilot-reviews` スキルが起動し、その中で **test-runner** や **doc-reviewer** サブエージェントが自動的に呼び出されます。
+例: レビュー指摘対応では `/fix-reviews` スキルが起動し、その中で **test-runner** や **doc-reviewer** サブエージェントが自動的に呼び出されます。
