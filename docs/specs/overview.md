@@ -14,6 +14,7 @@ Learning Companionは、Slack上で動作するAI学習支援アシスタント�
 | F3 | ユーザー情報抽出 | 会話から興味・スキル・目標を抽出 | [f3-user-profiling.md](f3-user-profiling.md) |
 | F4 | トピック提案 | 収集情報+プロファイルから学習提案 | [f4-topic-recommend.md](f4-topic-recommend.md) |
 | F5 | MCP統合 | LLMが外部ツールを動的に呼び出すプロトコル統合 | [f5-mcp-integration.md](f5-mcp-integration.md) |
+| F6 | 特定チャンネル自動返信 | 指定チャンネルでメンションなしでも自動応答 | [f6-auto-reply.md](f6-auto-reply.md) |
 
 ## 3. 技術スタック
 

@@ -51,3 +51,39 @@ def test_ac3_assistant_yaml_loaded() -> None:
     config = load_assistant_config(Path("config/assistant.yaml"))
     assert isinstance(config["name"], str) and config["name"]
     assert isinstance(config["personality"], str) and config["personality"]
+
+
+# F6: get_auto_reply_channels のテスト
+def test_get_auto_reply_channels_empty_string(monkeypatch: pytest.MonkeyPatch) -> None:
+    """F6: 空文字列の場合は空リストを返す."""
+    monkeypatch.setenv("SLACK_AUTO_REPLY_CHANNELS", "")
+    s = Settings()
+    assert s.get_auto_reply_channels() == []
+
+
+def test_get_auto_reply_channels_single_channel(monkeypatch: pytest.MonkeyPatch) -> None:
+    """F6: 単一チャンネルIDが正しくパースされる."""
+    monkeypatch.setenv("SLACK_AUTO_REPLY_CHANNELS", "C0123456789")
+    s = Settings()
+    assert s.get_auto_reply_channels() == ["C0123456789"]
+
+
+def test_get_auto_reply_channels_multiple_channels(monkeypatch: pytest.MonkeyPatch) -> None:
+    """F6: カンマ区切りの複数チャンネルIDが正しくパースされる."""
+    monkeypatch.setenv("SLACK_AUTO_REPLY_CHANNELS", "C111,C222,C333")
+    s = Settings()
+    assert s.get_auto_reply_channels() == ["C111", "C222", "C333"]
+
+
+def test_get_auto_reply_channels_strips_whitespace(monkeypatch: pytest.MonkeyPatch) -> None:
+    """F6: チャンネルID周辺の空白がトリムされる."""
+    monkeypatch.setenv("SLACK_AUTO_REPLY_CHANNELS", "  C111 , C222  ,  C333  ")
+    s = Settings()
+    assert s.get_auto_reply_channels() == ["C111", "C222", "C333"]
+
+
+def test_get_auto_reply_channels_filters_empty_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
+    """F6: 空トークン（連続カンマなど）がフィルタリングされる."""
+    monkeypatch.setenv("SLACK_AUTO_REPLY_CHANNELS", "C111,,C222,,,C333")
+    s = Settings()
+    assert s.get_auto_reply_channels() == ["C111", "C222", "C333"]

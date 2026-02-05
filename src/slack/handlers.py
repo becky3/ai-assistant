@@ -1,5 +1,5 @@
 """Slack イベントハンドラ
-仕様: docs/specs/f1-chat.md, docs/specs/f2-feed-collection.md, docs/specs/f3-user-profiling.md, docs/specs/f4-topic-recommend.md
+仕様: docs/specs/f1-chat.md, docs/specs/f2-feed-collection.md, docs/specs/f3-user-profiling.md, docs/specs/f4-topic-recommend.md, docs/specs/f6-auto-reply.md
 """
 
 from __future__ import annotations
@@ -182,20 +182,18 @@ def register_handlers(
     channel_id: str | None = None,
     max_articles_per_category: int = 10,
     feed_card_layout: Literal["vertical", "horizontal"] = "horizontal",
+    auto_reply_channels: list[str] | None = None,
 ) -> None:
-    """app_mention ハンドラを登録する."""
+    """app_mention および message ハンドラを登録する."""
 
-    @app.event("app_mention")
-    async def handle_mention(event: dict, say: object) -> None:  # type: ignore[type-arg]
-        user_id: str = event.get("user", "")
-        text: str = event.get("text", "")
-        thread_ts: str = event.get("thread_ts") or event.get("ts", "")
-
-        cleaned_text = strip_mention(text)
-        if not cleaned_text:
-            return
-
-        # プロファイル確認キーワード (AC4)
+    async def _process_message(
+        user_id: str,
+        cleaned_text: str,
+        thread_ts: str,
+        say: object,
+    ) -> None:
+        """共通メッセージ処理ロジック（app_mention / message 共用）."""
+        # プロファイル確認キーワード (F3-AC4, F6-AC4)
         if user_profiler is not None and any(
             kw in cleaned_text.lower() for kw in _PROFILE_KEYWORDS
         ):
@@ -209,7 +207,7 @@ def register_handlers(
                 )
             return
 
-        # feedコマンド (F2 - AC7)
+        # feedコマンド (F2-AC7, F6-AC4)
         lower_text = cleaned_text.lower().lstrip()
         if collector is not None and any(
             re.match(rf"^{re.escape(kw)}\b", lower_text) for kw in _FEED_KEYWORDS
@@ -266,7 +264,7 @@ def register_handlers(
                 )
             return
 
-        # トピック提案キーワード (F4)
+        # トピック提案キーワード (F4, F6-AC4)
         if topic_recommender is not None and any(
             kw in cleaned_text.lower() for kw in _TOPIC_KEYWORDS
         ):
@@ -281,6 +279,7 @@ def register_handlers(
                 )
             return
 
+        # デフォルト: ChatService で応答
         try:
             response = await chat_service.respond(
                 user_id=user_id,
@@ -289,7 +288,7 @@ def register_handlers(
             )
             await say(text=response, thread_ts=thread_ts)  # type: ignore[operator]
 
-            # ユーザー情報抽出を非同期で実行 (AC3)
+            # ユーザー情報抽出を非同期で実行 (F3-AC3)
             if user_profiler is not None:
                 asyncio.create_task(
                     _safe_extract_profile(user_profiler, user_id, cleaned_text)
@@ -300,6 +299,66 @@ def register_handlers(
                 text="申し訳ありません、応答の生成中にエラーが発生しました。しばらくしてからもう一度お試しください。",
                 thread_ts=thread_ts,
             )
+
+    @app.event("app_mention")
+    async def handle_mention(event: dict, say: object) -> None:  # type: ignore[type-arg]
+        user_id: str = event.get("user", "")
+        text: str = event.get("text", "")
+        thread_ts: str = event.get("thread_ts") or event.get("ts", "")
+
+        cleaned_text = strip_mention(text)
+        if not cleaned_text:
+            return
+
+        await _process_message(user_id, cleaned_text, thread_ts, say)
+
+    @app.event("message")
+    async def handle_message(event: dict, say: object) -> None:  # type: ignore[type-arg]
+        """自動返信チャンネルでのメッセージ処理 (F6).
+
+        フィルタリング (F6-AC2, AC3, AC6, AC7):
+        - bot_id がある → 無視（Bot自身の投稿）
+        - subtype がある → 無視（編集、削除など）
+        - channel が auto_reply_channels に含まれない → 無視
+        - メンション付き → 無視（app_mention で処理される）
+        """
+        # F6-AC6: 自動返信チャンネルが設定されていない場合は無視
+        if not auto_reply_channels:
+            return
+
+        # F6-AC2: Bot自身の投稿は無視
+        if event.get("bot_id"):
+            return
+
+        # F6-AC3: サブタイプ付きメッセージ（編集、削除など）は無視
+        if event.get("subtype"):
+            return
+
+        # F6-AC1: 対象チャンネルのみ処理
+        channel: str = event.get("channel", "")
+        if channel not in auto_reply_channels:
+            return
+
+        text: str = event.get("text", "")
+
+        # F6-AC7: メンション付きメッセージは app_mention で処理されるためスキップ
+        # strip_mention と同じパターンを使用
+        if re.search(r"<@[A-Za-z0-9]+>\s*", text):
+            return
+
+        user_id: str = event.get("user", "")
+        # user_id が空の場合はスキップ（システムメッセージなどのエッジケース対応）
+        if not user_id:
+            return
+
+        thread_ts: str = event.get("thread_ts") or event.get("ts", "")
+
+        cleaned_text = text.strip()
+        if not cleaned_text:
+            return
+
+        logger.info("Processing auto-reply message in channel %s", channel)
+        await _process_message(user_id, cleaned_text, thread_ts, say)
 
 
 async def _safe_extract_profile(

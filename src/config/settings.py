@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     slack_signing_secret: str = ""
     slack_app_token: str = ""
     slack_news_channel_id: str = ""
+    slack_auto_reply_channels: str = ""
+
+    def get_auto_reply_channels(self) -> list[str]:
+        """自動返信チャンネルのリストを返す（カンマ区切りを解析）."""
+        if not self.slack_auto_reply_channels:
+            return []
+        return [ch.strip() for ch in self.slack_auto_reply_channels.split(",") if ch.strip()]
 
     # LLM Provider Selection (global online provider)
     online_llm_provider: Literal["openai", "anthropic"] = "openai"
