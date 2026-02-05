@@ -310,7 +310,7 @@ async def test_ac13_1_handle_feed_import_success(monkeypatch: pytest.MonkeyPatch
     mock_client.__aexit__ = AsyncMock(return_value=None)
 
     import httpx
-    monkeypatch.setattr(httpx, "AsyncClient", lambda: mock_client)
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: mock_client)
 
     files = [{"name": "feeds.csv", "mimetype": "text/csv", "url_private": "https://files.slack.com/feeds.csv"}]
     result = await _handle_feed_import(collector, files, "xoxb-token")
@@ -344,7 +344,7 @@ async def test_ac13_3_handle_feed_import_default_category(monkeypatch: pytest.Mo
     mock_client.__aexit__ = AsyncMock(return_value=None)
 
     import httpx
-    monkeypatch.setattr(httpx, "AsyncClient", lambda: mock_client)
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: mock_client)
 
     files = [{"name": "feeds.csv", "mimetype": "text/csv", "url_private": "https://files.slack.com/feeds.csv"}]
     result = await _handle_feed_import(collector, files, "xoxb-token")
@@ -374,13 +374,14 @@ async def test_ac13_4_handle_feed_import_duplicate_skipped(monkeypatch: pytest.M
     mock_client.__aexit__ = AsyncMock(return_value=None)
 
     import httpx
-    monkeypatch.setattr(httpx, "AsyncClient", lambda: mock_client)
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: mock_client)
 
     files = [{"name": "feeds.csv", "mimetype": "text/csv", "url_private": "https://files.slack.com/feeds.csv"}]
     result = await _handle_feed_import(collector, files, "xoxb-token")
 
     assert "成功: 0件" in result
     assert "失敗: 1件" in result
+    assert "行2:" in result
     assert "既に登録されています" in result
 
 
@@ -404,7 +405,7 @@ async def test_ac13_2_handle_feed_import_invalid_header(monkeypatch: pytest.Monk
     mock_client.__aexit__ = AsyncMock(return_value=None)
 
     import httpx
-    monkeypatch.setattr(httpx, "AsyncClient", lambda: mock_client)
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: mock_client)
 
     files = [{"name": "feeds.csv", "mimetype": "text/csv", "url_private": "https://files.slack.com/feeds.csv"}]
     result = await _handle_feed_import(collector, files, "xoxb-token")
@@ -437,7 +438,7 @@ async def test_ac13_7_handle_feed_import_summary(monkeypatch: pytest.MonkeyPatch
     mock_client.__aexit__ = AsyncMock(return_value=None)
 
     import httpx
-    monkeypatch.setattr(httpx, "AsyncClient", lambda: mock_client)
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: mock_client)
 
     files = [{"name": "feeds.csv", "mimetype": "text/csv", "url_private": "https://files.slack.com/feeds.csv"}]
     result = await _handle_feed_import(collector, files, "xoxb-token")
@@ -445,4 +446,5 @@ async def test_ac13_7_handle_feed_import_summary(monkeypatch: pytest.MonkeyPatch
     assert "フィードインポート完了" in result
     assert "成功: 1件" in result
     assert "失敗: 1件" in result
+    assert "行3:" in result  # 3行目（ヘッダー=1, 1件目=2, 2件目=3）
     assert "重複" in result

@@ -202,6 +202,12 @@ async def _handle_feed_import(
             "CSV形式のファイル（.csv）を添付してください。"
         )
 
+    # ファイルサイズ検証（最大1MB）
+    max_file_size = 1 * 1024 * 1024  # 1MB
+    file_size = csv_file.get("size", 0)
+    if isinstance(file_size, int) and file_size > max_file_size:
+        return f"エラー: ファイルサイズが大きすぎます（最大1MB、実際: {file_size // 1024}KB）"
+
     # ファイルをダウンロード
     url_private = csv_file.get("url_private")
     if not url_private or not isinstance(url_private, str):
@@ -213,7 +219,7 @@ async def _handle_feed_import(
         download_url = url_private
 
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(
                 download_url,
                 headers={"Authorization": f"Bearer {bot_token}"},
@@ -252,23 +258,29 @@ async def _handle_feed_import(
     success_count = 0
     errors: list[str] = []
 
-    for row in rows:
+    for line_number, row in enumerate(rows, start=2):  # ヘッダー行が1行目なので2から開始
         url = row.get("url", "").strip()
         name = row.get("name", "").strip()
         category = row.get("category", "").strip() or "一般"
 
         if not url or not name:
-            errors.append(f"スキップ: url または name が空です（行: {row}）")
+            errors.append(f"行{line_number}: url または name が空です")
+            continue
+
+        # URLの形式を検証
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            errors.append(f"行{line_number}: 無効なURL形式です（{url}）")
             continue
 
         try:
             await collector.add_feed(url, name, category)
             success_count += 1
         except ValueError as e:
-            errors.append(f"{url}: {e}")
+            errors.append(f"行{line_number}: {e}")
         except Exception:
             logger.exception("Failed to add feed: %s", url)
-            errors.append(f"{url}: 追加中にエラーが発生しました")
+            errors.append(f"行{line_number}: 追加中にエラーが発生しました")
 
     # 結果サマリーを作成
     result_lines = [

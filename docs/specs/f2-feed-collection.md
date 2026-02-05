@@ -156,8 +156,8 @@ https://another.com/rss,Another Feed,News
 ❌ 失敗: 2件
 
 エラー詳細:
-  • https://example.com/rss: 既に登録済みです
-  • https://invalid.url: URLの形式が不正です
+  • 行5: 既に登録されています
+  • 行12: 無効なURL形式です（invalid-url）
 ```
 
 ### 情報源探索
