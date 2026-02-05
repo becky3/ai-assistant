@@ -11,6 +11,7 @@ RSS記事の自動収集・要約配信、チャットでの質問応答、ユ�
 - **情報収集・配信** — RSSフィードから記事を収集・要約し、毎朝Slackに自動配信（要約はローカルLLM）
 - **ユーザープロファイリング** — 会話から興味・スキル・目標を自動抽出（ローカルLLM）
 - **学習トピック提案** — プロファイルと最新記事をもとにおすすめトピックを提案（オンラインLLM）
+- **特定チャンネル自動返信** — 指定したチャンネルではメンションなしで全メッセージに自動応答
 
 ## 技術スタック
 
@@ -22,6 +23,18 @@ Python 3.10+ / uv / slack-bolt / OpenAI SDK / Anthropic SDK / SQLite + SQLAlchem
 uv sync
 cp .env.example .env  # 各種トークン・APIキーを設定
 ```
+
+### 主な環境変数
+
+| 変数名 | 説明 |
+|--------|------|
+| `SLACK_BOT_TOKEN` | Slack Bot トークン |
+| `SLACK_APP_TOKEN` | Slack App トークン（Socket Mode用） |
+| `SLACK_NEWS_CHANNEL_ID` | フィード配信先チャンネルID |
+| `SLACK_AUTO_REPLY_CHANNELS` | 自動返信を有効にするチャンネルID（カンマ区切り） |
+| `CHAT_LLM_PROVIDER` | チャット応答のLLMプロバイダー（`local` / `online`） |
+
+詳細は `.env.example` を参照してください。
 
 ## 起動
 
@@ -104,6 +117,8 @@ uv run mypy src
 - [F2: 情報収集・配信](docs/specs/f2-feed-collection.md)
 - [F3: ユーザー情報抽出](docs/specs/f3-user-profiling.md)
 - [F4: トピック提案](docs/specs/f4-topic-recommend.md)
+- [F5: MCP統合](docs/specs/f5-mcp-integration.md)
+- [F6: 特定チャンネル自動返信](docs/specs/f6-auto-reply.md)
 
 ### Claude Code 関連
 - [Claude Code Hooks](docs/specs/claude-code-hooks.md)

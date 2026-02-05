@@ -352,6 +352,7 @@ def register_handlers(
         if not cleaned_text:
             return
 
+        logger.info("Processing auto-reply message in channel %s", channel)
         await _process_message(user_id, cleaned_text, thread_ts, say)
 
 

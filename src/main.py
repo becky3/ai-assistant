@@ -81,7 +81,7 @@ async def main() -> None:
         channel_id=settings.slack_news_channel_id,
         max_articles_per_category=settings.feed_articles_per_category,
         feed_card_layout=settings.feed_card_layout,
-        auto_reply_channels=settings.slack_auto_reply_channels,
+        auto_reply_channels=settings.get_auto_reply_channels(),
     )
 
     # Socket Mode で起動
