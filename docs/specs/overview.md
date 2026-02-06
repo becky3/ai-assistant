@@ -17,6 +17,7 @@ AI Assistantは、Slack上で動作するAIアシスタントである。
 | F6 | 特定チャンネル自動返信 | 指定チャンネルでメンションなしでも自動応答 | [f6-auto-reply.md](f6-auto-reply.md) |
 | F7 | ボットステータスコマンド | 稼働環境・ホスト名・稼働時間の表示 | [f7-bot-status.md](f7-bot-status.md) |
 | F8 | ボットのスレッド対応 | Slackスレッド履歴取得によるコンテキスト補完 | [f8-thread-support.md](f8-thread-support.md) |
+| F9 | RAGナレッジ | 外部Webページの知識をベクトルDBに蓄積しチャット応答に活用 | [f9-rag-knowledge.md](f9-rag-knowledge.md) |
 
 ## 3. 技術スタック
 
@@ -30,6 +31,9 @@ AI Assistantは、Slack上で動作するAIアシスタントである。
 | DB | SQLite + SQLAlchemy (ORM経由で将来DB切替可能) |
 | スケジューラ | APScheduler |
 | RSS | feedparser |
+| ベクトルDB | ChromaDB (SQLiteベース, Embedding永続化) |
+| HTML解析 | BeautifulSoup4 |
+| Embedding | OpenAI Embeddings API / LM Studio (nomic-embed-text) |
 | 設定管理 | pydantic-settings (.env) + YAML (アシスタント性格) |
 
 ## 4. LLM使い分けルール
@@ -45,6 +49,7 @@ AI Assistantは、Slack上で動作するAIアシスタントである。
 | `PROFILER_LLM_PROVIDER` | UserProfiler | local | ユーザー情報抽出 |
 | `TOPIC_LLM_PROVIDER` | TopicRecommender | local | トピック提案 |
 | `SUMMARIZER_LLM_PROVIDER` | Summarizer | local | 記事要約 |
+| `EMBEDDING_PROVIDER` | EmbeddingProvider | local | Embedding生成（RAG用） |
 
 各設定には `"local"` または `"online"` を指定する。
 `"online"` の場合、`ONLINE_LLM_PROVIDER` の設定（`"openai"` or `"anthropic"`）が使用される。
@@ -74,6 +79,12 @@ ONLINE_LLM_PROVIDER=openai
 | articles | 収集済み記事 | feed_id(FK), title, url, summary, published_at, collected_at |
 | user_profiles | ユーザー情報 | slack_user_id, interests, skills, goals, updated_at |
 | conversations | 会話履歴 | slack_user_id, thread_ts, role, content, created_at |
+
+### ベクトルDB (ChromaDB)
+
+| コレクション名 | 用途 | 主要フィールド |
+|--------------|------|---------------|
+| knowledge | RAGナレッジチャンク | id, text, metadata (source_url, title, chunk_index, crawled_at) |
 
 ## 6. アシスタント設定
 
