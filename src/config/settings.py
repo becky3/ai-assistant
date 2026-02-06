@@ -78,6 +78,12 @@ class Settings(BaseSettings):
     # Thread History
     thread_history_limit: int = Field(default=20, ge=1, le=100)
 
+    # RAG / Embedding
+    rag_enabled: bool = False
+    embedding_provider: Literal["local", "online"] = "local"
+    embedding_model_local: str = "nomic-embed-text"
+    embedding_model_online: str = "text-embedding-3-small"
+
     # Logging
     log_level: str = "INFO"
 
