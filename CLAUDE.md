@@ -12,6 +12,12 @@
   - `SUMMARIZER_LLM_PROVIDER` — Summarizer用
 - 各設定は `"local"` または `"online"` を指定（デフォルト: `"local"`）
 
+### MCP設定
+- `MCP_ENABLED` — MCP機能の有効/無効（`true` / `false`、デフォルト: `false`）
+- `MCP_SERVERS_CONFIG` — MCPサーバー設定ファイルのパス（デフォルト: `config/mcp_servers.json`）
+- MCPサーバーの追加・変更は `config/mcp_servers.json` で行う
+- MCPサーバー（`mcp-servers/` 配下）は `src/` のモジュールを import しないこと（将来のリポジトリ分離制約）
+
 ## 開発ルール
 
 ### 仕様駆動開発

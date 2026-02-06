@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "weather": {
+      "transport": "stdio",
+      "command": "python",
+      "args": ["mcp-servers/weather/server.py"],
+      "env": {},
+      "response_instruction": "気温、降水確率などの数値データは省略せず、具体的に回答に含めてください。"
+    }
+  }
+}

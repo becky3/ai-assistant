@@ -1,18 +1,21 @@
 """Learning Companion エントリーポイント
-仕様: docs/specs/overview.md
+仕様: docs/specs/overview.md, docs/specs/f5-mcp-integration.md
 """
 
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import src.slack.handlers as handlers_module
 from src.config.settings import get_settings, load_assistant_config
 from src.db.session import init_db, get_session_factory
 from src.llm.factory import get_provider_for_service
+from src.mcp.client_manager import MCPClientManager, MCPServerConfig
 from src.services.chat import ChatService
 from src.services.feed_collector import FeedCollector
 from src.services.ogp_extractor import OgpExtractor
@@ -20,6 +23,36 @@ from src.services.summarizer import Summarizer
 from src.services.topic_recommender import TopicRecommender
 from src.services.user_profiler import UserProfiler
 from src.slack.app import create_app, start_socket_mode
+
+logger = logging.getLogger(__name__)
+
+
+def _load_mcp_server_configs(config_path: str) -> list[MCPServerConfig]:
+    """MCPサーバー設定ファイルを読み込む."""
+    path = Path(config_path)
+    if not path.exists():
+        logger.warning("MCP設定ファイル '%s' が見つかりません。", config_path)
+        return []
+
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except json.JSONDecodeError:
+        logger.exception("MCP設定ファイル '%s' のJSON解析に失敗しました。", config_path)
+        return []
+
+    configs: list[MCPServerConfig] = []
+    for name, server_def in data.get("mcpServers", {}).items():
+        configs.append(MCPServerConfig(
+            name=name,
+            transport=server_def.get("transport", "stdio"),
+            command=server_def.get("command", ""),
+            args=server_def.get("args", []),
+            env=server_def.get("env", {}),
+            url=server_def.get("url", ""),
+            response_instruction=server_def.get("response_instruction", ""),
+        ))
+    return configs
 
 
 async def main() -> None:
@@ -44,12 +77,24 @@ async def main() -> None:
     topic_llm = get_provider_for_service(settings, settings.topic_llm_provider)
     summarizer_llm = get_provider_for_service(settings, settings.summarizer_llm_provider)
 
+    # MCP初期化（有効時のみ）
+    mcp_manager: MCPClientManager | None = None
+    if settings.mcp_enabled:
+        mcp_manager = MCPClientManager()
+        server_configs = _load_mcp_server_configs(settings.mcp_servers_config)
+        await mcp_manager.initialize(server_configs)
+        tools = await mcp_manager.get_available_tools()
+        logger.info("MCP有効: %d個のツールが利用可能", len(tools))
+    else:
+        logger.info("MCP無効: ツール呼び出し機能はオフです")
+
     # チャットサービス
     session_factory = get_session_factory()
     chat_service = ChatService(
         llm=chat_llm,
         session_factory=session_factory,
         system_prompt=system_prompt,
+        mcp_manager=mcp_manager,
     )
 
     # ユーザー情報抽出サービス
@@ -93,7 +138,12 @@ async def main() -> None:
     )
 
     # Socket Mode で起動
-    await start_socket_mode(app, settings)
+    try:
+        await start_socket_mode(app, settings)
+    finally:
+        if mcp_manager:
+            await mcp_manager.cleanup()
+            logger.info("MCP接続をクリーンアップしました")
 
 
 if __name__ == "__main__":

@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     # Environment
     env_name: str = ""
 
+    # MCP
+    mcp_enabled: bool = False
+    mcp_servers_config: str = "config/mcp_servers.json"
+
     # Logging
     log_level: str = "INFO"
 

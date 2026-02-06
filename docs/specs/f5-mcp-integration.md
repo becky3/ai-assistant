@@ -224,11 +224,14 @@ async def get_weather(location: str, date: str = "today") -> str:
     ...
 ```
 
-**天気予報APIの選定**:
-- 第1候補: [Open-Meteo API](https://open-meteo.com/) — 無料、APIキー不要、日本対応
-- 第2候補: [天気予報API (livedoor天気互換)](https://weather.tsukumijima.net/) — 日本語対応、地域ID指定
+**天気予報API**:
+- [気象庁API（非公式）](https://www.jma.go.jp/bosai/forecast/) — 無料、APIキー不要、日本国内全域対応
+  - `https://www.jma.go.jp/bosai/common/const/area.json`: 地域コード一覧（offices レベル）
+  - `https://www.jma.go.jp/bosai/forecast/data/forecast/{code}.json`: 天気予報データ（短期3日間 + 週間7日間）
+- 地名検索: 完全一致 → 前方一致 → 部分一致 → 主要都市名フォールバックの4段階で検索
+- 対応範囲: 日本国内のみ（海外都市は非対応）
 
-**分離制約**: このファイルは `src/` 配下のモジュールを一切 import してはならない。依存は `mcp` SDK と HTTP クライアント (`aiohttp` 等) のみ。
+**分離制約**: このファイルは `src/` 配下のモジュールを一切 import してはならない。依存は `mcp` SDK と `urllib.request`（標準ライブラリ）のみ。
 
 ### MCPサーバー設定 (`config/mcp_servers.json`)
 
@@ -462,7 +465,7 @@ class Settings(BaseSettings):
 
 - [ ] **AC1**: 天気予報MCPサーバーが起動し、`get_weather` ツールを公開すること
 - [ ] **AC2**: `get_weather` ツールが地域名と日付を受け取り、天気予報テキストを返すこと
-- [ ] **AC3**: 外部天気予報API（Open-Meteo または 天気予報API）から実データを取得すること
+- [ ] **AC3**: 気象庁API（非公式）から実データを取得すること
 
 ### MCPクライアント
 
@@ -530,7 +533,7 @@ class Settings(BaseSettings):
 
 ### テスト戦略
 
-- MCPサーバーのテスト: `mcp.server.fastmcp` のテストユーティリティを使用
+- MCPサーバーのテスト: `urllib.request.urlopen` をモック化し、APIレスポンスを差し替えて検証
 - MCPクライアントのテスト: MCPサーバーをモック化してツール呼び出しを検証
 - LLMプロバイダーのテスト: LLM応答をモック化してtool_use解析を検証
 - 統合テスト: LLM・MCPサーバー両方をモック化してフロー全体を検証
@@ -566,5 +569,5 @@ class Settings(BaseSettings):
 - [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk)
 - [MCP Chatbot実装例](https://github.com/3choff/mcp-chatbot)
 - [参考記事: MCPサーバー構築 (Qiita)](https://qiita.com/k_ide/items/11c04869f9a179258618)
-- [Open-Meteo API](https://open-meteo.com/)
-- [天気予報API (livedoor天気互換)](https://weather.tsukumijima.net/)
+- [気象庁API（非公式）](https://www.jma.go.jp/bosai/forecast/) — 天気予報データ
+- [参考記事: 気象庁APIの使い方 (Qiita)](https://qiita.com/Tatsuki_Yo/items/121afaecad59a7e11c61)

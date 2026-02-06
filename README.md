@@ -12,10 +12,11 @@ RSS記事の自動収集・要約配信、チャットでの質問応答、ユ�
 - **ユーザープロファイリング** — 会話から興味・スキル・目標を自動抽出（ローカルLLM）
 - **学習トピック提案** — プロファイルと最新記事をもとにおすすめトピックを提案（オンラインLLM）
 - **特定チャンネル自動返信** — 指定したチャンネルではメンションなしで全メッセージに自動応答
+- **外部ツール連携（MCP）** — MCPプロトコルで外部ツールを動的に呼び出し（天気予報サンプル付属）
 
 ## 技術スタック
 
-Python 3.10+ / uv / slack-bolt / OpenAI SDK / Anthropic SDK / SQLite + SQLAlchemy / APScheduler / feedparser
+Python 3.10+ / uv / slack-bolt / OpenAI SDK / Anthropic SDK / SQLite + SQLAlchemy / APScheduler / feedparser / MCP SDK
 
 ## セットアップ
 
@@ -33,6 +34,7 @@ cp .env.example .env  # 各種トークン・APIキーを設定
 | `SLACK_NEWS_CHANNEL_ID` | フィード配信先チャンネルID |
 | `SLACK_AUTO_REPLY_CHANNELS` | 自動返信を有効にするチャンネルID（カンマ区切り） |
 | `CHAT_LLM_PROVIDER` | チャット応答のLLMプロバイダー（`local` / `online`） |
+| `MCP_ENABLED` | MCP機能の有効/無効（`true` / `false`、デフォルト: `false`） |
 
 詳細は `.env.example` を参照してください。
 
@@ -57,14 +59,21 @@ src/
   llm/anthropic_provider.py
   llm/lmstudio_provider.py  # OpenAI SDK で base_url を localhost:1234 に向ける
   llm/factory.py     # プロバイダー生成ファクトリ
+  mcp/
+    __init__.py
+    client_manager.py  # MCPサーバー接続管理
   services/chat.py           # チャット応答 (オンラインLLM)
   services/feed_collector.py # RSS収集
   services/summarizer.py     # 記事要約 (ローカルLLM)
   services/user_profiler.py  # 会話からユーザー情報抽出 (ローカルLLM)
   services/topic_recommender.py # 学習トピック提案 (オンラインLLM)
   scheduler/jobs.py  # APScheduler 毎朝の収集・配信ジョブ
+mcp-servers/                 # MCPサーバー群（将来リポジトリ分離対象）
+  weather/
+    server.py          # 天気予報MCPサーバー（気象庁API）
 config/
   assistant.yaml     # アシスタントの名前・性格・口調 (システムプロンプトに反映)
+  mcp_servers.json   # MCPサーバー接続設定
 docs/
   specs/             # 機能仕様書 (実装の根拠)
   retro/             # レトロスペクティブ記録
@@ -119,6 +128,7 @@ uv run mypy src
 - [F4: トピック提案](docs/specs/f4-topic-recommend.md)
 - [F5: MCP統合](docs/specs/f5-mcp-integration.md)
 - [F6: 特定チャンネル自動返信](docs/specs/f6-auto-reply.md)
+- [F7: ボットステータス](docs/specs/f7-bot-status.md)
 
 ### Claude Code 関連
 - [Claude Code Hooks](docs/specs/claude-code-hooks.md)
