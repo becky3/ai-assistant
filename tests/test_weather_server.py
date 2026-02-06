@@ -99,7 +99,7 @@ def _mock_urlopen_factory(
     if forecast_response is None:
         forecast_response = _make_forecast_response()
 
-    def side_effect(req: object, timeout: int = 10) -> MagicMock:
+    def side_effect(req: object, timeout: int = 10, context: object = None) -> MagicMock:
         mock_resp = MagicMock()
         url = req.full_url if hasattr(req, "full_url") else str(req)
         if "area.json" in url:

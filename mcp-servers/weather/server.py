@@ -9,8 +9,15 @@ from __future__ import annotations
 
 import json
 import logging
+import ssl
 import urllib.request
 from typing import Any
+
+try:
+    import certifi
+    _ssl_context = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    _ssl_context = None
 
 from mcp.server.fastmcp import FastMCP
 
@@ -46,7 +53,7 @@ def _load_area_map() -> dict[str, str]:
     """気象庁 area.json から offices レベルのマッピングを取得する."""
     try:
         req = urllib.request.Request(_AREA_URL)
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=10, context=_ssl_context) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except Exception:
         logger.exception("気象庁 area.json の取得に失敗しました")
@@ -103,7 +110,7 @@ def _fetch_forecast(office_code: str) -> list[dict[str, Any]]:
     """気象庁APIから天気予報データを取得する."""
     url = _FORECAST_URL.format(code=office_code)
     req = urllib.request.Request(url)
-    with urllib.request.urlopen(req, timeout=10) as resp:
+    with urllib.request.urlopen(req, timeout=10, context=_ssl_context) as resp:
         data: list[dict[str, Any]] = json.loads(resp.read().decode("utf-8"))
     return data
 
