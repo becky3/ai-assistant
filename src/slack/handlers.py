@@ -1,5 +1,5 @@
 """Slack イベントハンドラ
-仕様: docs/specs/f1-chat.md, docs/specs/f2-feed-collection.md, docs/specs/f3-user-profiling.md, docs/specs/f4-topic-recommend.md, docs/specs/f6-auto-reply.md, docs/specs/f7-bot-status.md
+仕様: docs/specs/f1-chat.md, docs/specs/f2-feed-collection.md, docs/specs/f3-user-profiling.md, docs/specs/f4-topic-recommend.md, docs/specs/f6-auto-reply.md, docs/specs/f7-bot-status.md, docs/specs/f8-thread-support.md
 """
 
 from __future__ import annotations
@@ -360,6 +360,9 @@ def register_handlers(
         thread_ts: str,
         say: object,
         files: list[dict[str, object]] | None = None,
+        channel: str = "",
+        is_in_thread: bool = False,
+        current_ts: str = "",
     ) -> None:
         """共通メッセージ処理ロジック（app_mention / message 共用）."""
         # ステータスコマンド (F7)
@@ -468,6 +471,9 @@ def register_handlers(
                 user_id=user_id,
                 text=cleaned_text,
                 thread_ts=thread_ts,
+                channel=channel,
+                is_in_thread=is_in_thread,
+                current_ts=current_ts,
             )
             await say(text=response, thread_ts=thread_ts)  # type: ignore[operator]
 
@@ -487,14 +493,22 @@ def register_handlers(
     async def handle_mention(event: dict, say: object) -> None:  # type: ignore[type-arg]
         user_id: str = event.get("user", "")
         text: str = event.get("text", "")
-        thread_ts: str = event.get("thread_ts") or event.get("ts", "")
+        raw_thread_ts: str | None = event.get("thread_ts")
+        event_ts: str = event.get("ts", "")
+        thread_ts: str = raw_thread_ts or event_ts
         files: list[dict[str, object]] | None = event.get("files")
+        channel: str = event.get("channel", "")
 
         cleaned_text = strip_mention(text)
         if not cleaned_text:
             return
 
-        await _process_message(user_id, cleaned_text, thread_ts, say, files)
+        await _process_message(
+            user_id, cleaned_text, thread_ts, say, files,
+            channel=channel,
+            is_in_thread=raw_thread_ts is not None,
+            current_ts=event_ts,
+        )
 
     @app.event("message")
     async def handle_message(event: dict, say: object) -> None:  # type: ignore[type-arg]
@@ -535,7 +549,9 @@ def register_handlers(
         if not user_id:
             return
 
-        thread_ts: str = event.get("thread_ts") or event.get("ts", "")
+        raw_thread_ts: str | None = event.get("thread_ts")
+        event_ts: str = event.get("ts", "")
+        thread_ts: str = raw_thread_ts or event_ts
         files: list[dict[str, object]] | None = event.get("files")
 
         cleaned_text = text.strip()
@@ -543,7 +559,12 @@ def register_handlers(
             return
 
         logger.info("Processing auto-reply message in channel %s", channel)
-        await _process_message(user_id, cleaned_text, thread_ts, say, files)
+        await _process_message(
+            user_id, cleaned_text, thread_ts, say, files,
+            channel=channel,
+            is_in_thread=raw_thread_ts is not None,
+            current_ts=event_ts,
+        )
 
 
 async def _safe_extract_profile(

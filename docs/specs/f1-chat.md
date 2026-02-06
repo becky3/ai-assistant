@@ -39,7 +39,7 @@ Slackで @bot メンションされた際に、アシスタントの性格設定
 ## 受け入れ条件
 
 - [ ] AC1: @bot メンションに対してスレッド内で応答する
-- [ ] AC2: 同一スレッド内の会話履歴を保持し、文脈を踏まえた応答ができる
+- [ ] AC2: 同一スレッド内の会話履歴を保持し、文脈を踏まえた応答ができる（スレッド履歴取得の詳細は [f8-thread-support.md](f8-thread-support.md) を参照）
 - [ ] AC3: `config/assistant.yaml` の性格設定がシステムプロンプトに反映される
 - [ ] AC4: メンション部分（`<@BOT_ID>`）を除去してからLLMに送信する
 - [ ] AC5: オンラインLLM（OpenAI or Anthropic、設定で切替）で応答を生成する
@@ -56,7 +56,7 @@ Slackで @bot メンションされた際に、アシスタントの性格設定
 |---------|------|
 | `src/slack/app.py` | Slack Bolt AsyncApp初期化 |
 | `src/slack/handlers.py` | app_mentionイベントハンドラ |
-| `src/services/chat.py` | チャットオーケストレーション、会話履歴管理 |
+| `src/services/chat.py` | チャットオーケストレーション、会話履歴管理（F8 でスレッド履歴統合を追加） |
 | `src/llm/base.py` | LLMProvider抽象インターフェース |
 | `src/llm/openai_provider.py` | OpenAIプロバイダー |
 | `src/llm/anthropic_provider.py` | Anthropicプロバイダー |

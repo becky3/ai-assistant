@@ -1,5 +1,5 @@
 """Learning Companion エントリーポイント
-仕様: docs/specs/overview.md, docs/specs/f5-mcp-integration.md
+仕様: docs/specs/overview.md, docs/specs/f5-mcp-integration.md, docs/specs/f8-thread-support.md
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from src.db.session import init_db, get_session_factory
 from src.llm.factory import get_provider_for_service
 from src.mcp.client_manager import MCPClientManager, MCPServerConfig
 from src.services.chat import ChatService
+from src.services.thread_history import ThreadHistoryService
 from src.services.feed_collector import FeedCollector
 from src.services.ogp_extractor import OgpExtractor
 from src.services.summarizer import Summarizer
@@ -88,6 +89,27 @@ async def main() -> None:
     else:
         logger.info("MCP無効: ツール呼び出し機能はオフです")
 
+    # Slack アプリ（ThreadHistoryService に必要なため先に作成）
+    app = create_app(settings)
+    slack_client = app.client
+
+    # Bot User ID を取得（スレッド履歴でボットの発言を識別するため）
+    try:
+        auth_result = await slack_client.auth_test()
+    except Exception as e:
+        raise RuntimeError(f"Failed to call Slack auth_test: {e}") from e
+
+    bot_user_id: str | None = auth_result.get("user_id")  # type: ignore[union-attr]
+    if not bot_user_id:
+        raise RuntimeError("Slack auth_test response does not contain 'user_id'.")
+
+    # スレッド履歴サービス (F8)
+    thread_history_service = ThreadHistoryService(
+        slack_client=slack_client,
+        bot_user_id=bot_user_id,
+        limit=settings.thread_history_limit,
+    )
+
     # チャットサービス
     session_factory = get_session_factory()
     chat_service = ChatService(
@@ -95,6 +117,7 @@ async def main() -> None:
         session_factory=session_factory,
         system_prompt=system_prompt,
         mcp_manager=mcp_manager,
+        thread_history_service=thread_history_service,
     )
 
     # ユーザー情報抽出サービス
@@ -117,10 +140,6 @@ async def main() -> None:
         summarizer=summarizer,
         ogp_extractor=ogp_extractor,
     )
-
-    # Slack アプリ
-    app = create_app(settings)
-    slack_client = app.client
     handlers_module.register_handlers(
         app, chat_service,
         user_profiler=user_profiler,

@@ -75,6 +75,9 @@ class Settings(BaseSettings):
     mcp_enabled: bool = False
     mcp_servers_config: str = "config/mcp_servers.json"
 
+    # Thread History
+    thread_history_limit: int = Field(default=20, ge=1, le=100)
+
     # Logging
     log_level: str = "INFO"
 

@@ -1,5 +1,5 @@
 """チャットオーケストレーション・会話履歴管理
-仕様: docs/specs/f1-chat.md, docs/specs/f5-mcp-integration.md
+仕様: docs/specs/f1-chat.md, docs/specs/f5-mcp-integration.md, docs/specs/f8-thread-support.md
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from src.llm.base import LLMProvider, LLMResponse, Message, ToolDefinition, Tool
 
 if TYPE_CHECKING:
     from src.mcp.client_manager import MCPClientManager
+    from src.services.thread_history import ThreadHistoryService
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ TOOL_CALL_TIMEOUT_SEC = 30
 class ChatService:
     """チャット応答サービス.
 
-    仕様: docs/specs/f1-chat.md, docs/specs/f5-mcp-integration.md
+    仕様: docs/specs/f1-chat.md, docs/specs/f5-mcp-integration.md, docs/specs/f8-thread-support.md
     """
 
     def __init__(
@@ -38,17 +39,37 @@ class ChatService:
         session_factory: async_sessionmaker[AsyncSession],
         system_prompt: str = "",
         mcp_manager: MCPClientManager | None = None,
+        thread_history_service: ThreadHistoryService | None = None,
     ) -> None:
         self._llm = llm
         self._session_factory = session_factory
         self._system_prompt = system_prompt
         self._mcp_manager = mcp_manager
+        self._thread_history = thread_history_service
 
-    async def respond(self, user_id: str, text: str, thread_ts: str) -> str:
+    async def respond(
+        self,
+        user_id: str,
+        text: str,
+        thread_ts: str,
+        channel: str = "",
+        is_in_thread: bool = False,
+        current_ts: str = "",
+    ) -> str:
         """ユーザーメッセージに対する応答を生成し、履歴を保存する."""
         async with self._session_factory() as session:
-            # 会話履歴を取得
-            history = await self._load_history(session, thread_ts)
+            # スレッド内かつ ThreadHistoryService が利用可能な場合は Slack API から取得
+            history: list[Message] | None = None
+            if is_in_thread and self._thread_history and channel:
+                history = await self._thread_history.fetch_thread_messages(
+                    channel=channel,
+                    thread_ts=thread_ts,
+                    current_ts=current_ts,
+                )
+
+            # Slack API から取得できなかった場合は DB フォールバック
+            if history is None:
+                history = await self._load_history(session, thread_ts)
 
             # メッセージリストを構築
             messages: list[Message] = []

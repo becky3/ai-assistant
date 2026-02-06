@@ -53,7 +53,8 @@ async def test_ac1_handle_mention_replies_in_thread() -> None:
     await handlers["app_mention"](event=event, say=say)
 
     chat_service.respond.assert_called_once_with(
-        user_id="U123", text="こんにちは", thread_ts="123.456"
+        user_id="U123", text="こんにちは", thread_ts="123.456",
+        channel="", is_in_thread=False, current_ts="123.456",
     )
     say.assert_called_once_with(text="テスト応答", thread_ts="123.456")
 
@@ -205,7 +206,8 @@ async def test_f6_ac1_auto_reply_in_configured_channel() -> None:
     await handlers["message"](event=event, say=say)
 
     chat_service.respond.assert_called_once_with(
-        user_id="U123", text="hello", thread_ts="123.456"
+        user_id="U123", text="hello", thread_ts="123.456",
+        channel="C_AUTO", is_in_thread=False, current_ts="123.456",
     )
     say.assert_called_once_with(text="自動返信", thread_ts="123.456")
 
