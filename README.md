@@ -68,7 +68,6 @@ config/
 docs/
   specs/             # 機能仕様書 (実装の根拠)
   retro/             # レトロスペクティブ記録
-  handover/          # 引き継ぎドキュメント
 .claude/
   settings.json      # Claude Code 設定（hooks、サブエージェント定義など）
   agents/            # サブエージェント定義ファイル
@@ -85,7 +84,6 @@ CLAUDE.mdには以下の重要な情報が含まれています：
 - Git運用フロー
 - LLM使い分けルール
 - サブエージェントの使用方法
-- 引き継ぎドキュメントの運用
 
 ### 開発フロー概要
 

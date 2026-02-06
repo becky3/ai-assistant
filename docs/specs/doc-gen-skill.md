@@ -2,7 +2,7 @@
 
 ## 概要
 
-プロジェクトドキュメント（仕様書・引き継ぎ・レトロスペクティブ）の新規作成と既存ドキュメントの編集をClaude Codeスキルとして実装する。
+プロジェクトドキュメント（仕様書・レトロスペクティブ）の新規作成と既存ドキュメントの編集をClaude Codeスキルとして実装する。
 
 ## 背景
 
@@ -16,7 +16,6 @@
 
 ### doc-gen スキル
 - 開発者として、`/doc-gen spec <feature-name>` で機能仕様書を自動生成したい
-- 開発者として、`/doc-gen handover` で現在の作業状況から引き継ぎ資料を生成したい
 - 開発者として、`/doc-gen retro <feature-name>` で実装完了後のレトロスペクティブを生成したい
 
 ### doc-edit スキル
@@ -30,19 +29,18 @@
 **メタデータ:**
 ```yaml
 name: doc-gen
-description: プロジェクトドキュメント（仕様書・引き継ぎ・レトロ）の新規作成
+description: プロジェクトドキュメント（仕様書・レトロ）の新規作成
 user-invocable: true
 allowed-tools: Bash, Read, Edit, Write, Grep, Glob
-argument-hint: [spec|handover|retro] [feature-name]
+argument-hint: [spec|retro] [feature-name]
 ```
 
 **引数パターン:**
 - `spec <feature-name>`: 仕様書を `docs/specs/f{N}-{feature-name}.md` に生成
-- `handover`: 引き継ぎ資料を `docs/handover/YYYY-MM-DD-{内容}.md` に生成
 - `retro <feature-name>`: レトロを `docs/retro/f{N}-{feature-name}.md` に生成
 
 **処理フロー:**
-1. 引数から生成対象を判定（spec/handover/retro）
+1. 引数から生成対象を判定（spec/retro）
 2. 既存ドキュメントを参照してフォーマットを理解
 3. 関連するIssue/PR/コミット履歴を調査
 4. テンプレートに従ってドキュメントを生成
@@ -61,16 +59,6 @@ argument-hint: [spec|handover|retro] [feature-name]
    - 技術仕様
    - 受け入れ条件 (AC)
    - 関連ファイル
-
-**引き継ぎ資料生成の詳細:**
-1. 現在のブランチ・PR状況を確認
-2. 最近のコミット履歴から完了作業を抽出
-3. 未完了のIssueを確認
-4. CLAUDE.mdのテンプレートに従って生成:
-   - 完了済み作業
-   - 未着手・作業中
-   - 注意事項・判断メモ
-   - 環境メモ
 
 **レトロ生成の詳細:**
 1. 該当機能のPR・コミット履歴を調査
@@ -126,11 +114,9 @@ argument-hint: <file-path> [update-reason]
 
 - [ ] AC1: `/doc-gen spec test-feature` で仕様書が正しく生成される
 - [ ] AC2: 生成される仕様書が既存の仕様書と同じフォーマットを持つ
-- [ ] AC3: `/doc-gen handover` で引き継ぎ資料が正しい命名（YYYY-MM-DD-*.md）で生成される
-- [ ] AC4: 引き継ぎ資料がCLAUDE.mdのテンプレートに従っている
-- [ ] AC5: `/doc-gen retro test-feature` でレトロが正しく生成される
-- [ ] AC6: 既存ファイルがある場合に上書き警告が表示される
-- [ ] AC7: Issue/PR/コミット履歴から関連情報を自動収集できる
+- [ ] AC3: `/doc-gen retro test-feature` でレトロが正しく生成される
+- [ ] AC4: 既存ファイルがある場合に上書き警告が表示される
+- [ ] AC5: Issue/PR/コミット履歴から関連情報を自動収集できる
 
 ### doc-edit スキル
 
@@ -146,7 +132,6 @@ argument-hint: <file-path> [update-reason]
 | `.claude/skills/doc-gen/SKILL.md` | doc-genスキル定義 |
 | `.claude/skills/doc-edit/SKILL.md` | doc-editスキル定義 |
 | `docs/specs/*.md` | 既存仕様書（参照用） |
-| `docs/handover/*.md` | 既存引き継ぎ資料（参照用） |
 | `docs/retro/*.md` | 既存レトロ（参照用） |
 | `CLAUDE.md` | 命名規則・テンプレート定義 |
 
