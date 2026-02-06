@@ -87,7 +87,7 @@ _STATUS_KEYWORDS = ("status", "info")
 ### ステータス情報の構築
 
 ```python
-def _build_status_message(timezone: str) -> str:
+def _build_status_message(timezone: str, env_name: str) -> str:
     hostname = socket.gethostname()
     now = datetime.now(tz=ZoneInfo(timezone))
     uptime = now - BOT_START_TIME

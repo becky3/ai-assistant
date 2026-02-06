@@ -20,7 +20,6 @@ from src.services.summarizer import Summarizer
 from src.services.topic_recommender import TopicRecommender
 from src.services.user_profiler import UserProfiler
 from src.slack.app import create_app, start_socket_mode
-from src.slack.handlers import register_handlers
 
 
 async def main() -> None:
@@ -77,7 +76,7 @@ async def main() -> None:
     # Slack アプリ
     app = create_app(settings)
     slack_client = app.client
-    register_handlers(
+    handlers_module.register_handlers(
         app, chat_service,
         user_profiler=user_profiler,
         topic_recommender=topic_recommender,

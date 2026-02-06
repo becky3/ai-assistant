@@ -358,7 +358,7 @@ def test_f7_build_status_with_env_name() -> None:
         handlers_module.BOT_START_TIME = start_time
         with patch("src.slack.handlers.datetime") as mock_dt:
             mock_dt.now.return_value = now
-            mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
+            mock_dt.side_effect = datetime
             result = _build_status_message("Asia/Tokyo", "production")
     finally:
         handlers_module.BOT_START_TIME = original
@@ -378,7 +378,7 @@ def test_f7_build_status_without_env_name() -> None:
         handlers_module.BOT_START_TIME = start_time
         with patch("src.slack.handlers.datetime") as mock_dt:
             mock_dt.now.return_value = now
-            mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
+            mock_dt.side_effect = datetime
             result = _build_status_message("Asia/Tokyo", "")
     finally:
         handlers_module.BOT_START_TIME = original
@@ -395,7 +395,7 @@ def test_f7_build_status_shows_hostname() -> None:
         with patch("src.slack.handlers.socket.gethostname", return_value="test-host-01"):
             with patch("src.slack.handlers.datetime") as mock_dt:
                 mock_dt.now.return_value = handlers_module.BOT_START_TIME
-                mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
+                mock_dt.side_effect = datetime
                 result = _build_status_message("Asia/Tokyo", "")
     finally:
         handlers_module.BOT_START_TIME = original
@@ -472,7 +472,7 @@ async def test_f7_ac9_no_sensitive_info() -> None:
         handlers_module.BOT_START_TIME = datetime.now(tz=ZoneInfo("Asia/Tokyo"))
         with patch("src.slack.handlers.datetime") as mock_dt:
             mock_dt.now.return_value = handlers_module.BOT_START_TIME
-            mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
+            mock_dt.side_effect = datetime
             result = _build_status_message("Asia/Tokyo", "production")
     finally:
         handlers_module.BOT_START_TIME = original
@@ -515,7 +515,7 @@ async def test_f7_ac5_uptime_format() -> None:
         handlers_module.BOT_START_TIME = start_time
         with patch("src.slack.handlers.datetime") as mock_dt:
             mock_dt.now.return_value = now
-            mock_dt.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
+            mock_dt.side_effect = datetime
             result = _build_status_message("Asia/Tokyo", "")
     finally:
         handlers_module.BOT_START_TIME = original
