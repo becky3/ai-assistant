@@ -1,5 +1,5 @@
 """Slack イベントハンドラ
-仕様: docs/specs/f1-chat.md, docs/specs/f2-feed-collection.md, docs/specs/f3-user-profiling.md, docs/specs/f4-topic-recommend.md, docs/specs/f6-auto-reply.md
+仕様: docs/specs/f1-chat.md, docs/specs/f2-feed-collection.md, docs/specs/f3-user-profiling.md, docs/specs/f4-topic-recommend.md, docs/specs/f6-auto-reply.md, docs/specs/f7-bot-status.md
 """
 
 from __future__ import annotations
@@ -9,8 +9,11 @@ import csv
 import io
 import logging
 import re
+import socket
+from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 import httpx
 from slack_bolt.async_app import AsyncApp
@@ -30,6 +33,10 @@ _PROFILE_KEYWORDS = ("プロファイル", "プロフィール", "profile")
 _TOPIC_KEYWORDS = ("おすすめ", "トピック", "何を学ぶ", "何学ぶ", "学習提案", "recommend")
 _DELIVER_KEYWORDS = ("deliver",)
 _FEED_KEYWORDS = ("feed",)
+_STATUS_KEYWORDS = ("status", "info")
+
+# 起動時刻（main.py から設定される）
+BOT_START_TIME: datetime | None = None
 
 
 def strip_mention(text: str) -> str:
@@ -71,6 +78,35 @@ def _parse_feed_command(text: str) -> tuple[str, list[str], str]:
 
     category = " ".join(category_tokens) if category_tokens else "一般"
     return (subcommand, urls, category)
+
+
+def _format_uptime(seconds: float) -> str:
+    """稼働時間を「N時間M分」形式にフォーマットする."""
+    total_minutes = int(seconds) // 60
+    hours = total_minutes // 60
+    minutes = total_minutes % 60
+    if hours > 0:
+        return f"{hours}時間{minutes}分"
+    return f"{minutes}分"
+
+
+def _build_status_message(timezone: str, env_name: str) -> str:
+    """ボットステータスメッセージを構築する (F7)."""
+    hostname = socket.gethostname()
+    now = datetime.now(tz=ZoneInfo(timezone))
+
+    lines = ["\U0001f916 ボットステータス", f"ホスト: {hostname}"]
+
+    if env_name:
+        lines.append(f"環境: {env_name}")
+
+    if BOT_START_TIME is not None:
+        start_str = BOT_START_TIME.strftime("%Y-%m-%d %H:%M:%S %Z")
+        uptime = now - BOT_START_TIME
+        uptime_str = _format_uptime(uptime.total_seconds())
+        lines.append(f"起動: {start_str}（稼働 {uptime_str}）")
+
+    return "\n".join(lines)
 
 
 async def _handle_feed_add(
@@ -313,6 +349,8 @@ def register_handlers(
     feed_card_layout: Literal["vertical", "horizontal"] = "horizontal",
     auto_reply_channels: list[str] | None = None,
     bot_token: str | None = None,
+    timezone: str = "Asia/Tokyo",
+    env_name: str = "",
 ) -> None:
     """app_mention および message ハンドラを登録する."""
 
@@ -324,6 +362,12 @@ def register_handlers(
         files: list[dict[str, object]] | None = None,
     ) -> None:
         """共通メッセージ処理ロジック（app_mention / message 共用）."""
+        # ステータスコマンド (F7)
+        if cleaned_text.lower().strip() in _STATUS_KEYWORDS:
+            response_text = _build_status_message(timezone, env_name)
+            await say(text=response_text, thread_ts=thread_ts)  # type: ignore[operator]
+            return
+
         # プロファイル確認キーワード (F3-AC4, F6-AC4)
         if user_profiler is not None and any(
             kw in cleaned_text.lower() for kw in _PROFILE_KEYWORDS

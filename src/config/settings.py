@@ -68,6 +68,9 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "sqlite+aiosqlite:///./learning_companion.db"
 
+    # Environment
+    env_name: str = ""
+
     # Logging
     log_level: str = "INFO"
 
