@@ -50,6 +50,7 @@ def _load_mcp_server_configs(config_path: str) -> list[MCPServerConfig]:
             args=server_def.get("args", []),
             env=server_def.get("env", {}),
             url=server_def.get("url", ""),
+            response_instruction=server_def.get("response_instruction", ""),
         ))
     return configs
 

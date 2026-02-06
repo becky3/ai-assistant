@@ -37,6 +37,7 @@ class MCPServerConfig:
     args: list[str] = field(default_factory=list)
     env: dict[str, str] = field(default_factory=dict)
     url: str = ""
+    response_instruction: str = ""  # ツール結果を使った応答時にLLMへ追加する指示
 
 
 class MCPClientManager:
@@ -50,6 +51,7 @@ class MCPClientManager:
         self._sessions: dict[str, ClientSession] = {}
         self._tool_to_server: dict[str, str] = {}
         self._tools: list[ToolDefinition] = []
+        self._server_instructions: dict[str, str] = {}  # server_name → response_instruction
 
     async def initialize(self, server_configs: list[MCPServerConfig]) -> None:
         """設定されたMCPサーバーに接続し、利用可能ツールを取得する.
@@ -67,6 +69,8 @@ class MCPClientManager:
 
             try:
                 await self._connect_stdio_server(config)
+                if config.response_instruction:
+                    self._server_instructions[config.name] = config.response_instruction
                 logger.info("MCPサーバー '%s' に接続しました。", config.name)
             except Exception:
                 logger.exception(
@@ -108,6 +112,11 @@ class MCPClientManager:
         """全サーバーのツールをプロバイダー非依存形式で返す."""
         return list(self._tools)
 
+    def get_response_instruction(self, tool_name: str) -> str:
+        """ツール名に対応するサーバーの応答指示を返す."""
+        server_name = self._tool_to_server.get(tool_name, "")
+        return self._server_instructions.get(server_name, "")
+
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> str:
         """指定ツールを実行し、結果を返す.
 
@@ -147,3 +156,4 @@ class MCPClientManager:
         self._sessions.clear()
         self._tool_to_server.clear()
         self._tools.clear()
+        self._server_instructions.clear()

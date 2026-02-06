@@ -82,6 +82,7 @@ class ChatService:
         self, messages: list[Message], tools: list[ToolDefinition]
     ) -> LLMResponse:
         """ツール呼び出しループを実行する."""
+        applied_instructions: set[str] = set()
         for _ in range(TOOL_LOOP_MAX_ITERATIONS):
             response = await self._llm.complete_with_tools(messages, tools)
 
@@ -101,6 +102,10 @@ class ChatService:
                     content=result.content,
                     tool_call_id=tc.id,
                 ))
+                # ツール固有の応答指示をシステムプロンプトに追加（重複防止）
+                self._apply_response_instruction(
+                    messages, tc.name, applied_instructions
+                )
 
         # 最大反復到達 → 強制的にテキスト応答を要求
         messages.append(Message(
@@ -108,6 +113,25 @@ class ChatService:
             content="ツール呼び出しの上限に達しました。現在の情報で回答してください。",
         ))
         return await self._llm.complete(messages)
+
+    def _apply_response_instruction(
+        self,
+        messages: list[Message],
+        tool_name: str,
+        applied: set[str],
+    ) -> None:
+        """ツール固有の応答指示をシステムプロンプトに追加する."""
+        if not self._mcp_manager:
+            return
+        instruction = self._mcp_manager.get_response_instruction(tool_name)
+        if not instruction or instruction in applied:
+            return
+        applied.add(instruction)
+        if messages and messages[0].role == "system":
+            messages[0] = Message(
+                role="system",
+                content=messages[0].content + "\n\n" + instruction,
+            )
 
     async def _execute_tool_with_timeout(
         self, tool_name: str, arguments: dict[str, object]
