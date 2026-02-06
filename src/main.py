@@ -99,9 +99,7 @@ async def main() -> None:
     except Exception as e:
         raise RuntimeError(f"Failed to call Slack auth_test: {e}") from e
 
-    bot_user_id: str | None = (
-        auth_result.get("user_id") if isinstance(auth_result, dict) else None
-    )
+    bot_user_id: str | None = auth_result.get("user_id")  # type: ignore[union-attr]
     if not bot_user_id:
         raise RuntimeError("Slack auth_test response does not contain 'user_id'.")
 
