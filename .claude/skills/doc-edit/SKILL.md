@@ -19,7 +19,6 @@ argument-hint: "<file-path> [update-reason]"
 **例**:
 ```bash
 /doc-edit docs/specs/f2-feed-collection.md
-/doc-edit docs/handover/2026-02-01-step1-complete.md "Step2の内容を追記"
 /doc-edit CLAUDE.md "スキル使用方法を追加"
 ```
 
@@ -43,7 +42,7 @@ fi
 
 - Readツールでファイル全体を読み込む
 - ドキュメントの構造（セクション、見出し、フォーマット）を理解する
-- ドキュメントの種類を判定（仕様書/引き継ぎ/レトロ/CLAUDE.md等）
+- ドキュメントの種類を判定（仕様書/レトロ/CLAUDE.md等）
 
 ### 3. 更新理由の確認
 
@@ -63,14 +62,6 @@ git log --oneline --grep="f{N}" -10
 
 # 関連PR
 gh pr list --search "in:title <feature-name>" --state all
-```
-
-**引き継ぎ資料の場合**:
-```bash
-# 最新の作業状況
-git status
-gh issue list --state open
-gh pr list --state open
 ```
 
 **CLAUDE.mdの場合**:
@@ -119,18 +110,7 @@ git diff --no-index /dev/null $FILE_PATH 2>/dev/null || git diff $FILE_PATH
 - ACの番号を変更しない（既存のテストコードと紐づいている）
 - 新しいACは末尾に追加
 
-### B. 引き継ぎ資料 (`docs/handover/*.md`)
-
-**よくある更新**:
-- 完了済み作業の追加
-- 未着手・作業中の状態更新
-- 注意事項の追記
-
-**注意点**:
-- 過去の記録は削除しない（履歴として残す）
-- 新しい情報は各セクションの末尾に追加
-
-### C. レトロスペクティブ (`docs/retro/*.md`)
+### B. レトロスペクティブ (`docs/retro/*.md`)
 
 **よくある更新**:
 - 「改善点」セクションへの追記
@@ -139,7 +119,7 @@ git diff --no-index /dev/null $FILE_PATH 2>/dev/null || git diff $FILE_PATH
 **注意点**:
 - 実装完了後の振り返りなので、基本的には追記のみ
 
-### D. CLAUDE.md
+### C. CLAUDE.md
 
 **よくある更新**:
 - 新しいスキルの使用方法追加
