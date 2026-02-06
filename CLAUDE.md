@@ -118,6 +118,10 @@ PRに対するレビュー指摘（Copilot、人間問わず）への対応は `
 **Windows環境での注意点**:
 - シェルスクリプト（`.sh`）は **LF 改行コード** で保存すること（CRLF だとエラー）
 - 改行コード変換: `cat file.sh | tr -d '\r' > file_tmp.sh && mv file_tmp.sh file.sh`
+- **出力の破棄には必ず `/dev/null` を使うこと。`> nul` は禁止。**
+  - Git Bash 環境では `> nul` と書くと `nul` という名前のファイルが作成されてしまう（Windows の予約デバイス名が正しく解釈されない）
+  - 正: `command > /dev/null 2>&1`
+  - 誤: `command > nul 2>&1`
 
 ### スキル（ユーザー実行コマンド）
 
