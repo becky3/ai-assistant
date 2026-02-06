@@ -6,7 +6,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
+import src.slack.handlers as handlers_module
 from src.config.settings import get_settings, load_assistant_config
 from src.db.session import init_db, get_session_factory
 from src.llm.factory import get_provider_for_service
@@ -22,6 +25,9 @@ from src.slack.handlers import register_handlers
 
 async def main() -> None:
     settings = get_settings()
+
+    # 起動時刻を記録 (F7)
+    handlers_module.BOT_START_TIME = datetime.now(tz=ZoneInfo(settings.timezone))
 
     # ログ設定
     logging.basicConfig(level=settings.log_level)
@@ -83,6 +89,8 @@ async def main() -> None:
         feed_card_layout=settings.feed_card_layout,
         auto_reply_channels=settings.get_auto_reply_channels(),
         bot_token=settings.slack_bot_token,
+        timezone=settings.timezone,
+        env_name=settings.env_name,
     )
 
     # Socket Mode で起動
