@@ -1,9 +1,9 @@
 ---
 name: doc-gen
-description: プロジェクトドキュメント（仕様書・引き継ぎ・レトロ）の新規作成
+description: プロジェクトドキュメント（仕様書・レトロ）の新規作成
 user-invocable: true
 allowed-tools: Bash, Read, Edit, Write, Grep, Glob
-argument-hint: "[spec|handover|retro] [feature-name]"
+argument-hint: "[spec|retro] [feature-name]"
 ---
 
 ## タスク
@@ -14,7 +14,6 @@ argument-hint: "[spec|handover|retro] [feature-name]"
 
 `$ARGUMENTS` の形式:
 - `spec <feature-name>`: 仕様書生成（例: `spec feed-collection`）
-- `handover`: 引き継ぎ資料生成
 - `retro <feature-name>`: レトロスペクティブ生成（例: `retro chat`）
 
 ## 処理手順
@@ -24,8 +23,8 @@ argument-hint: "[spec|handover|retro] [feature-name]"
 1. **引数解析**
    ```bash
    ARGS=($ARGUMENTS)
-   DOC_TYPE="${ARGS[0]}"  # spec, handover, retro
-   FEATURE_NAME="${ARGS[1]}"  # 機能名（handoverの場合は不要）
+   DOC_TYPE="${ARGS[0]}"  # spec, retro
+   FEATURE_NAME="${ARGS[1]}"  # 機能名
    ```
 
 2. **既存ドキュメントの参照**
@@ -80,43 +79,7 @@ argument-hint: "[spec|handover|retro] [feature-name]"
 
 **参考**: `docs/specs/f1-chat.md` のフォーマットを踏襲
 
-### B. 引き継ぎ資料生成 (`handover`)
-
-**出力先**: `docs/handover/YYYY-MM-DD-{内容}.md`
-
-**手順**:
-
-1. 日付の取得
-   ```bash
-   DATE=$(date +%Y-%m-%d)
-   ```
-
-2. 現在の状況調査
-   ```bash
-   # ブランチ確認
-   git branch --show-current
-
-   # 最近のコミット
-   git log --oneline -10
-
-   # 現在のPR
-   gh pr view --json number,title,state
-
-   # 未完了のIssue
-   gh issue list --state open
-   ```
-
-3. 引き継ぎ資料生成（CLAUDE.mdのテンプレートに従う）:
-   - **完了済み作業**: 最近のコミットから抽出（Issue番号を含める）
-   - **未着手・作業中**: 未完了のIssueから抽出
-   - **注意事項・判断メモ**: 最近のPRコメント等から重要な判断を抽出
-   - **環境メモ**: 特殊な設定があれば記載
-
-4. ファイル名の決定
-   - 内容を示す短い文字列を生成（例: `step2-complete`, `f3-in-progress`）
-   - フルパス: `docs/handover/{DATE}-{内容}.md`
-
-### C. レトロスペクティブ生成 (`retro <feature-name>`)
+### B. レトロスペクティブ生成 (`retro <feature-name>`)
 
 **出力先**: `docs/retro/f{N}-{feature-name}.md`
 
@@ -152,7 +115,6 @@ argument-hint: "[spec|handover|retro] [feature-name]"
   エラー: 引数が不正です。
   使用方法:
     /doc-gen spec <feature-name>
-    /doc-gen handover
     /doc-gen retro <feature-name>
   ```
 
