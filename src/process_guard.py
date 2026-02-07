@@ -65,8 +65,8 @@ def is_process_alive(pid: int) -> bool:
     except PermissionError:
         # プロセスは存在するがアクセス権がない
         return True
-    except OSError:
-        # Windows環境で不正なPIDの場合など
+    except (OSError, SystemError):
+        # Windows環境で不正なPID・終了済みプロセスの場合など
         return False
     else:
         return True
