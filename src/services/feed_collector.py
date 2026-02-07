@@ -62,14 +62,17 @@ class FeedCollector:
         async with self._session_factory() as session:
             feeds = await self._get_enabled_feeds(session)
 
-        for feed in feeds:
+        logger.info("collect_all: %d feeds to process (skip_summary=%s)", len(feeds), skip_summary)
+        for i, feed in enumerate(feeds, 1):
             try:
+                logger.info("collect_all: [%d/%d] %s", i, len(feeds), feed.name)
                 articles = await self._collect_feed(feed, skip_summary=skip_summary)
                 collected.extend(articles)
             except Exception:
                 logger.exception("Failed to collect feed: %s (%s)", feed.name, feed.url)
                 continue
 
+        logger.info("collect_all: done — %d articles collected", len(collected))
         return collected
 
     async def get_enabled_feeds(self) -> list[Feed]:
@@ -81,13 +84,15 @@ class FeedCollector:
         self,
         feed: Feed,
         on_article_ready: Callable[[Article], Awaitable[bool]] | None = None,
+        skip_summary: bool = False,
     ) -> list[Article]:
         """単一フィードから記事を収集する（公開API）.
 
         on_article_ready: 記事1件の処理完了時に呼ばれるコールバック。
             True を返すと収集続行、False を返すと収集を中止する。
+        skip_summary: Trueの場合、LLM要約をスキップしdescriptionまたはプレースホルダを使用する。
         """
-        return await self._collect_feed(feed, on_article_ready=on_article_ready)
+        return await self._collect_feed(feed, on_article_ready=on_article_ready, skip_summary=skip_summary)
 
     async def _get_enabled_feeds(self, session: AsyncSession) -> list[Feed]:
         """有効なフィード一覧を取得する."""
@@ -175,7 +180,6 @@ class FeedCollector:
                     summary=summary,
                     image_url=image_url,
                     published_at=published_at,
-                    delivered=skip_summary,
                 )
                 session.add(article)
                 existing_urls.add(url)

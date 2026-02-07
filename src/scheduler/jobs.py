@@ -277,6 +277,7 @@ async def daily_collect_and_deliver(
     channel_id: str,
     max_articles_per_feed: int = 10,
     layout: Literal["vertical", "horizontal"] = "horizontal",
+    skip_summary: bool = False,
 ) -> None:
     """毎朝の収集・配信ジョブ（フィードごとに収集→即投稿の逐次型）."""
     logger.info("Starting daily feed collection and delivery")
@@ -340,7 +341,7 @@ async def daily_collect_and_deliver(
 
             # フィード単位で収集（1記事ごとにコールバックで即投稿）
             try:
-                await collector.collect_feed(feed, on_article_ready=on_article_ready)
+                await collector.collect_feed(feed, on_article_ready=on_article_ready, skip_summary=skip_summary)
             except Exception:
                 logger.exception("Failed to collect feed: %s (%s)", feed.name, feed.url)
                 continue

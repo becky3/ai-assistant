@@ -214,7 +214,7 @@ async def test_ac4_daily_collect_and_deliver_posts_to_slack(db_factory) -> None:
         )
         undelivered = list(article_result.scalars().all())
 
-    async def mock_collect_feed(feed, on_article_ready=None):  # type: ignore[no-untyped-def]
+    async def mock_collect_feed(feed, on_article_ready=None, skip_summary=False):  # type: ignore[no-untyped-def]
         feed_articles = [a for a in undelivered if a.feed_id == feed.id]
         for article in feed_articles:
             if on_article_ready:
@@ -340,7 +340,7 @@ def _make_sequential_collector(db_factory, undelivered: list[Article]) -> AsyncM
     """逐次型 daily_collect_and_deliver 用のコレクターモックを作成する."""
     collector = AsyncMock()
 
-    async def mock_collect_feed(feed, on_article_ready=None):  # type: ignore[no-untyped-def]
+    async def mock_collect_feed(feed, on_article_ready=None, skip_summary=False):  # type: ignore[no-untyped-def]
         feed_articles = [a for a in undelivered if a.feed_id == feed.id]
         for article in feed_articles:
             if on_article_ready:

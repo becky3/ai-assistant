@@ -586,8 +586,8 @@ async def test_ac18_2_skip_summary_no_llm_call(db_factory) -> None:  # type: ign
     summarizer.summarize.assert_not_called()
 
 
-async def test_ac18_3_skip_summary_delivered_true(db_factory) -> None:  # type: ignore[no-untyped-def]
-    """AC18.3: 収集された記事はdelivered=Trueで保存される."""
+async def test_ac18_3_skip_summary_delivered_default(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC18.3: 要約スキップでも記事はdelivered=Falseで保存される（通常配信フローで投稿）."""
     summarizer = AsyncMock(spec=Summarizer)
     collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
 
@@ -604,7 +604,7 @@ async def test_ac18_3_skip_summary_delivered_true(db_factory) -> None:  # type: 
             select(Article).where(Article.url == "https://example.com/delivered")
         )
         article = result.scalar_one()
-        assert article.delivered is True
+        assert article.delivered is False
 
 
 async def test_ac18_4_skip_summary_uses_description(db_factory) -> None:  # type: ignore[no-untyped-def]
