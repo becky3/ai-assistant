@@ -263,7 +263,7 @@ class FeedCollector:
             (有効フィードリスト, 無効フィードリスト) のタプル
         """
         async with self._session_factory() as session:
-            result = await session.execute(select(Feed))
+            result = await session.execute(select(Feed).order_by(Feed.id.asc()))
             all_feeds = list(result.scalars().all())
 
         enabled = [f for f in all_feeds if f.enabled]
