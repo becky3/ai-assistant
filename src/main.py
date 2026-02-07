@@ -1,5 +1,6 @@
 """AI Assistant エントリーポイント
-仕様: docs/specs/overview.md, docs/specs/f5-mcp-integration.md, docs/specs/f8-thread-support.md
+仕様: docs/specs/overview.md, docs/specs/f5-mcp-integration.md, docs/specs/f8-thread-support.md,
+      docs/specs/bot-process-guard.md
 """
 
 from __future__ import annotations
@@ -13,6 +14,12 @@ from zoneinfo import ZoneInfo
 
 import src.slack.handlers as handlers_module
 from src.config.settings import get_settings, load_assistant_config
+from src.process_guard import (
+    check_already_running,
+    cleanup_children,
+    remove_pid_file,
+    write_pid_file,
+)
 from src.db.session import init_db, get_session_factory
 from src.llm.factory import get_provider_for_service
 from src.mcp_bridge.client_manager import MCPClientManager, MCPServerConfig
@@ -57,6 +64,10 @@ def _load_mcp_server_configs(config_path: str) -> list[MCPServerConfig]:
 
 
 async def main() -> None:
+    # 重複起動検知: 既に動いていたら警告して終了
+    check_already_running()
+    write_pid_file()
+
     settings = get_settings()
 
     # 起動時刻を記録 (F7)
@@ -163,8 +174,16 @@ async def main() -> None:
         await start_socket_mode(app, settings)
     finally:
         if mcp_manager:
-            await mcp_manager.cleanup()
-            logger.info("MCP接続をクリーンアップしました")
+            try:
+                await mcp_manager.cleanup()
+                logger.info("MCP接続をクリーンアップしました")
+            except Exception:
+                logger.warning("MCPクリーンアップ失敗", exc_info=True)
+        try:
+            cleanup_children()
+        except Exception:
+            logger.warning("子プロセスクリーンアップ失敗", exc_info=True)
+        remove_pid_file()
 
 
 if __name__ == "__main__":

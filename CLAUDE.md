@@ -106,6 +106,13 @@ PRに対するレビュー指摘（Copilot、人間問わず）への対応は `
 - テンプレート・運用ルール自体の改善も行う
 - 新機能の仕様策定時は、関連する既存レトロの「次に活かすこと」を参照する
 
+## Bot プロセスガード
+
+- Bot起動時に `bot.pid` ファイルで重複起動を検知する（仕様: `docs/specs/bot-process-guard.md`）
+- 既に起動中の場合は警告メッセージを表示して `sys.exit(1)` で終了する（自動killはしない）
+- シャットダウン時に子プロセス（MCPサーバー等）をクリーンアップする
+- プラットフォーム分岐: Windows は `tasklist`/`wmic`/`taskkill`、Unix は `os.kill`/`pgrep`/`SIGTERM`
+
 ## Claude Code 拡張機能
 
 ### Hooks
