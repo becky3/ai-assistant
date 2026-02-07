@@ -415,6 +415,23 @@ async def _handle_feed_replace(
     return "\n".join(result_lines)
 
 
+async def _handle_feed_collect_skip_summary(
+    collector: FeedCollector,
+) -> str:
+    """要約をスキップして全フィードから記事を一括収集する（初回インポート用）."""
+    try:
+        feed_count, article_count = await collector.collect_all_skip_summary()
+    except Exception:
+        logger.exception("Failed to collect feeds with skip-summary")
+        return "要約スキップ収集中にエラーが発生しました。"
+
+    return (
+        "*要約スキップ収集完了*\n"
+        f"📰 収集フィード数: {feed_count}\n"
+        f"📝 収集記事数: {article_count}"
+    )
+
+
 async def _handle_feed_export(
     collector: FeedCollector,
     slack_client: object,
@@ -561,6 +578,19 @@ def register_handlers(
                         thread_ts=thread_ts,
                     )
                 return
+            elif subcommand == "collect":
+                # feed collect --skip-summary
+                if "--skip-summary" in cleaned_text.lower():
+                    await say(text="要約スキップ収集を開始します...", thread_ts=thread_ts)  # type: ignore[operator]
+                    response_text = await _handle_feed_collect_skip_summary(collector)
+                    await say(text=response_text, thread_ts=thread_ts)  # type: ignore[operator]
+                else:
+                    response_text = (
+                        "使用方法:\n"
+                        "• `@bot feed collect --skip-summary` — 要約なし一括収集"
+                    )
+                    await say(text=response_text, thread_ts=thread_ts)  # type: ignore[operator]
+                return
             elif subcommand == "test":
                 if (
                     session_factory is not None
@@ -599,6 +629,7 @@ def register_handlers(
                     "• `@bot feed import` + CSV添付 — フィード一括インポート\n"
                     "• `@bot feed replace` + CSV添付 — フィード一括置換\n"
                     "• `@bot feed export` — フィード一覧をCSVエクスポート\n"
+                    "• `@bot feed collect --skip-summary` — 要約なし一括収集\n"
                     "• `@bot feed test` — テスト配信（上位3フィード・各5件）\n"
                     "※ URL・カテゴリは複数指定可能（スペース区切り）"
                 )

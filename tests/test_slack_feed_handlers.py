@@ -9,6 +9,7 @@ import pytest
 from src.services.feed_collector import FeedCollector
 from src.slack.handlers import (
     _handle_feed_add,
+    _handle_feed_collect_skip_summary,
     _handle_feed_delete,
     _handle_feed_disable,
     _handle_feed_enable,
@@ -702,3 +703,50 @@ async def test_ac17_6_handle_feed_export_permission_error() -> None:
 
     assert "エラー" in result
     assert "files:write" in result
+
+
+# --- feed collect --skip-summary テスト (AC18) ---
+
+
+def test_parse_feed_command_collect() -> None:
+    """feedコマンド解析: collect."""
+    subcommand, urls, category = _parse_feed_command("feed collect --skip-summary")
+    assert subcommand == "collect"
+    assert urls == []
+
+
+@pytest.mark.asyncio
+async def test_ac18_1_handle_feed_collect_skip_summary_success() -> None:
+    """feedハンドラ: collect --skip-summary 成功 (AC18.1)."""
+    collector = AsyncMock(spec=FeedCollector)
+    collector.collect_all_skip_summary.return_value = (3, 45)
+
+    result = await _handle_feed_collect_skip_summary(collector)
+
+    collector.collect_all_skip_summary.assert_called_once()
+    assert "要約スキップ収集完了" in result
+    assert "収集フィード数: 3" in result
+    assert "収集記事数: 45" in result
+
+
+@pytest.mark.asyncio
+async def test_ac18_6_handle_feed_collect_skip_summary_summary_format() -> None:
+    """feedハンドラ: collect --skip-summary サマリー形式 (AC18.6)."""
+    collector = AsyncMock(spec=FeedCollector)
+    collector.collect_all_skip_summary.return_value = (0, 0)
+
+    result = await _handle_feed_collect_skip_summary(collector)
+
+    assert "収集フィード数: 0" in result
+    assert "収集記事数: 0" in result
+
+
+@pytest.mark.asyncio
+async def test_ac18_handle_feed_collect_skip_summary_error() -> None:
+    """feedハンドラ: collect --skip-summary エラー時."""
+    collector = AsyncMock(spec=FeedCollector)
+    collector.collect_all_skip_summary.side_effect = Exception("Unexpected error")
+
+    result = await _handle_feed_collect_skip_summary(collector)
+
+    assert "エラーが発生しました" in result

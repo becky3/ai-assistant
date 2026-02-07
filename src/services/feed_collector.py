@@ -65,6 +65,96 @@ class FeedCollector:
 
         return collected
 
+    async def collect_all_skip_summary(self) -> tuple[int, int]:
+        """要約をスキップして全フィードから記事を一括収集する（初回インポート用）.
+
+        LLM呼び出しなしで記事をDBに登録する。
+        - summary にはフィードの description（HTMLタグ除去済み）またはプレースホルダを保存
+        - delivered=True で保存（配信キューに入らないようにする）
+
+        Returns:
+            (収集フィード数, 収集記事数) のタプル
+        """
+        async with self._session_factory() as session:
+            feeds = await self._get_enabled_feeds(session)
+
+        total_feeds = 0
+        total_articles = 0
+
+        for feed in feeds:
+            try:
+                count = await self._collect_feed_skip_summary(feed)
+                if count > 0:
+                    total_feeds += 1
+                    total_articles += count
+            except Exception:
+                logger.exception(
+                    "Failed to collect feed (skip-summary): %s (%s)",
+                    feed.name, feed.url,
+                )
+                continue
+
+        return (total_feeds, total_articles)
+
+    async def _collect_feed_skip_summary(self, feed: Feed) -> int:
+        """要約をスキップして単一フィードから記事を収集する."""
+        parsed = await asyncio.to_thread(feedparser.parse, feed.url)
+
+        async with self._session_factory() as session:
+            # エントリ内の全URLを収集し、一括で既存記事を取得する
+            urls = [entry.get("link", "") for entry in parsed.entries if entry.get("link")]
+            existing_urls: set[str] = set()
+            if urls:
+                result = await session.execute(
+                    select(Article.url).where(Article.url.in_(urls))
+                )
+                existing_urls = set(result.scalars().all())
+
+            new_count = 0
+            for entry in parsed.entries:
+                url = entry.get("link", "")
+                if not url or url in existing_urls:
+                    continue
+
+                title = entry.get("title", "")
+                description = strip_html(
+                    entry.get("summary", "") or entry.get("description", "")
+                )
+                published_at = None
+                if hasattr(entry, "published_parsed") and entry.published_parsed:
+                    published_at = datetime.fromtimestamp(
+                        mktime(entry.published_parsed), tz=timezone.utc
+                    )
+
+                # 要約の代わりにdescriptionまたはプレースホルダを使用
+                summary = description if description else "（要約なし）"
+
+                image_url = None
+                if self._ogp_extractor:
+                    entry_dict = {
+                        k: entry.get(k, None)
+                        for k in ("media_content", "enclosures", "media_thumbnail", "summary", "content")
+                    }
+                    image_url = await self._ogp_extractor.extract_image_url(
+                        url, entry_dict
+                    )
+
+                article = Article(
+                    feed_id=feed.id,
+                    title=title,
+                    url=url,
+                    summary=summary,
+                    image_url=image_url,
+                    published_at=published_at,
+                    delivered=True,
+                )
+                session.add(article)
+                new_count += 1
+
+            await session.commit()
+
+        return new_count
+
     async def get_enabled_feeds(self) -> list[Feed]:
         """有効なフィード一覧を取得する（公開API）."""
         async with self._session_factory() as session:

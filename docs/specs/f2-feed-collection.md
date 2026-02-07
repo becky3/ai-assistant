@@ -149,6 +149,7 @@ uv run python scripts/test_delivery.py vertical     # 縦長形式を指定
 - `@bot feed import` + CSV添付 — フィード一括インポート
 - `@bot feed replace` + CSV添付 — フィード一括置換（全削除→再登録）
 - `@bot feed export` — フィード一覧CSVエクスポート
+- `@bot feed collect --skip-summary` — 要約なし一括収集（初回インポート用）
 
 **コマンド解析ルール:**
 - `http://` または `https://` で始まり、ドメインを含むトークンをURLとして認識
@@ -159,6 +160,7 @@ uv run python scripts/test_delivery.py vertical     # 縦長形式を指定
 - 操作結果をスレッド内で応答（成功: ✓ / 失敗: ✗）
 - `feed list` は各フィードを `URL — フィード名` 形式で表示（有効/無効で分類）
 - フィード一覧はURL昇順でソートする（`feed list` / `feed export` / 配信処理で共通）
+- `feed collect --skip-summary` は `FeedCollector.collect_all_skip_summary()` を呼び出す
 - 不明なサブコマンドの場合はヘルプメッセージを表示
 
 ### フィード一括インポート（CSV）
@@ -246,6 +248,31 @@ https://another.com/rss,Another Feed,News
 - `files:read` スコープが推奨（`files_upload_v2()` の内部処理に使用）
 - 権限不足時は分かりやすいエラーメッセージを返す
 
+### 要約スキップ収集（collect --skip-summary）
+
+初回インポート後に大量記事を一括収集する際、LLM要約をスキップして高速に記事を登録するモード。
+
+**入力:**
+- Slackでボットにメンション + `feed collect --skip-summary`
+
+**処理:**
+1. 有効フィードを順に処理
+2. 各フィードのRSSエントリを取得し、既存記事（URL重複）をスキップ
+3. 新規記事を要約なしでDBに保存
+   - LLM呼び出しなし
+   - `summary` にはフィードの description（HTMLタグ除去済み）を保存。description が空の場合はプレースホルダ「（要約なし）」を保存
+   - `delivered=True` で保存（配信キューに入らないようにする）
+   - OGP画像の取得も行う（通常収集と同様）
+4. フィード単位でエラーが発生した場合はログに記録し、他のフィードの処理を継続する
+5. 処理結果のサマリーをSlackに返答
+
+**出力例:**
+```
+要約スキップ収集完了
+📰 収集フィード数: 5
+📝 収集記事数: 120
+```
+
 ### 情報源探索
 
 **入力:**
@@ -330,6 +357,16 @@ https://another.com/rss,Another Feed,News
   - [ ] AC17.4: 有効・無効問わず全フィードがエクスポートされる
   - [ ] AC17.5: フィードが0件の場合はエラーメッセージを表示
   - [ ] AC17.6: Slack API権限不足時に分かりやすいエラーメッセージを表示
+- [ ] AC18: 要約スキップ収集モード（`feed collect --skip-summary`）
+  - [ ] AC18.1: `@bot feed collect --skip-summary` コマンドで要約なし収集が実行できる
+  - [ ] AC18.2: 要約なし収集時は LLM を呼び出さない
+  - [ ] AC18.3: 収集された記事は `delivered=True` で保存され、配信キューに入らない
+  - [ ] AC18.4: summary にはフィードの description またはプレースホルダ「（要約なし）」が保存される
+  - [ ] AC18.5: 要約なし収集後の通常収集で、新着記事のみが要約・配信対象になる
+  - [ ] AC18.6: 処理結果のサマリー（収集フィード数・記事数）をSlackに返答する
+  - [ ] AC18.7: フィード処理中にエラーが発生した場合、該当フィードをスキップして他のフィードの処理を継続する
+  - [ ] AC18.8: 既にarticlesテーブルに存在するURLの記事はスキップする（重複排除）
+  - [ ] AC18.9: 要約スキップ収集時もOGP画像URLを取得する
 
 ## 使用LLMプロバイダー
 
@@ -366,3 +403,4 @@ https://another.com/rss,Another Feed,News
 - フィード一括置換テスト: 全削除→再登録の正常系、CSV検証エラー、部分失敗時のサマリー
 - フィードエクスポートテスト: CSV生成・ファイル投稿の正常系、0件時エラー、権限不足エラー
 - FeedCollector の `delete_all_feeds()` / `get_all_feeds()` のユニットテスト
+- 要約スキップ収集テスト: LLM非呼び出し検証、delivered=True検証、summaryにdescription/プレースホルダ保存検証、通常収集との組み合わせ検証、URL重複スキップ検証、エラー時のフィードスキップ継続検証、OGP画像取得検証
