@@ -549,7 +549,7 @@ def test_strip_html_medium_like_content() -> None:
 
 
 async def test_ac18_1_collect_all_skip_summary(db_factory) -> None:  # type: ignore[no-untyped-def]
-    """AC18.1: collect_all_skip_summary で要約なし収集が実行できる."""
+    """AC18.1: collect_all(skip_summary=True) で要約なし収集が実行できる."""
     summarizer = AsyncMock(spec=Summarizer)
     collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
 
@@ -560,15 +560,14 @@ async def test_ac18_1_collect_all_skip_summary(db_factory) -> None:  # type: ign
 
     with patch("src.services.feed_collector.feedparser.parse", return_value=parsed):
         with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
-            feed_count, article_count = await collector.collect_all_skip_summary()
+            articles = await collector.collect_all(skip_summary=True)
 
-    assert feed_count == 1
-    assert article_count == 2
+    assert len(articles) == 2
 
     async with db_factory() as session:
         result = await session.execute(select(Article))
-        articles = list(result.scalars().all())
-        assert len(articles) == 2
+        db_articles = list(result.scalars().all())
+        assert len(db_articles) == 2
 
 
 async def test_ac18_2_skip_summary_no_llm_call(db_factory) -> None:  # type: ignore[no-untyped-def]
@@ -582,7 +581,7 @@ async def test_ac18_2_skip_summary_no_llm_call(db_factory) -> None:  # type: ign
 
     with patch("src.services.feed_collector.feedparser.parse", return_value=parsed):
         with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
-            await collector.collect_all_skip_summary()
+            await collector.collect_all(skip_summary=True)
 
     summarizer.summarize.assert_not_called()
 
@@ -598,7 +597,7 @@ async def test_ac18_3_skip_summary_delivered_true(db_factory) -> None:  # type: 
 
     with patch("src.services.feed_collector.feedparser.parse", return_value=parsed):
         with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
-            await collector.collect_all_skip_summary()
+            await collector.collect_all(skip_summary=True)
 
     async with db_factory() as session:
         result = await session.execute(
@@ -619,7 +618,7 @@ async def test_ac18_4_skip_summary_uses_description(db_factory) -> None:  # type
 
     with patch("src.services.feed_collector.feedparser.parse", return_value=parsed):
         with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
-            await collector.collect_all_skip_summary()
+            await collector.collect_all(skip_summary=True)
 
     async with db_factory() as session:
         result = await session.execute(
@@ -640,7 +639,7 @@ async def test_ac18_4_skip_summary_placeholder_when_no_description(db_factory) -
 
     with patch("src.services.feed_collector.feedparser.parse", return_value=parsed):
         with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
-            await collector.collect_all_skip_summary()
+            await collector.collect_all(skip_summary=True)
 
     async with db_factory() as session:
         result = await session.execute(
@@ -663,7 +662,7 @@ async def test_ac18_5_skip_summary_then_normal_collect(db_factory) -> None:  # t
 
     with patch("src.services.feed_collector.feedparser.parse", return_value=parsed1):
         with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
-            await collector.collect_all_skip_summary()
+            await collector.collect_all(skip_summary=True)
 
     # 次に通常収集（新着 + 既存の混在フィード）
     parsed2 = _make_parsed_feed([
@@ -698,10 +697,10 @@ async def test_ac18_6_skip_summary_result_summary(db_factory) -> None:  # type: 
 
     with patch("src.services.feed_collector.feedparser.parse", return_value=parsed):
         with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
-            feed_count, article_count = await collector.collect_all_skip_summary()
+            articles = await collector.collect_all(skip_summary=True)
 
-    assert feed_count == 1
-    assert article_count == 3
+    assert len({a.feed_id for a in articles}) == 1
+    assert len(articles) == 3
 
 
 async def test_ac18_skip_summary_duplicate_skipped(db_factory) -> None:  # type: ignore[no-untyped-def]
@@ -725,15 +724,14 @@ async def test_ac18_skip_summary_duplicate_skipped(db_factory) -> None:  # type:
 
     with patch("src.services.feed_collector.feedparser.parse", return_value=parsed):
         with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
-            feed_count, article_count = await collector.collect_all_skip_summary()
+            articles = await collector.collect_all(skip_summary=True)
 
-    assert feed_count == 1
-    assert article_count == 1
+    assert len(articles) == 1
 
     async with db_factory() as session:
         result = await session.execute(select(Article))
-        articles = list(result.scalars().all())
-        assert len(articles) == 2  # 既存1 + 新規1
+        db_articles = list(result.scalars().all())
+        assert len(db_articles) == 2  # 既存1 + 新規1
 
 
 async def test_ac18_skip_summary_feed_failure_continues(db_factory) -> None:  # type: ignore[no-untyped-def]
@@ -756,10 +754,9 @@ async def test_ac18_skip_summary_feed_failure_continues(db_factory) -> None:  # 
 
     with patch("src.services.feed_collector.feedparser.parse", side_effect=mock_parse):
         with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
-            feed_count, article_count = await collector.collect_all_skip_summary()
+            articles = await collector.collect_all(skip_summary=True)
 
-    assert feed_count == 1
-    assert article_count == 1
+    assert len(articles) == 1
 
 
 async def test_ac18_skip_summary_with_ogp(db_factory) -> None:  # type: ignore[no-untyped-def]
@@ -780,7 +777,7 @@ async def test_ac18_skip_summary_with_ogp(db_factory) -> None:  # type: ignore[n
 
     with patch("src.services.feed_collector.feedparser.parse", return_value=parsed):
         with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
-            await collector.collect_all_skip_summary()
+            await collector.collect_all(skip_summary=True)
 
     async with db_factory() as session:
         result = await session.execute(

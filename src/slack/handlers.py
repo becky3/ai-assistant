@@ -423,10 +423,13 @@ async def _handle_feed_collect_skip_summary(
 ) -> str:
     """要約をスキップして全フィードから記事を一括収集する（初回インポート用）."""
     try:
-        feed_count, article_count = await collector.collect_all_skip_summary()
+        articles = await collector.collect_all(skip_summary=True)
     except Exception:
         logger.exception("Failed to collect feeds with skip-summary")
         return "要約スキップ収集中にエラーが発生しました。"
+
+    feed_count = len({a.feed_id for a in articles})
+    article_count = len(articles)
 
     return (
         "*要約スキップ収集完了*\n"

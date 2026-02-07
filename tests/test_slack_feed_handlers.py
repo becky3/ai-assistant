@@ -721,11 +721,13 @@ def test_parse_feed_command_collect() -> None:
 async def test_ac18_1_handle_feed_collect_skip_summary_success() -> None:
     """feedハンドラ: collect --skip-summary 成功 (AC18.1)."""
     collector = AsyncMock(spec=FeedCollector)
-    collector.collect_all_skip_summary.return_value = (3, 45)
+    # 3フィードから計45記事を返すモック
+    mock_articles = [MagicMock(feed_id=i) for i in range(3) for _ in range(15)]
+    collector.collect_all.return_value = mock_articles
 
     result = await _handle_feed_collect_skip_summary(collector)
 
-    collector.collect_all_skip_summary.assert_called_once()
+    collector.collect_all.assert_called_once_with(skip_summary=True)
     assert "要約スキップ収集完了" in result
     assert "収集フィード数: 3" in result
     assert "収集記事数: 45" in result
@@ -735,7 +737,7 @@ async def test_ac18_1_handle_feed_collect_skip_summary_success() -> None:
 async def test_ac18_6_handle_feed_collect_skip_summary_summary_format() -> None:
     """feedハンドラ: collect --skip-summary サマリー形式 (AC18.6)."""
     collector = AsyncMock(spec=FeedCollector)
-    collector.collect_all_skip_summary.return_value = (0, 0)
+    collector.collect_all.return_value = []
 
     result = await _handle_feed_collect_skip_summary(collector)
 
@@ -747,7 +749,7 @@ async def test_ac18_6_handle_feed_collect_skip_summary_summary_format() -> None:
 async def test_ac18_handle_feed_collect_skip_summary_error() -> None:
     """feedハンドラ: collect --skip-summary エラー時."""
     collector = AsyncMock(spec=FeedCollector)
-    collector.collect_all_skip_summary.side_effect = Exception("Unexpected error")
+    collector.collect_all.side_effect = Exception("Unexpected error")
 
     result = await _handle_feed_collect_skip_summary(collector)
 
