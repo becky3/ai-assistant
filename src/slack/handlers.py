@@ -141,14 +141,14 @@ async def _handle_feed_list(collector: FeedCollector) -> str:
     if enabled:
         lines.append("*有効なフィード*")
         for feed in enabled:
-            lines.append(f"• {feed.url} — {feed.category}")
+            lines.append(f"• {feed.url} — {feed.name}")
     else:
         lines.append("有効なフィードはありません")
 
     if disabled:
         lines.append("\n*無効なフィード*")
         for feed in disabled:
-            lines.append(f"• {feed.url} — {feed.category}")
+            lines.append(f"• {feed.url} — {feed.name}")
 
     return "\n".join(lines)
 
