@@ -382,7 +382,15 @@ async def _handle_feed_replace(
         return error
 
     # 全フィード削除
-    deleted_count = await collector.delete_all_feeds()
+    try:
+        deleted_count = await collector.delete_all_feeds()
+    except Exception:
+        logger.exception("Failed to delete all feeds in replace")
+        return (
+            "*フィード置換エラー*\n"
+            "🗑️ 既存フィードの削除中に予期せぬエラーが発生しました。\n"
+            "❌ フィードの置換を完了できませんでした。"
+        )
 
     # CSVからフィードを登録
     try:
@@ -420,11 +428,21 @@ async def _handle_feed_export(
         return "エクスポートするフィードがありません。"
 
     # CSV文字列を生成
+    def _sanitize_csv_field(value: str) -> str:
+        """CSVインジェクション対策: 先頭が危険な文字の場合にシングルクォートを付与."""
+        if value and value[0] in ("=", "+", "-", "@"):
+            return f"'{value}"
+        return value
+
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["url", "name", "category"])
     for feed in feeds:
-        writer.writerow([feed.url, feed.name, feed.category])
+        writer.writerow([
+            feed.url,
+            _sanitize_csv_field(feed.name),
+            _sanitize_csv_field(feed.category),
+        ])
     csv_content = output.getvalue()
 
     # Slackにファイルをアップロード
