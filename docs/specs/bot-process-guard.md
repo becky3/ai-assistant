@@ -38,11 +38,14 @@ PID_FILE = Path("bot.pid")
 ```
 
 #### `write_pid_file() -> None`
-- 現在のプロセスIDを `bot.pid` に書き込む
+- `O_CREAT | O_EXCL` フラグによる排他作成でPIDファイルを確保する（TOCTOU対策）
+- PIDファイルが既に存在する場合:
+  - 既存PIDのプロセスが生存していれば `sys.exit(1)`
+  - stale PIDならファイルを削除して再試行（1回のみ）
 
 #### `read_pid_file() -> int | None`
 - PIDファイルを読み取り、整数値として返す
-- ファイルが存在しない、または内容が不正な場合は `None` を返す
+- ファイルが存在しない、内容が不正、または PID <= 0 の場合は `None` を返す
 
 #### `remove_pid_file() -> None`
 - PIDファイルを削除する
@@ -99,9 +102,9 @@ async def main() -> None:
     check_already_running()
     write_pid_file()
 
-    # ... 既存の初期化処理 ...
-
+    mcp_manager = None
     try:
+        # ... 既存の初期化処理 ...
         await start_socket_mode(app, settings)
     finally:
         if mcp_manager:
@@ -115,6 +118,8 @@ async def main() -> None:
             logger.warning("子プロセスクリーンアップ失敗", exc_info=True)
         remove_pid_file()
 ```
+
+`write_pid_file()` 直後から全体を `try/finally` で包むことで、初期化中の例外でもPIDファイル削除と子プロセスクリーンアップが確実に実行される。
 
 ## やらないこと
 

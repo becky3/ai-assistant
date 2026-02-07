@@ -93,6 +93,54 @@ class TestPidFile:
 
         assert read_pid_file() is None
 
+    def test_read_pid_file_returns_none_for_zero_pid(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """PID=0 は不正値としてNoneを返す."""
+        pid_file = tmp_path / "bot.pid"
+        pid_file.write_text("0", encoding="utf-8")
+        monkeypatch.setattr("src.process_guard.PID_FILE", pid_file)
+
+        assert read_pid_file() is None
+
+    def test_read_pid_file_returns_none_for_negative_pid(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """負のPIDは不正値としてNoneを返す."""
+        pid_file = tmp_path / "bot.pid"
+        pid_file.write_text("-1", encoding="utf-8")
+        monkeypatch.setattr("src.process_guard.PID_FILE", pid_file)
+
+        assert read_pid_file() is None
+
+    def test_write_pid_file_exclusive_exits_when_alive(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """排他作成: PIDファイルが既に存在し生存プロセスなら exit(1)."""
+        pid_file = tmp_path / "bot.pid"
+        pid_file.write_text("12345", encoding="utf-8")
+        monkeypatch.setattr("src.process_guard.PID_FILE", pid_file)
+
+        with (
+            patch("src.process_guard.is_process_alive", return_value=True),
+            pytest.raises(SystemExit, match="1"),
+        ):
+            write_pid_file()
+
+    def test_write_pid_file_exclusive_recovers_stale(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """排他作成: stale PIDファイルがあれば削除して再作成する."""
+        pid_file = tmp_path / "bot.pid"
+        pid_file.write_text("99999", encoding="utf-8")
+        monkeypatch.setattr("src.process_guard.PID_FILE", pid_file)
+
+        with patch("src.process_guard.is_process_alive", return_value=False):
+            write_pid_file()
+
+        assert pid_file.exists()
+        assert pid_file.read_text(encoding="utf-8") == str(os.getpid())
+
 
 # ---------------------------------------------------------------------------
 # プロセス生存確認テスト (Unix)
@@ -145,7 +193,7 @@ class TestIsProcessAliveWindows:
             assert _is_process_alive_windows(12345) is False
 
     def test_ac5_tasklist_not_found_returns_false(self) -> None:
-        """taslistコマンドが見つからない場合はFalse."""
+        """tasklistコマンドが見つからない場合はFalse."""
         with patch(
             "src.process_guard.subprocess.run",
             side_effect=FileNotFoundError(),
@@ -281,7 +329,7 @@ class TestCleanupChildren:
             cleanup_children()
             mock_kill.assert_not_called()
 
-    def test_windows_pgrep_not_found(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_windows_wmic_not_found(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Windows: wmicが見つからない場合はスキップ."""
         monkeypatch.setattr("sys.platform", "win32")
 

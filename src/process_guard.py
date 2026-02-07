@@ -22,9 +22,35 @@ PID_FILE = Path("bot.pid")
 
 
 def write_pid_file() -> None:
-    """現在のプロセスIDをPIDファイルに書き込む."""
-    PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
-    logger.info("PIDファイルを作成しました: %s (PID=%d)", PID_FILE, os.getpid())
+    """現在のプロセスIDをPIDファイルに書き込む（排他作成）."""
+    pid = os.getpid()
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    try:
+        fd = os.open(str(PID_FILE), flags, 0o644)
+    except FileExistsError:
+        # 同時起動の競合: PIDファイルが既に存在する
+        existing_pid = read_pid_file()
+        if existing_pid is not None and is_process_alive(existing_pid):
+            logger.error(
+                "既に別プロセスが起動中です: %s (PID=%d)", PID_FILE, existing_pid,
+            )
+            sys.exit(1)
+        # stale PIDファイルを削除して再試行
+        try:
+            PID_FILE.unlink()
+        except OSError:
+            logger.error(
+                "stale PIDファイルを削除できませんでした: %s", PID_FILE, exc_info=True,
+            )
+            sys.exit(1)
+        try:
+            fd = os.open(str(PID_FILE), flags, 0o644)
+        except FileExistsError:
+            logger.error("PIDファイルの排他確保に失敗しました: %s", PID_FILE)
+            sys.exit(1)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(str(pid))
+    logger.info("PIDファイルを作成しました: %s (PID=%d)", PID_FILE, pid)
 
 
 def read_pid_file() -> int | None:
@@ -36,7 +62,10 @@ def read_pid_file() -> int | None:
         return None
     try:
         text = PID_FILE.read_text(encoding="utf-8").strip()
-        return int(text)
+        pid = int(text)
+        if pid <= 0:
+            return None
+        return pid
     except (ValueError, OSError):
         return None
 
@@ -151,7 +180,10 @@ def _cleanup_children_unix() -> None:
             os.kill(child_pid, signal.SIGTERM)
             logger.info("子プロセスを停止しました: PID=%d", child_pid)
         except (ValueError, ProcessLookupError):
-            pass
+            logger.debug(
+                "子プロセスのPIDが不正、または既に存在しません。スキップします: PID文字列=%r",
+                child_pid_str,
+            )
         except PermissionError:
             logger.warning("子プロセスの停止権限がありません: PID=%s", child_pid_str)
 
