@@ -70,16 +70,17 @@
 **Claudeによる実装完了時の必須手順**:
 1. **ファイル作成の確認**: 作成したと報告したファイルが実際に存在するか `ls -la` で確認
 2. **テスト実行**: **test-runner サブエージェント** で全テスト（pytest / mypy / ruff）が通過することを確認
-3. **ドキュメントレビュー**: `docs/specs/` に変更・新規追加がある場合、**doc-reviewer サブエージェント** で品質レビューを実施し、指摘があれば修正する。実装のみのPRでも、対応する仕様書との整合性チェックのため実施すること。
-4. **変更のステージング**: `git status` で変更を確認し、`git add` で全てステージング
-5. **コミット**: 変更内容を明確に記述したコミットメッセージでコミット
-6. **プッシュ**: `git push origin <ブランチ名>` でリモートにプッシュ
-7. **PR作成**: `gh pr create` コマンドで実際にPRを作成（手動リンクではなく実際に作成）
+3. **コードレビュー**: **code-reviewer サブエージェント** で変更コードのセルフレビューを実施し、Critical/Warning の指摘があれば修正する
+4. **ドキュメントレビュー**: `docs/specs/` に変更・新規追加がある場合、**doc-reviewer サブエージェント** で品質レビューを実施し、指摘があれば修正する。実装のみのPRでも、対応する仕様書との整合性チェックのため実施すること。
+5. **変更のステージング**: `git status` で変更を確認し、`git add` で全てステージング
+6. **コミット**: 変更内容を明確に記述したコミットメッセージでコミット
+7. **プッシュ**: `git push origin <ブランチ名>` でリモートにプッシュ
+8. **PR作成**: `gh pr create` コマンドで実際にPRを作成（手動リンクではなく実際に作成）
    ```bash
    gh pr create --title "タイトル" --body "説明\n\nCloses #Issue番号" --base main
    ```
-8. **作成確認**: `gh pr view` でPRが正しく作成されたことを確認し、URLをユーザーに提示
-9. **レトロスペクティブ**: 機能実装のPRの場合、`/doc-gen retro <feature-name>` でレトロを生成・更新する
+9. **作成確認**: `gh pr view` でPRが正しく作成されたことを確認し、URLをユーザーに提示
+10. **レトロスペクティブ**: 機能実装のPRの場合、`/doc-gen retro <feature-name>` でレトロを生成・更新する
 
 ### レビュー指摘対応
 PRに対するレビュー指摘（Copilot、人間問わず）への対応は `/fix-reviews` スキルを使用する。
@@ -145,11 +146,12 @@ PRに対するレビュー指摘（Copilot、人間問わず）への対応は `
 | サブエージェント | 用途 | 使用例 |
 |-----------------|------|--------|
 | **planner** | Issue・提案内容から実装計画を立案 | `plannerサブエージェントでIssue #42 の実装計画を立ててください` |
+| **code-reviewer** | コミット前のセルフコードレビュー | `code-reviewerサブエージェントで変更差分をレビューしてください` |
 | **doc-reviewer** | 仕様書・README.md の品質レビュー | `doc-reviewerサブエージェントで docs/specs/f1-chat.md をレビューしてください` |
 | **test-runner** | pytest によるテスト実行・分析・修正提案 | `test-runnerサブエージェントで全テストを実行してください` |
 
 **定義ファイル**: `.claude/agents/` 配下
-**仕様書**: `docs/specs/planner-agent.md`, `docs/specs/doc-review-agent.md`, `docs/specs/test-runner-agent.md`
+**仕様書**: `docs/specs/planner-agent.md`, `docs/specs/code-review-agent.md`, `docs/specs/doc-review-agent.md`, `docs/specs/test-runner-agent.md`
 
 ### スキルとサブエージェントの使い分け
 
