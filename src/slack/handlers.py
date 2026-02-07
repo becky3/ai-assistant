@@ -345,7 +345,7 @@ def register_handlers(
     session_factory: async_sessionmaker[AsyncSession] | None = None,
     slack_client: object | None = None,
     channel_id: str | None = None,
-    max_articles_per_category: int = 10,
+    max_articles_per_feed: int = 10,
     feed_card_layout: Literal["vertical", "horizontal"] = "horizontal",
     auto_reply_channels: list[str] | None = None,
     bot_token: str | None = None,
@@ -409,6 +409,33 @@ def register_handlers(
                     response_text = await _handle_feed_import(
                         collector, files, bot_token
                     )
+            elif subcommand == "test":
+                if (
+                    session_factory is not None
+                    and slack_client is not None
+                    and channel_id is not None
+                ):
+                    from src.scheduler.jobs import feed_test_deliver
+
+                    try:
+                        await say(text="テスト配信を開始します...", thread_ts=thread_ts)  # type: ignore[operator]
+                        await feed_test_deliver(
+                            session_factory=session_factory,
+                            slack_client=slack_client,
+                            channel_id=channel_id,
+                            layout=feed_card_layout,
+                        )
+                        await say(text="テスト配信が完了しました", thread_ts=thread_ts)  # type: ignore[operator]
+                    except Exception:
+                        logger.exception("Failed to run feed test delivery")
+                        await say(  # type: ignore[operator]
+                            text="テスト配信中にエラーが発生しました。",
+                            thread_ts=thread_ts,
+                        )
+                else:
+                    response_text = "エラー: 配信設定が不足しています。"
+                    await say(text=response_text, thread_ts=thread_ts)  # type: ignore[operator]
+                return
             else:
                 response_text = (
                     "使用方法:\n"
@@ -418,6 +445,7 @@ def register_handlers(
                     "• `@bot feed enable <URL>` — フィード有効化\n"
                     "• `@bot feed disable <URL>` — フィード無効化\n"
                     "• `@bot feed import` + CSV添付 — フィード一括インポート\n"
+                    "• `@bot feed test` — テスト配信（上位3フィード・各5件）\n"
                     "※ URL・カテゴリは複数指定可能（スペース区切り）"
                 )
 
@@ -438,7 +466,7 @@ def register_handlers(
                 await say(text="配信を開始します...", thread_ts=thread_ts)  # type: ignore[operator]
                 await daily_collect_and_deliver(
                     collector, session_factory, slack_client, channel_id,
-                    max_articles_per_category=max_articles_per_category,
+                    max_articles_per_feed=max_articles_per_feed,
                     layout=feed_card_layout,
                 )
                 await say(text="配信が完了しました", thread_ts=thread_ts)  # type: ignore[operator]

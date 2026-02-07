@@ -125,7 +125,7 @@ async def test_deliver_keyword_triggers_manual_delivery() -> None:
 
     mock_deliver.assert_called_once_with(
         collector, session_factory, slack_client, channel_id,
-        max_articles_per_category=10,
+        max_articles_per_feed=10,
         layout="horizontal",
     )
     # First call: "配信を開始します...", second: "配信が完了しました"

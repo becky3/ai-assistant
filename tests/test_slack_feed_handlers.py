@@ -81,6 +81,14 @@ def test_parse_feed_command_case_insensitive() -> None:
     assert subcommand == "add"
 
 
+def test_parse_feed_command_test() -> None:
+    """feedコマンド解析: test."""
+    subcommand, urls, category = _parse_feed_command("feed test")
+    assert subcommand == "test"
+    assert urls == []
+    assert category == "一般"
+
+
 def test_parse_feed_command_invalid() -> None:
     """feedコマンド解析: 不正コマンド."""
     subcommand, urls, category = _parse_feed_command("feed")

@@ -139,6 +139,7 @@ async def main() -> None:
         session_factory=session_factory,
         summarizer=summarizer,
         ogp_extractor=ogp_extractor,
+        summarize_timeout=settings.feed_summarize_timeout,
     )
     handlers_module.register_handlers(
         app, chat_service,
@@ -148,7 +149,7 @@ async def main() -> None:
         session_factory=session_factory,
         slack_client=slack_client,
         channel_id=settings.slack_news_channel_id,
-        max_articles_per_category=settings.feed_articles_per_category,
+        max_articles_per_feed=settings.feed_articles_per_feed,
         feed_card_layout=settings.feed_card_layout,
         auto_reply_channels=settings.get_auto_reply_channels(),
         bot_token=settings.slack_bot_token,
