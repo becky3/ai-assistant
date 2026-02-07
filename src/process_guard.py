@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -72,9 +73,13 @@ def read_pid_file() -> int | None:
 
 def remove_pid_file() -> None:
     """PIDファイルを削除する. 存在しない場合は何もしない."""
+    existed = PID_FILE.exists()
     try:
         PID_FILE.unlink(missing_ok=True)
-        logger.info("PIDファイルを削除しました: %s", PID_FILE)
+        if existed:
+            logger.info("PIDファイルを削除しました: %s", PID_FILE)
+        else:
+            logger.debug("PIDファイルは存在しませんでした（削除対象なし）: %s", PID_FILE)
     except OSError:
         logger.warning("PIDファイルの削除に失敗しました: %s", PID_FILE, exc_info=True)
 
@@ -108,7 +113,8 @@ def _is_process_alive_windows(pid: int) -> bool:
         # tasklist は該当プロセスがない場合 "INFO: No tasks ..." を返す
         if output.startswith("INFO:"):
             return False
-        return str(pid) in output
+        # PID列を単語境界で厳密一致（部分一致による誤判定を防止）
+        return bool(re.search(rf"\b{pid}\b", output))
     except FileNotFoundError:
         logger.warning("tasklist コマンドが見つかりません")
         return False

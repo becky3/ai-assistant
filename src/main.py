@@ -64,19 +64,18 @@ def _load_mcp_server_configs(config_path: str) -> list[MCPServerConfig]:
 
 
 async def main() -> None:
+    # ログ設定（プロセスガードのログ出力に必要なため最初に実行）
+    settings = get_settings()
+    logging.basicConfig(level=settings.log_level)
+
     # 重複起動検知: 既に動いていたら警告して終了
     check_already_running()
     write_pid_file()
 
     mcp_manager: MCPClientManager | None = None
     try:
-        settings = get_settings()
-
         # 起動時刻を記録 (F7)
         handlers_module.BOT_START_TIME = datetime.now(tz=ZoneInfo(settings.timezone))
-
-        # ログ設定
-        logging.basicConfig(level=settings.log_level)
 
         # DB 初期化
         await init_db()

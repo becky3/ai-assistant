@@ -215,6 +215,14 @@ class TestIsProcessAliveWindows:
         with patch("src.process_guard.subprocess.run", return_value=mock_result):
             assert _is_process_alive_windows(12345) is False
 
+    def test_ac5_partial_pid_match_returns_false(self) -> None:
+        """PIDが別PIDの部分文字列として含まれる場合はFalse（誤判定防止）."""
+        mock_result = MagicMock()
+        # PID=123 を検索するが、出力には 12345 しかない
+        mock_result.stdout = "python.exe                   12345 Console  1    50,000 K\n"
+        with patch("src.process_guard.subprocess.run", return_value=mock_result):
+            assert _is_process_alive_windows(123) is False
+
 
 # ---------------------------------------------------------------------------
 # 重複起動チェックテスト
