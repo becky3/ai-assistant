@@ -10,6 +10,7 @@ import logging
 import os
 import signal
 import sys
+import time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,9 @@ def is_process_alive(pid: int) -> bool:
     except PermissionError:
         # プロセスは存在するがアクセス権がない
         return True
+    except OSError:
+        # Windows環境で不正なPIDの場合など
+        return False
     else:
         return True
 
@@ -80,9 +84,10 @@ def _kill_process_tree(pid: int) -> None:
 
 
 def _kill_process_tree_unix(pid: int) -> None:
-    """Unix系OSでプロセスツリーを停止する.
+    """Unix系OSでプロセスを停止する.
 
-    プロセスグループ全体にシグナルを送信し、子プロセスも含めて停止する。
+    対象PIDに SIGTERM → SIGKILL を送信して停止を試みる。
+    子プロセスのクリーンアップは cleanup_children() が担当する。
     """
     # まず SIGTERM で graceful に停止を試みる
     try:
@@ -96,15 +101,14 @@ def _kill_process_tree_unix(pid: int) -> None:
         return
 
     # 少し待ってからまだ生きているか確認
-    import time
-
     time.sleep(1)
 
     if is_process_alive(pid):
         try:
-            os.kill(pid, signal.SIGKILL)
+            os.kill(pid, signal.SIGKILL)  # type: ignore[attr-defined]
             logger.info("プロセス PID=%d に SIGKILL を送信しました", pid)
         except ProcessLookupError:
+            # SIGKILL 送信前にプロセスが終了していた場合は正常
             pass
         except PermissionError:
             logger.warning("プロセス PID=%d への SIGKILL 送信に失敗しました（権限不足）", pid)
@@ -148,6 +152,14 @@ def kill_existing_process(pid_path: Path = DEFAULT_PID_FILE) -> None:
 
     logger.info("既存プロセス PID=%d を停止します...", pid)
     _kill_process_tree(pid)
+
+    # kill後に生存確認し、停止できていなければPIDファイルを残してエラーにする
+    time.sleep(1)
+    if is_process_alive(pid):
+        msg = f"プロセス PID={pid} の停止に失敗しました。手動で停止してください。"
+        logger.error(msg)
+        raise RuntimeError(msg)
+
     remove_pid_file(pid_path)
     logger.info("既存プロセスの停止が完了しました。")
 
@@ -187,6 +199,7 @@ def _cleanup_children_unix(parent_pid: int) -> None:
                 os.kill(child_pid, signal.SIGTERM)
                 logger.info("子プロセス PID=%d に SIGTERM を送信しました", child_pid)
             except ProcessLookupError:
+                # 子プロセスが既に終了していた場合は正常
                 pass
             except PermissionError:
                 logger.warning("子プロセス PID=%d への SIGTERM 送信に失敗しました", child_pid)
@@ -225,6 +238,7 @@ def _cleanup_children_windows(parent_pid: int) -> None:
                     )
                     logger.info("子プロセス PID=%d を停止しました", child_pid)
                 except FileNotFoundError:
+                    # taskkill コマンドが見つからない場合は停止をスキップ
                     pass
     except FileNotFoundError:
         logger.debug("wmic コマンドが見つかりません。子プロセスのクリーンアップをスキップします。")

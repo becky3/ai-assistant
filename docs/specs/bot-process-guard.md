@@ -34,9 +34,8 @@ PIDファイルベースで既存プロセスを検出・停止してからBot�
 1. PIDファイル（`bot.pid`）の存在を確認
 2. PIDファイルがある場合、該当プロセスが生存しているか確認
 3. 生存している場合、プロセスツリーごと停止（子プロセス含む）
-4. PIDファイルを更新して新プロセスのPIDを記録
-5. `uv run python -m src.main` を実行
-6. 終了時にPIDファイルを削除
+4. 既存のPIDファイル（`bot.pid`）があれば削除
+5. `exec uv run python -m src.main` を実行（新しいPIDファイルの作成および終了時の削除は、Python側の `write_pid_file()` とクリーンアップ処理に委譲）
 
 **クロスプラットフォーム対応**:
 - Linux/macOS: `kill`, `ps` コマンドを使用
@@ -90,6 +89,7 @@ async def main() -> None:
 - [ ] AC6: 起動スクリプト（`scripts/bot_start.sh`）がLinux/macOS/Windows(Git Bash)で動作すること
 - [ ] AC7: `uv run python -m src.main` での直接起動でもプロセスガードが機能すること
 - [ ] AC8: PIDファイルが `.gitignore` に追加されていること
+- [ ] AC9: 既存プロセスの停止に失敗した場合、PIDファイルを残してエラーとなること
 
 ## 設定
 

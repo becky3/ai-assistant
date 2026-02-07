@@ -36,7 +36,7 @@ is_process_alive() {
     os_type=$(detect_os)
 
     if [ "$os_type" = "windows" ]; then
-        tasklist //FI "PID eq $pid" 2>/dev/null | grep -q "$pid"
+        tasklist //FI "PID eq $pid" 2>/dev/null | grep -wq "$pid"
     else
         kill -0 "$pid" 2>/dev/null
     fi
