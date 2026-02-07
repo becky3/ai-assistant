@@ -41,14 +41,21 @@ cp .env.example .env  # 各種トークン・APIキーを設定
 ## 起動
 
 ```bash
+# 推奨: 起動スクリプト経由（重複起動防止付き）
+bash scripts/bot_start.sh
+
+# 直接起動（Python側のプロセスガードが動作）
 uv run python -m src.main
 ```
+
+起動時にPIDファイル（`bot.pid`）で既存プロセスを検出し、生存していれば自動停止してから起動します。詳細は `docs/specs/bot-process-guard.md` を参照。
 
 ## プロジェクト構造
 
 ```
 src/
   main.py           # エントリーポイント
+  process_guard.py   # Bot重複起動防止（PIDファイル管理・子プロセスクリーンアップ）
   config/settings.py # pydantic-settings による環境変数管理
   db/models.py       # SQLAlchemy モデル (feeds, articles, user_profiles, conversations)
   db/session.py      # DB接続・セッション管理
@@ -59,7 +66,7 @@ src/
   llm/anthropic_provider.py
   llm/lmstudio_provider.py  # OpenAI SDK で base_url を localhost:1234 に向ける
   llm/factory.py     # プロバイダー生成ファクトリ
-  mcp/
+  mcp_bridge/
     __init__.py
     client_manager.py  # MCPサーバー接続管理
   services/chat.py           # チャット応答 (オンラインLLM)
@@ -71,6 +78,8 @@ src/
 mcp-servers/                 # MCPサーバー群（将来リポジトリ分離対象）
   weather/
     server.py          # 天気予報MCPサーバー（気象庁API）
+scripts/
+  bot_start.sh       # Bot起動スクリプト（重複起動防止付き）
 config/
   assistant.yaml     # アシスタントの名前・性格・口調 (システムプロンプトに反映)
   mcp_servers.json   # MCPサーバー接続設定
@@ -127,6 +136,11 @@ uv run mypy src
 - [F5: MCP統合](docs/specs/f5-mcp-integration.md)
 - [F6: 特定チャンネル自動返信](docs/specs/f6-auto-reply.md)
 - [F7: ボットステータス](docs/specs/f7-bot-status.md)
+- [F8: スレッド対応](docs/specs/f8-thread-support.md)
+- [F9: RAGナレッジ](docs/specs/f9-rag-knowledge.md)
+
+### 運用
+- [Bot重複起動防止](docs/specs/bot-process-guard.md)
 
 ### Claude Code 関連
 - [Claude Code Hooks](docs/specs/claude-code-hooks.md)
