@@ -106,36 +106,6 @@ PRに対するレビュー指摘（Copilot、人間問わず）への対応は `
 - テンプレート・運用ルール自体の改善も行う
 - 新機能の仕様策定時は、関連する既存レトロの「次に活かすこと」を参照する
 
-## Bot起動・プロセス管理
-
-Bot の重複起動を防止する仕組みが組み込まれています。
-
-- **仕様**: `docs/specs/bot-process-guard.md`
-- **プロセスガードモジュール**: `src/process_guard.py`
-- **起動スクリプト**: `scripts/bot_start.sh`
-
-### 起動方法
-
-```bash
-# 推奨: 起動スクリプト経由（PIDチェック + 既存プロセス停止 + 起動）
-bash scripts/bot_start.sh
-
-# 直接起動（Python側のプロセスガードが動作）
-uv run python -m src.main
-```
-
-### 動作の仕組み
-
-1. **起動時**: PIDファイル（`bot.pid`）を確認し、既存プロセスが生存していれば自動停止
-2. **実行中**: `bot.pid` に現在のPIDを記録
-3. **終了時**: 子プロセス（MCPサーバー等）をクリーンアップし、PIDファイルを削除
-
-### 注意事項
-
-- `bot.pid` は `.gitignore` に登録済み
-- Windows（Git Bash）環境でも動作する（`taskkill` を使用）
-- `scripts/bot_start.sh` はLF改行コードで保存すること
-
 ## Claude Code 拡張機能
 
 ### Hooks
