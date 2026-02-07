@@ -22,25 +22,45 @@
 ```
 scripts/
   bot_start.sh        # 起動スクリプト（PID管理・重複防止）
+  bot_stop.sh         # 停止スクリプト（プロセス検証付き）
 src/
   process_guard.py     # Pythonプロセスガード（PID管理・子プロセスクリーンアップ）
 ```
 
-### 起動スクリプト (`scripts/bot_start.sh`)
+### 停止スクリプト (`scripts/bot_stop.sh`)
 
-PIDファイルベースで既存プロセスを検出・停止してからBotを起動するシェルスクリプト。
+PIDファイルベースでBotを停止するシェルスクリプト。プロセス検証により、PID再利用時に無関係プロセスを誤killしない。
 
 **処理フロー**:
-1. PIDファイル（`bot.pid`）の存在を確認
-2. PIDファイルがある場合、該当プロセスが生存しているか確認
-3. 生存している場合、プロセスツリーごと停止（子プロセス含む）
-4. 既存のPIDファイル（`bot.pid`）があれば削除
-5. `exec uv run python -m src.main` を実行（新しいPIDファイルの作成および終了時の削除は、Python側の `write_pid_file()` とクリーンアップ処理に委譲）
+1. PIDファイル（`bot.pid`）が存在しない → 「Botは起動していません」、exit 0
+2. PID読み取り → 不正な値なら PIDファイル削除、exit 1
+3. `is_process_alive` → 死んでいれば PIDファイル削除、exit 0
+4. `is_bot_process` → Bot以外なら「PID再利用検出」警告、PIDファイル削除、exit 0（killしない）
+5. `kill_process_tree` でプロセスツリーごと停止
+6. PIDファイル削除、「Botを停止しました」表示
+
+**プロセス検証（`is_bot_process`）**:
+- コマンドライン文字列に識別キーワード `src.main` が含まれるかで判定
+- Windows: `wmic process where "ProcessId=PID" get CommandLine`
+- Unix: `ps -p PID -o args=`
+- コマンド実行失敗時は安全側に倒し、Bot以外と判定（killしない）
+
+**ヘルパー関数**:
+- `detect_os`, `is_process_alive`, `kill_process_tree` — `bot_stop.sh` 内で定義（`bot_start.sh` は `bot_stop.sh` を呼び出すため間接的に使用）
+- `is_bot_process` — プロセスがBotかどうか検証
 
 **クロスプラットフォーム対応**:
-- Linux/macOS: `kill`, `ps` コマンドを使用
-- Windows (Git Bash): `taskkill` コマンドを使用
+- Linux/macOS: `kill`, `ps`, `pkill` コマンドを使用
+- Windows (Git Bash): `taskkill`, `tasklist`, `wmic` コマンドを使用
 - プラットフォーム判定: `uname -s` の結果で分岐
+
+### 起動スクリプト (`scripts/bot_start.sh`)
+
+既存プロセスの停止を `bot_stop.sh` に委譲し、新しいBotを起動するシェルスクリプト。
+
+**処理フロー**:
+1. `bot_stop.sh` を呼び出して既存プロセスを停止
+2. `exec uv run python -m src.main` を実行（新しいPIDファイルの作成および終了時の削除は、Python側の `write_pid_file()` とクリーンアップ処理に委譲）
 
 ### Pythonプロセスガード (`src/process_guard.py`)
 
@@ -48,8 +68,9 @@ PIDファイルベースで既存プロセスを検出・停止してからBot�
 
 **機能**:
 1. PIDファイルの書き込み・読み取り・削除
-2. 既存プロセスの検出・停止（`os.kill` / `pgrep`（Unix）、`taskkill` / `wmic`（Windows））
-3. シャットダウン時の子プロセスクリーンアップ（`main.py` の `finally` ブロックから呼び出し）
+2. 既存プロセスの検出・停止（`os.kill` でシグナル送信、プロセスツリー停止時に `pgrep`（Unix）/ `taskkill`（Windows）を使用）
+3. プロセス検証（コマンドライン文字列から `src.main` の存在を確認し、Bot以外のkillを防止）
+4. シャットダウン時の子プロセスクリーンアップ（`main.py` の `finally` ブロックから呼び出し）
 
 **PIDファイル**:
 - パス: プロジェクトルートの `bot.pid`
@@ -61,23 +82,9 @@ PIDファイルベースで既存プロセスを検出・停止してからBot�
 
 `src/main.py` の `main()` 関数にプロセスガードを組み込む:
 
-```python
-from src.process_guard import write_pid_file, remove_pid_file, kill_existing_process, cleanup_children
-
-async def main() -> None:
-    # 既存プロセスの停止
-    kill_existing_process()
-    # PIDファイル書き込み
-    write_pid_file()
-    try:
-        # ... 既存の初期化処理 ...
-        await start_socket_mode(app, settings)
-    finally:
-        if mcp_manager:
-            await mcp_manager.cleanup()
-        cleanup_children()
-        remove_pid_file()
-```
+1. 起動時: `kill_existing_process()` → `write_pid_file()`
+2. `try` ブロック内: 既存の初期化処理・ソケットモード開始
+3. `finally` ブロック: 各クリーンアップ処理（`mcp_manager.cleanup()`、`cleanup_children()`、`remove_pid_file()`）は例外安全に実装し、一つの処理が失敗しても残りの処理が確実に実行されるようにする
 
 ## 受け入れ条件
 
@@ -90,6 +97,9 @@ async def main() -> None:
 - [ ] AC7: `uv run python -m src.main` での直接起動でもプロセスガードが機能すること
 - [ ] AC8: PIDファイルが `.gitignore` に追加されていること
 - [ ] AC9: 既存プロセスの停止に失敗した場合、PIDファイルを残してエラーとなること
+- [ ] AC10: `scripts/bot_stop.sh` を単独実行し、PIDファイルに記録されたBotプロセスをプロセスツリーごと停止し、PIDファイルを削除できること
+- [ ] AC11: PIDファイルのプロセスがBotかコマンドライン文字列で検証し、Bot以外をkillしないこと
+- [ ] AC12: `bot_start.sh` が内部で `bot_stop.sh` を呼び出して既存プロセスを停止すること
 
 ## 設定
 
@@ -106,7 +116,8 @@ PIDファイルはプロジェクトルートの `bot.pid` に固定する（環
 | ファイル | 役割 |
 |---------|------|
 | `src/process_guard.py` | プロセスガードモジュール（PID管理・子プロセスクリーンアップ） |
-| `scripts/bot_start.sh` | Bot起動スクリプト（PIDベース重複防止） |
+| `scripts/bot_start.sh` | Bot起動スクリプト（停止処理を `bot_stop.sh` に委譲） |
+| `scripts/bot_stop.sh` | Bot停止スクリプト（プロセス検証付き） |
 | `src/main.py` | エントリーポイント（プロセスガード統合） |
 | `.gitignore` | `bot.pid` を除外対象に追加 |
 | `CLAUDE.md` | Bot起動手順の更新 |
@@ -117,6 +128,9 @@ PIDファイルはプロジェクトルートの `bot.pid` に固定する（環
 
 - 単体テスト: PIDファイルの読み書き・削除、stale PID検出
 - 単体テスト: 子プロセスクリーンアップのモック検証
+- 単体テスト: プロセス検証（`is_bot_process`）のモック検証
+- 結合テスト（手動）: `bot_stop.sh` の単独実行でBotが停止されること（AC10）
+- 結合テスト（手動）: `bot_start.sh` 実行時に `bot_stop.sh` が呼び出され、既存プロセスが停止されてから新しいBotが起動すること（AC12）
 - テスト名は `test_ac{N}_...` 形式で受け入れ条件と対応
 
 ## 考慮事項
@@ -125,6 +139,10 @@ PIDファイルはプロジェクトルートの `bot.pid` に固定する（環
 - シェルスクリプトはLF改行コードで保存
 - `kill` コマンドの代わりに `taskkill` を使用するケースを考慮
 - Python側は `sys.platform` で判定し、Windows では `taskkill` / `wmic` コマンドを使用
+
+### プロセス停止失敗時の挙動
+- **Python側**（`kill_existing_process()`）: 停止後にプロセス生存確認を行い、停止失敗時はPIDファイルを残して `RuntimeError` を発生させる（AC9）
+- **シェルスクリプト側**（`bot_stop.sh`）: 簡易実装として停止コマンドの結果に関わらずPIDファイルを削除する。確実な停止保証はPython側が担当する
 
 ### セキュリティ
 - PIDファイルには数値のみを書き込み（インジェクション防止）

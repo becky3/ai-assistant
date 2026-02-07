@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.process_guard import (
+    is_bot_process,
     is_process_alive,
     kill_existing_process,
     read_pid_file,
@@ -119,6 +120,7 @@ class TestKillExistingProcess:
         # 最初の呼び出し(生存確認)はTrue、kill後の確認はFalse
         with (
             patch("src.process_guard.is_process_alive", side_effect=[True, False]),
+            patch("src.process_guard.is_bot_process", return_value=True),
             patch("src.process_guard._kill_process_tree") as mock_kill,
             patch("src.process_guard.time"),
         ):
@@ -134,6 +136,7 @@ class TestKillExistingProcess:
         # kill後もプロセスが生存している場合
         with (
             patch("src.process_guard.is_process_alive", return_value=True),
+            patch("src.process_guard.is_bot_process", return_value=True),
             patch("src.process_guard._kill_process_tree"),
             patch("src.process_guard.time"),
             pytest.raises(RuntimeError, match="停止に失敗しました"),
@@ -273,3 +276,138 @@ class TestCleanupChildrenWindows:
             from src.process_guard import _cleanup_children_windows
 
             _cleanup_children_windows(12345)  # 例外が発生しないこと
+
+
+class TestIsBotProcess:
+    """AC11: プロセス検証テスト."""
+
+    def test_ac11_bot_process_identified_unix(self) -> None:
+        """Unixでsrc.mainを含むコマンドラインがBotと判定されること."""
+        mock_result = MagicMock()
+        mock_result.stdout = "python -m src.main"
+
+        with (
+            patch("src.process_guard.sys") as mock_sys,
+            patch("subprocess.run", return_value=mock_result),
+        ):
+            mock_sys.platform = "linux"
+            from src.process_guard import _is_bot_process_unix
+
+            assert _is_bot_process_unix(12345) is True
+
+    def test_ac11_non_bot_process_rejected_unix(self) -> None:
+        """Unixで無関係プロセスがBot以外と判定されること."""
+        mock_result = MagicMock()
+        mock_result.stdout = "/usr/bin/vim somefile.txt"
+
+        with (
+            patch("src.process_guard.sys") as mock_sys,
+            patch("subprocess.run", return_value=mock_result),
+        ):
+            mock_sys.platform = "linux"
+            from src.process_guard import _is_bot_process_unix
+
+            assert _is_bot_process_unix(12345) is False
+
+    def test_ac11_bot_process_identified_windows(self) -> None:
+        """Windowsでsrc.mainを含むコマンドラインがBotと判定されること."""
+        mock_result = MagicMock()
+        mock_result.stdout = "CommandLine\npython -m src.main\n"
+
+        with (
+            patch("src.process_guard.sys") as mock_sys,
+            patch("subprocess.run", return_value=mock_result),
+        ):
+            mock_sys.platform = "win32"
+            from src.process_guard import _is_bot_process_windows
+
+            assert _is_bot_process_windows(12345) is True
+
+    def test_ac11_non_bot_process_rejected_windows(self) -> None:
+        """Windowsで無関係プロセスがBot以外と判定されること."""
+        mock_result = MagicMock()
+        mock_result.stdout = "CommandLine\nC:\\Windows\\notepad.exe\n"
+
+        with (
+            patch("src.process_guard.sys") as mock_sys,
+            patch("subprocess.run", return_value=mock_result),
+        ):
+            mock_sys.platform = "win32"
+            from src.process_guard import _is_bot_process_windows
+
+            assert _is_bot_process_windows(12345) is False
+
+    def test_ac11_ps_not_found_returns_false(self) -> None:
+        """psコマンドが見つからない場合にFalseを返すこと."""
+        with patch("subprocess.run", side_effect=FileNotFoundError):
+            from src.process_guard import _is_bot_process_unix
+
+            assert _is_bot_process_unix(12345) is False
+
+    def test_ac11_wmic_not_found_returns_false(self) -> None:
+        """wmicコマンドが見つからない場合にFalseを返すこと."""
+        with patch("subprocess.run", side_effect=FileNotFoundError):
+            from src.process_guard import _is_bot_process_windows
+
+            assert _is_bot_process_windows(12345) is False
+
+    def test_ac11_is_bot_process_dispatches_to_unix(self) -> None:
+        """is_bot_processがUnix環境で_is_bot_process_unixを呼ぶこと."""
+        with (
+            patch("src.process_guard.sys") as mock_sys,
+            patch("src.process_guard._is_bot_process_unix", return_value=True) as mock_unix,
+            patch("src.process_guard._is_bot_process_windows") as mock_win,
+        ):
+            mock_sys.platform = "linux"
+            result = is_bot_process(12345)
+
+        assert result is True
+        mock_unix.assert_called_once_with(12345)
+        mock_win.assert_not_called()
+
+    def test_ac11_is_bot_process_dispatches_to_windows(self) -> None:
+        """is_bot_processがWindows環境で_is_bot_process_windowsを呼ぶこと."""
+        with (
+            patch("src.process_guard.sys") as mock_sys,
+            patch("src.process_guard._is_bot_process_unix") as mock_unix,
+            patch("src.process_guard._is_bot_process_windows", return_value=True) as mock_win,
+        ):
+            mock_sys.platform = "win32"
+            result = is_bot_process(12345)
+
+        assert result is True
+        mock_win.assert_called_once_with(12345)
+        mock_unix.assert_not_called()
+
+
+class TestKillExistingProcessWithBotCheck:
+    """AC11: kill_existing_processのプロセス検証テスト."""
+
+    def test_ac11_skip_kill_if_not_bot_process(self, pid_file: Path) -> None:
+        """Bot以外のプロセスの場合、killをスキップしPIDファイルを削除すること."""
+        pid_file.write_text("99999", encoding="utf-8")
+
+        with (
+            patch("src.process_guard.is_process_alive", return_value=True),
+            patch("src.process_guard.is_bot_process", return_value=False),
+            patch("src.process_guard._kill_process_tree") as mock_kill,
+        ):
+            kill_existing_process(pid_file)
+
+        mock_kill.assert_not_called()
+        assert not pid_file.exists()
+
+    def test_ac11_kill_if_bot_process_confirmed(self, pid_file: Path) -> None:
+        """Bot確認済みの場合、killが実行されること."""
+        pid_file.write_text("99999", encoding="utf-8")
+
+        with (
+            patch("src.process_guard.is_process_alive", side_effect=[True, False]),
+            patch("src.process_guard.is_bot_process", return_value=True),
+            patch("src.process_guard._kill_process_tree") as mock_kill,
+            patch("src.process_guard.time"),
+        ):
+            kill_existing_process(pid_file)
+
+        mock_kill.assert_called_once_with(99999)
+        assert not pid_file.exists()

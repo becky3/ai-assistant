@@ -72,6 +72,55 @@ def is_process_alive(pid: int) -> bool:
         return True
 
 
+# Bot識別キーワード（コマンドライン文字列に含まれるか確認）
+BOT_KEYWORD = "src.main"
+
+
+def is_bot_process(pid: int) -> bool:
+    """指定PIDのプロセスがBotプロセスかどうか検証する.
+
+    コマンドライン文字列に BOT_KEYWORD が含まれるかで判定する。
+    コマンド実行失敗時は安全側に倒し、Bot以外と判定（False を返す）。
+    """
+    if sys.platform == "win32":
+        return _is_bot_process_windows(pid)
+    return _is_bot_process_unix(pid)
+
+
+def _is_bot_process_windows(pid: int) -> bool:
+    """WindowsでプロセスがBotかどうか検証する."""
+    import subprocess
+
+    try:
+        result = subprocess.run(  # noqa: S603
+            ["wmic", "process", "where", f"ProcessId={pid}", "get", "CommandLine"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return BOT_KEYWORD in result.stdout
+    except FileNotFoundError:
+        logger.debug("wmic コマンドが見つかりません。プロセス検証をスキップします。")
+        return False
+
+
+def _is_bot_process_unix(pid: int) -> bool:
+    """Unix系OSでプロセスがBotかどうか検証する."""
+    import subprocess
+
+    try:
+        result = subprocess.run(  # noqa: S603
+            ["ps", "-p", str(pid), "-o", "args="],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return BOT_KEYWORD in result.stdout
+    except FileNotFoundError:
+        logger.debug("ps コマンドが見つかりません。プロセス検証をスキップします。")
+        return False
+
+
 def _kill_process_tree(pid: int) -> None:
     """プロセスとその子プロセスを停止する.
 
@@ -168,6 +217,15 @@ def kill_existing_process(pid_path: Path = DEFAULT_PID_FILE) -> None:
     # 自分自身のPIDの場合は停止しない
     if pid == os.getpid():
         logger.info("PIDファイルのプロセスは自分自身です。スキップします。")
+        return
+
+    # プロセス検証: Bot以外のプロセスをkillしない
+    if not is_bot_process(pid):
+        logger.warning(
+            "PID=%d はBotプロセスではありません（PID再利用検出）。killをスキップし、PIDファイルを削除します。",
+            pid,
+        )
+        remove_pid_file(pid_path)
         return
 
     logger.info("既存プロセス PID=%d を停止します...", pid)

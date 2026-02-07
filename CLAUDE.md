@@ -113,15 +113,19 @@ Bot の重複起動を防止する仕組みが組み込まれています。
 - **仕様**: `docs/specs/bot-process-guard.md`
 - **プロセスガードモジュール**: `src/process_guard.py`
 - **起動スクリプト**: `scripts/bot_start.sh`
+- **停止スクリプト**: `scripts/bot_stop.sh`
 
-### 起動方法
+### 起動・停止方法
 
 ```bash
-# 推奨: 起動スクリプト経由（PIDチェック + 既存プロセス停止 + 起動）
+# 推奨: 起動スクリプト経由（既存プロセス停止 + 起動）
 bash scripts/bot_start.sh
 
 # 直接起動（Python側のプロセスガードが動作）
 uv run python -m src.main
+
+# Bot停止（プロセス検証付き）
+bash scripts/bot_stop.sh
 ```
 
 ### 動作の仕組み
@@ -130,11 +134,17 @@ uv run python -m src.main
 2. **実行中**: `bot.pid` に現在のPIDを記録
 3. **終了時**: 子プロセス（MCPサーバー等）をクリーンアップし、PIDファイルを削除
 
+### プロセス検証
+
+- PIDファイルのプロセスがBotかどうか、コマンドライン文字列に `src.main` が含まれるかで検証
+- PID再利用により無関係プロセスがPIDファイルに記録されている場合、killせずPIDファイルのみ削除
+- `bot_stop.sh`（シェル側）と `process_guard.py`（Python側）の両方で検証を実施
+
 ### 注意事項
 
 - `bot.pid` は `.gitignore` に登録済み
-- Windows（Git Bash）環境でも動作する（`taskkill` を使用）
-- `scripts/bot_start.sh` はLF改行コードで保存すること
+- Windows（Git Bash）環境でも動作する（`taskkill` / `wmic` を使用）
+- `scripts/bot_start.sh`, `scripts/bot_stop.sh` はLF改行コードで保存すること
 
 ## Claude Code 拡張機能
 
