@@ -15,7 +15,7 @@ import src.slack.handlers as handlers_module
 from src.config.settings import get_settings, load_assistant_config
 from src.db.session import init_db, get_session_factory
 from src.llm.factory import get_provider_for_service
-from src.mcp.client_manager import MCPClientManager, MCPServerConfig
+from src.mcp_bridge.client_manager import MCPClientManager, MCPServerConfig
 from src.services.chat import ChatService
 from src.services.thread_history import ThreadHistoryService
 from src.services.feed_collector import FeedCollector

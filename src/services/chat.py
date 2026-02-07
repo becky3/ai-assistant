@@ -15,7 +15,7 @@ from src.db.models import Conversation
 from src.llm.base import LLMProvider, LLMResponse, Message, ToolDefinition, ToolResult
 
 if TYPE_CHECKING:
-    from src.mcp.client_manager import MCPClientManager
+    from src.mcp_bridge.client_manager import MCPClientManager
     from src.services.thread_history import ThreadHistoryService
 
 logger = logging.getLogger(__name__)
