@@ -415,6 +415,91 @@ async def test_ac7_13_add_feed_default_category(db_factory) -> None:  # type: ig
     assert feed.category == "一般"
 
 
+# ===== AC16: フィード一括置換のテスト =====
+
+
+async def test_ac16_delete_all_feeds(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC16: delete_all_feeds で全フィードが削除される."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    # 追加フィードを追加
+    await collector.add_feed("https://feed2.com/rss", "Feed 2", "Tech")
+
+    count = await collector.delete_all_feeds()
+
+    assert count == 2  # 初期フィード + feed2
+
+    async with db_factory() as session:
+        result = await session.execute(select(Feed))
+        assert list(result.scalars().all()) == []
+
+
+async def test_ac16_delete_all_feeds_cascades_articles(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC16: delete_all_feeds で関連記事もCASCADE削除される."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    # 記事を追加
+    async with db_factory() as session:
+        feed_result = await session.execute(select(Feed))
+        feed = feed_result.scalar_one()
+        session.add(Article(feed_id=feed.id, title="Article 1", url="https://example.com/a1"))
+        await session.commit()
+
+    count = await collector.delete_all_feeds()
+    assert count == 1
+
+    async with db_factory() as session:
+        article_result = await session.execute(select(Article))
+        assert list(article_result.scalars().all()) == []
+
+
+async def test_ac16_delete_all_feeds_empty(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC16: フィード0件時のdelete_all_feeds."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    # 初期フィードを削除
+    await collector.delete_feed("https://example.com/rss")
+
+    count = await collector.delete_all_feeds()
+    assert count == 0
+
+
+# ===== AC17: フィードエクスポートのテスト =====
+
+
+async def test_ac17_get_all_feeds(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC17: get_all_feeds で全フィードを取得できる."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    await collector.add_feed("https://feed2.com/rss", "Feed 2", "Tech")
+
+    feeds = await collector.get_all_feeds()
+    assert len(feeds) == 2
+    urls = {f.url for f in feeds}
+    assert "https://example.com/rss" in urls
+    assert "https://feed2.com/rss" in urls
+
+
+async def test_ac17_get_all_feeds_includes_disabled(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC17.4: get_all_feeds は無効フィードも含む."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    # 無効フィードを追加
+    async with db_factory() as session:
+        session.add(Feed(url="https://disabled.com/rss", name="Disabled", enabled=False))
+        await session.commit()
+
+    feeds = await collector.get_all_feeds()
+    assert len(feeds) == 2
+    urls = {f.url for f in feeds}
+    assert "https://disabled.com/rss" in urls
+
+
 # --- strip_html テスト ---
 
 

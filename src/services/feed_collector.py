@@ -85,7 +85,7 @@ class FeedCollector:
     async def _get_enabled_feeds(self, session: AsyncSession) -> list[Feed]:
         """有効なフィード一覧を取得する."""
         result = await session.execute(
-            select(Feed).where(Feed.enabled.is_(True)).order_by(Feed.id.asc())
+            select(Feed).where(Feed.enabled.is_(True)).order_by(Feed.url.asc())
         )
         return list(result.scalars().all())
 
@@ -263,9 +263,34 @@ class FeedCollector:
             (有効フィードリスト, 無効フィードリスト) のタプル
         """
         async with self._session_factory() as session:
-            result = await session.execute(select(Feed))
+            result = await session.execute(select(Feed).order_by(Feed.url.asc()))
             all_feeds = list(result.scalars().all())
 
         enabled = [f for f in all_feeds if f.enabled]
         disabled = [f for f in all_feeds if not f.enabled]
         return (enabled, disabled)
+
+    async def delete_all_feeds(self) -> int:
+        """全フィードを削除する（関連記事もCASCADE削除される）.
+
+        Returns:
+            削除されたフィード数
+        """
+        async with self._session_factory() as session:
+            result = await session.execute(select(Feed))
+            feeds = list(result.scalars().all())
+            count = len(feeds)
+            for feed in feeds:
+                await session.delete(feed)
+            await session.commit()
+            return count
+
+    async def get_all_feeds(self) -> list[Feed]:
+        """全フィード（有効・無効問わず）を取得する.
+
+        Returns:
+            全Feedオブジェクトのリスト
+        """
+        async with self._session_factory() as session:
+            result = await session.execute(select(Feed).order_by(Feed.url.asc()))
+            return list(result.scalars().all())

@@ -147,6 +147,8 @@ uv run python scripts/test_delivery.py vertical     # 縦長形式を指定
 - `@bot feed enable <URL>` — フィード有効化（複数URL対応）
 - `@bot feed disable <URL>` — フィード無効化（複数URL対応）
 - `@bot feed import` + CSV添付 — フィード一括インポート
+- `@bot feed replace` + CSV添付 — フィード一括置換（全削除→再登録）
+- `@bot feed export` — フィード一覧CSVエクスポート
 
 **コマンド解析ルール:**
 - `http://` または `https://` で始まり、ドメインを含むトークンをURLとして認識
@@ -155,6 +157,8 @@ uv run python scripts/test_delivery.py vertical     # 縦長形式を指定
 
 **出力:**
 - 操作結果をスレッド内で応答（成功: ✓ / 失敗: ✗）
+- `feed list` は各フィードを `URL — フィード名` 形式で表示（有効/無効で分類）
+- フィード一覧はURL昇順でソートする（`feed list` / `feed export` / 配信処理で共通）
 - 不明なサブコマンドの場合はヘルプメッセージを表示
 
 ### フィード一括インポート（CSV）
@@ -190,6 +194,58 @@ https://another.com/rss,Another Feed,News
   • 行12: 無効なURL形式です（invalid-url）
 ```
 
+### フィード一括置換（replace）
+
+**入力:**
+- Slackでボットにメンション + `feed replace` + CSVファイル添付
+
+**CSV形式:**
+- `feed import` と同一（`url,name,category`）
+
+**処理:**
+1. 添付ファイルの存在確認・CSV検証（`feed import` と共通処理）
+2. 既存の全フィード（関連記事含む）を削除（CASCADE削除）
+3. CSVの各行で `FeedCollector.add_feed()` を実行
+4. 全削除後のインポートで失敗しても、削除は取り消されない（非トランザクション）
+
+**出力例:**
+```
+フィード置換完了
+🗑️ 削除: 10件（既存フィード）
+✅ 登録成功: 25件
+❌ 登録失敗: 2件
+
+エラー詳細:
+  • 行5: 無効なURL形式です（invalid-url）
+  • 行12: url または name が空です
+```
+
+**異常系出力例（インポート中に予期せぬエラーが発生した場合）:**
+```
+フィード置換エラー
+🗑️ 削除: 10件（既存フィード）
+❌ インポート中に予期せぬエラーが発生しました。
+```
+
+### フィードエクスポート（export）
+
+**入力:**
+- Slackでボットにメンション + `feed export`
+
+**処理:**
+1. `FeedCollector.get_all_feeds()` で全フィード取得（有効・無効問わず）
+2. CSV文字列を生成（`url,name,category` ヘッダー付き、`feed import` / `feed replace` と同一形式）
+3. `slack_client.files_upload_v2()` でCSVファイルをスレッドに投稿
+
+**出力:**
+- CSVファイル（`feeds.csv`）がSlackにファイル添付として投稿される
+- フィードが0件の場合はエラーメッセージを表示
+
+**Slack API権限要件:**
+- `files:write` スコープが必須（`files_upload_v2()` に必要）
+- `files:read` スコープが推奨（`files_upload_v2()` の内部処理に使用）
+- 権限不足時は分かりやすいエラーメッセージを返す
+
 ### 情報源探索
 
 **入力:**
@@ -211,7 +267,7 @@ https://another.com/rss,Another Feed,News
 - [ ] AC7: フィードの追加・削除・有効/無効切替ができる
   - [ ] AC7.1: フィード追加（カテゴリ指定あり、省略時は「一般」）
   - [ ] AC7.2: 複数フィード一括追加
-  - [ ] AC7.3: フィード一覧を有効/無効で分類表示
+  - [ ] AC7.3: フィード一覧を有効/無効で分類し、各フィードは `URL — フィード名` 形式でURL昇順に表示
   - [ ] AC7.4: フィード削除（関連記事もCASCADE削除）
   - [ ] AC7.5: 複数フィード一括削除
   - [ ] AC7.6: フィード有効化
@@ -260,6 +316,20 @@ https://another.com/rss,Another Feed,News
   - [ ] AC15.3: 上から3フィード・各5件まで対象とする
   - [ ] AC15.4: delivered フラグを更新しない（副作用なし）
   - [ ] AC15.5: 通常配信と同じ共通関数（`_deliver_feed_to_slack` 等）で出力する
+- [ ] AC16: フィード一括置換（replace）ができる
+  - [ ] AC16.1: `@bot feed replace` + CSV添付で既存フィードを全削除し、CSVのフィードを登録できる
+  - [ ] AC16.2: CSV形式は feed import と同一（url,name,category）
+  - [ ] AC16.3: 処理結果のサマリー（削除件数・登録成功数・失敗数）を返答
+  - [ ] AC16.4: 添付ファイルがない場合はエラーメッセージを表示
+  - [ ] AC16.5: CSV以外のファイルはエラーメッセージを表示
+  - [ ] AC16.6: 全削除後のインポートで失敗しても、削除は取り消されない（非トランザクション）
+- [ ] AC17: フィードエクスポート（export）ができる
+  - [ ] AC17.1: `@bot feed export` で全フィードをCSV形式で出力できる
+  - [ ] AC17.2: CSV形式は feed import / replace と同一（url,name,category）
+  - [ ] AC17.3: CSVファイルがSlackにファイル添付として投稿される
+  - [ ] AC17.4: 有効・無効問わず全フィードがエクスポートされる
+  - [ ] AC17.5: フィードが0件の場合はエラーメッセージを表示
+  - [ ] AC17.6: Slack API権限不足時に分かりやすいエラーメッセージを表示
 
 ## 使用LLMプロバイダー
 
@@ -293,3 +363,6 @@ https://another.com/rss,Another Feed,News
 - 配信済みフラグのユニットテスト: 記事作成時に delivered==False、配信後に delivered==True に更新されることを確認
 - 重複配信防止のエンドツーエンドテスト: 同じ記事セットで2回配信実行し、再配信が防止されることを確認
 - 配信カード形式テスト: vertical/horizontal 両形式のBlock Kit構造検証、画像あり/なしの検証、不正値のバリデーションエラー検証
+- フィード一括置換テスト: 全削除→再登録の正常系、CSV検証エラー、部分失敗時のサマリー
+- フィードエクスポートテスト: CSV生成・ファイル投稿の正常系、0件時エラー、権限不足エラー
+- FeedCollector の `delete_all_feeds()` / `get_all_feeds()` のユニットテスト
