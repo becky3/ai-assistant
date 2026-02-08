@@ -162,10 +162,11 @@ test-runnerサブエージェントで差分テストを実行してください
    - mypyが利用できない場合やエラーの場合は適切にエラーを報告
 
 5. **Markdownチェック (markdownlint) 実行**
-   - `npx markdownlint-cli2` でMarkdownファイルの構文・スタイルをチェック
+   - `npx markdownlint-cli2@0.20.0` でMarkdownファイルの構文・スタイルをチェック
    - `.markdownlint-cli2.jsonc` の設定に従ったルールでチェック
+   - `full` モードではリポジトリ内のすべてのMarkdownファイルを対象、`diff` モードでは変更されたMarkdownファイルのみを対象
    - 出力を解析して違反箇所を取得
-   - markdownlint（npx）が利用できない場合は適切にエラーを報告し、他のチェックは続行
+   - markdownlint（`npx markdownlint-cli2@0.20.0`）が利用できない場合は適切にエラーを報告し、他のチェックは続行
 
 6. **結果の分析**
    - **pytest 成功時**: 実行件数、実行時間を報告

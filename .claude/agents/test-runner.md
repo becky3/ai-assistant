@@ -29,7 +29,7 @@ permissionMode: default
 - テスト実行コマンド: `uv run pytest`
 - lint実行コマンド: `uv run ruff check src/ tests/`
 - 型チェック実行コマンド: `uv run mypy src/`
-- Markdownチェックコマンド: `npx markdownlint-cli2`
+- Markdownチェックコマンド: `npx markdownlint-cli2@0.20.0`
 
 ## 実行パターン
 
@@ -166,10 +166,11 @@ uv run mypy {変更された src/**/*.py ファイル}
    - mypyが利用できない場合やエラーの場合は適切にエラーを報告
 
 5. **Markdownチェック (markdownlint) 実行**
-   - `npx markdownlint-cli2` でMarkdownファイルの構文・スタイルをチェック
+   - `npx markdownlint-cli2@0.20.0` でMarkdownファイルの構文・スタイルをチェック
    - `.markdownlint-cli2.jsonc` の設定に従ったルールでチェック
+   - `full` モードではリポジトリ内のすべてのMarkdownファイルを対象、`diff` モードでは変更されたMarkdownファイルのみを対象
    - 出力をキャプチャして違反箇所を解析
-   - markdownlint（npx）が利用できない場合は適切にエラーを報告し、他のチェックは続行
+   - markdownlint（`npx markdownlint-cli2@0.20.0`）が利用できない場合は適切にエラーを報告し、他のチェックは続行
 
 6. **結果の解析**
    - **pytest 成功時**:
