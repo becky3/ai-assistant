@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 from typing import TYPE_CHECKING
@@ -120,10 +121,7 @@ class RAGKnowledgeService:
         Returns:
             保存されたチャンク数
         """
-        # 既存チャンクを削除（upsert動作）
-        await self._vector_store.delete_by_source(page.url)
-
-        # テキストをチャンキング
+        # テキストをチャンキング（先にチャンク生成を試み、成功した場合のみ削除→追加）
         chunks = chunk_text(
             page.text,
             chunk_size=self._chunk_size,
@@ -131,8 +129,12 @@ class RAGKnowledgeService:
         )
 
         if not chunks:
+            # チャンク生成失敗時は既存ナレッジを削除しない（データ喪失防止）
             logger.info("No chunks generated for page: %s", page.url)
             return 0
+
+        # チャンク生成成功後に既存チャンクを削除（upsert動作）
+        await self._vector_store.delete_by_source(page.url)
 
         # DocumentChunkに変換
         url_hash = hashlib.md5(page.url.encode()).hexdigest()[:8]
@@ -201,4 +203,5 @@ class RAGKnowledgeService:
         Returns:
             統計情報の辞書
         """
-        return self._vector_store.get_stats()
+        # VectorStore.get_stats()は同期APIを呼ぶため、to_threadでラップ
+        return await asyncio.to_thread(self._vector_store.get_stats)

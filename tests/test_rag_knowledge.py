@@ -365,7 +365,8 @@ class TestChatServiceIntegration:
         )
 
         # Assert
-        mock_rag_service.retrieve.assert_called_once_with("What is Python?")
+        # Settingsのデフォルト rag_retrieval_count=5 が使われる
+        mock_rag_service.retrieve.assert_called_once_with("What is Python?", n_results=5)
         # LLMに渡されるメッセージを確認
         call_args = mock_llm.complete.call_args
         messages = call_args[0][0]
@@ -475,40 +476,28 @@ class TestSlackCommands:
     """
 
     async def test_ac23_rag_crawl_command(self) -> None:
-        """AC23: rag crawl <URL> [パターン] でリンク集ページからの一括取り込みができること.
-
-        TODO: Slackイベントのモックを使った統合テストを実装
-        """
+        """AC23: rag crawl <URL> [パターン] でリンク集ページからの一括取り込みができること."""
         # RAGKnowledgeService.ingest_from_index() の単体テストは
         # TestIngestFromIndex で実装済み
-        pass
+        pytest.skip("Slackイベントのモックを使った統合テストは未実装")
 
     async def test_ac24_rag_add_command(self) -> None:
-        """AC24: rag add <URL> で単一ページの取り込みができること.
-
-        TODO: Slackイベントのモックを使った統合テストを実装
-        """
+        """AC24: rag add <URL> で単一ページの取り込みができること."""
         # RAGKnowledgeService.ingest_page() の単体テストは
         # TestIngestPage で実装済み
-        pass
+        pytest.skip("Slackイベントのモックを使った統合テストは未実装")
 
     async def test_ac25_rag_status_command(self) -> None:
-        """AC25: rag status でナレッジベースの統計が表示されること.
-
-        TODO: Slackイベントのモックを使った統合テストを実装
-        """
+        """AC25: rag status でナレッジベースの統計が表示されること."""
         # RAGKnowledgeService.get_stats() の単体テストは
         # TestGetStats で実装済み
-        pass
+        pytest.skip("Slackイベントのモックを使った統合テストは未実装")
 
     async def test_ac26_rag_delete_command(self) -> None:
-        """AC26: rag delete <URL> でソースURL指定の削除ができること.
-
-        TODO: Slackイベントのモックを使った統合テストを実装
-        """
+        """AC26: rag delete <URL> でソースURL指定の削除ができること."""
         # RAGKnowledgeService.delete_source() の単体テストは
         # TestDeleteSource で実装済み
-        pass
+        pytest.skip("Slackイベントのモックを使った統合テストは未実装")
 
 
 class TestConfiguration:

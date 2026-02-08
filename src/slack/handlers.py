@@ -471,6 +471,8 @@ async def _handle_rag_crawl(
         )
     except ValueError as e:
         return f"エラー: {e}"
+    except re.error as e:
+        return f"エラー: 正規表現パターンが不正です: {e}"
     except Exception:
         logger.exception("Failed to crawl: %s", url)
         return "エラー: クロール中にエラーが発生しました。"

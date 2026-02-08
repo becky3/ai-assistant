@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -92,6 +92,16 @@ class Settings(BaseSettings):
     rag_allowed_domains: str = ""
     rag_max_crawl_pages: int = Field(default=50, ge=1)
     rag_crawl_delay_sec: float = Field(default=1.0, ge=0)
+
+    @model_validator(mode="after")
+    def validate_chunk_settings(self) -> "Settings":
+        """チャンク設定の相関バリデーション."""
+        if self.rag_chunk_overlap >= self.rag_chunk_size:
+            raise ValueError(
+                f"rag_chunk_overlap ({self.rag_chunk_overlap}) must be less than "
+                f"rag_chunk_size ({self.rag_chunk_size})"
+            )
+        return self
 
     def get_rag_allowed_domains(self) -> list[str]:
         """RAG許可ドメインのリストを返す（カンマ区切りを解析）."""

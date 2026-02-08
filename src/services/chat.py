@@ -78,7 +78,12 @@ class ChatService:
             rag_context = ""
             if self._rag_service:
                 try:
-                    rag_context = await self._rag_service.retrieve(text)
+                    from src.config.settings import Settings
+
+                    settings = Settings()
+                    rag_context = await self._rag_service.retrieve(
+                        text, n_results=settings.rag_retrieval_count
+                    )
                 except Exception:
                     logger.exception("Failed to retrieve RAG context")
 
