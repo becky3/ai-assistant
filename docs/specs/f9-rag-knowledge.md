@@ -93,7 +93,7 @@
 7. 結果サマリーをSlackに返答
 ```
 
-### 出力例
+### 出力例（正常系）
 
 ```
 bot: クロール完了しました。
@@ -106,6 +106,23 @@ bot: ナレッジベース統計:
      ソースURL数: 20
 
 bot: 削除しました: https://example.com/guide/getting-started (8チャンク)
+```
+
+### 出力例（エラー系）
+
+```
+bot: エラー: 指定されたURLのドメインが許可リストに含まれていません。
+     URL: https://malicious-site.com/page
+     許可ドメイン: example.com, docs.python.org
+
+bot: エラー: RAG機能が無効です。管理者に連絡してください。
+
+bot: エラー: クロールに失敗しました。
+     原因: 接続がタイムアウトしました (30秒)
+
+bot: エラー: ページの取り込みに失敗しました。
+     URL: https://example.com/broken-page
+     原因: HTTP 404 Not Found
 ```
 
 ### チャット応答（自動統合）
@@ -695,7 +712,9 @@ RAG_URL_SAFETY_CHECK=false
 | チャット応答生成 | 既存の `ChatService` 設定に従う | RAG固有のLLM設定は不要 |
 | Webクロール・チャンキング | なし | LLM不要（テキスト処理のみ） |
 
-## 新規ファイル一覧
+## 関連ファイル
+
+### 新規ファイル
 
 | ファイル | 用途 |
 |---------|------|
@@ -715,7 +734,7 @@ RAG_URL_SAFETY_CHECK=false
 | `tests/test_web_crawler.py` | Webクローラーテスト |
 | `tests/test_rag_knowledge.py` | RAGナレッジサービステスト |
 
-## 変更ファイル一覧
+### 変更ファイル
 
 | ファイル | 変更内容 |
 |---------|---------|
