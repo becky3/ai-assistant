@@ -141,7 +141,7 @@ uv run mypy {変更された src/**/*.py ファイル}
      - **変更ファイル0件の場合**:
        - 明示的にテスト対象（ファイルパスや `-k` オプション等）が指定されていれば、その指定に従って実行
        - 指定がなければ `full` モードにフォールバック
-     - Pythonファイル以外（docs/, CLAUDE.md等）のみの変更 → テスト0件で正常終了（lint・型チェックもスキップ）
+     - Markdownファイル（`*.md`）のみの変更 → pytest・ruff・mypyはスキップ、markdownlintのみ実行（変更されたMarkdownファイルを対象）
      - `pyproject.toml`, `conftest.py` の変更 → `full` モードにフォールバック
    - **full モード**:
      - 引数でファイルパスやテスト名が指定されていればそれを実行
