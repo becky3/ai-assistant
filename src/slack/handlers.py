@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from src.services.feed_collector import FeedCollector
+    from src.services.rag_knowledge import RAGKnowledgeService
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ _PROFILE_KEYWORDS = ("プロファイル", "プロフィール", "profile")
 _TOPIC_KEYWORDS = ("おすすめ", "トピック", "何を学ぶ", "何学ぶ", "学習提案", "recommend")
 _DELIVER_KEYWORDS = ("deliver",)
 _FEED_KEYWORDS = ("feed",)
+_RAG_KEYWORDS = ("rag",)
 _STATUS_KEYWORDS = ("status", "info")
 
 # 起動時刻（main.py から設定される）
@@ -418,6 +420,118 @@ async def _handle_feed_replace(
     return "\n".join(result_lines)
 
 
+def _parse_rag_command(text: str) -> tuple[str, str, str]:
+    """ragコマンドを解析する.
+
+    Args:
+        text: "rag crawl https://example.com/docs pattern" のようなコマンド文字列
+
+    Returns:
+        (サブコマンド, URL, パターン) のタプル
+    """
+    tokens = text.split()
+    if len(tokens) < 2:
+        return ("", "", "")
+
+    subcommand = tokens[1].lower()
+    url = ""
+    pattern = ""
+
+    if len(tokens) >= 3:
+        # URLを取得（Slackは URL を <https://...|label> 形式に変換するため除去）
+        url_token = tokens[2].strip("<>")
+        if "|" in url_token:
+            url_token = url_token.split("|")[0]
+        if url_token.startswith("http://") or url_token.startswith("https://"):
+            url = url_token
+
+    if len(tokens) >= 4:
+        # パターンは残りのトークンを結合
+        pattern = " ".join(tokens[3:])
+
+    return (subcommand, url, pattern)
+
+
+async def _handle_rag_crawl(
+    rag_service: RAGKnowledgeService,
+    url: str,
+    pattern: str,
+) -> str:
+    """RAGクロール処理."""
+    if not url:
+        return "エラー: URLを指定してください。\n例: `@bot rag crawl https://example.com/docs [パターン]`"
+
+    try:
+        result = await rag_service.ingest_from_index(url, pattern)
+        return (
+            f"クロール完了しました。\n"
+            f"取り込みページ数: {result['pages_crawled']}\n"
+            f"チャンク数: {result['chunks_stored']}\n"
+            f"エラー: {result['errors']}件"
+        )
+    except ValueError as e:
+        return f"エラー: {e}"
+    except Exception:
+        logger.exception("Failed to crawl: %s", url)
+        return "エラー: クロール中にエラーが発生しました。"
+
+
+async def _handle_rag_add(
+    rag_service: RAGKnowledgeService,
+    url: str,
+) -> str:
+    """RAG単一ページ追加処理."""
+    if not url:
+        return "エラー: URLを指定してください。\n例: `@bot rag add https://example.com/page`"
+
+    try:
+        chunks = await rag_service.ingest_page(url)
+        if chunks > 0:
+            return f"ページを取り込みました: {url} ({chunks}チャンク)"
+        else:
+            return f"エラー: ページの取り込みに失敗しました: {url}"
+    except ValueError as e:
+        return f"エラー: {e}"
+    except Exception:
+        logger.exception("Failed to add page: %s", url)
+        return "エラー: ページの取り込み中にエラーが発生しました。"
+
+
+async def _handle_rag_status(
+    rag_service: RAGKnowledgeService,
+) -> str:
+    """RAGステータス表示処理."""
+    try:
+        stats = await rag_service.get_stats()
+        return (
+            "ナレッジベース統計:\n"
+            f"総チャンク数: {stats['total_chunks']}\n"
+            f"ソースURL数: {stats['source_count']}"
+        )
+    except Exception:
+        logger.exception("Failed to get RAG stats")
+        return "エラー: 統計情報の取得中にエラーが発生しました。"
+
+
+async def _handle_rag_delete(
+    rag_service: RAGKnowledgeService,
+    url: str,
+) -> str:
+    """RAGソース削除処理."""
+    if not url:
+        return "エラー: URLを指定してください。\n例: `@bot rag delete https://example.com/page`"
+
+    try:
+        count = await rag_service.delete_source(url)
+        if count > 0:
+            return f"削除しました: {url} ({count}チャンク)"
+        else:
+            return f"該当するソースが見つかりませんでした: {url}"
+    except Exception:
+        logger.exception("Failed to delete source: %s", url)
+        return "エラー: 削除中にエラーが発生しました。"
+
+
 async def _handle_feed_export(
     collector: FeedCollector,
     slack_client: object,
@@ -486,6 +600,7 @@ def register_handlers(
     bot_token: str | None = None,
     timezone: str = "Asia/Tokyo",
     env_name: str = "",
+    rag_service: RAGKnowledgeService | None = None,
 ) -> None:
     """app_mention および message ハンドラを登録する."""
 
@@ -645,6 +760,32 @@ def register_handlers(
                     "• `@bot feed collect --skip-summary` — 要約なし一括収集\n"
                     "• `@bot feed test` — テスト配信（上位3フィード・各5件）\n"
                     "※ URL・カテゴリは複数指定可能（スペース区切り）"
+                )
+
+            await say(text=response_text, thread_ts=thread_ts)  # type: ignore[operator]
+            return
+
+        # ragコマンド (F9)
+        if rag_service is not None and any(
+            re.match(rf"^{re.escape(kw)}\b", lower_text) for kw in _RAG_KEYWORDS
+        ):
+            subcommand, url, pattern = _parse_rag_command(cleaned_text)
+
+            if subcommand == "crawl":
+                response_text = await _handle_rag_crawl(rag_service, url, pattern)
+            elif subcommand == "add":
+                response_text = await _handle_rag_add(rag_service, url)
+            elif subcommand == "status":
+                response_text = await _handle_rag_status(rag_service)
+            elif subcommand == "delete":
+                response_text = await _handle_rag_delete(rag_service, url)
+            else:
+                response_text = (
+                    "使用方法:\n"
+                    "• `@bot rag crawl <URL> [パターン]` — リンク集ページからクロール＆取り込み\n"
+                    "• `@bot rag add <URL>` — 単一ページ取り込み\n"
+                    "• `@bot rag status` — ナレッジベース統計表示\n"
+                    "• `@bot rag delete <URL>` — ソースURL指定で削除"
                 )
 
             await say(text=response_text, thread_ts=thread_ts)  # type: ignore[operator]

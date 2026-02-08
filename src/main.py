@@ -21,15 +21,19 @@ from src.process_guard import (
     write_pid_file,
 )
 from src.db.session import init_db, get_session_factory
+from src.embedding.factory import get_embedding_provider
 from src.llm.factory import get_provider_for_service
 from src.mcp_bridge.client_manager import MCPClientManager, MCPServerConfig
+from src.rag.vector_store import VectorStore
 from src.services.chat import ChatService
-from src.services.thread_history import ThreadHistoryService
 from src.services.feed_collector import FeedCollector
 from src.services.ogp_extractor import OgpExtractor
+from src.services.rag_knowledge import RAGKnowledgeService
 from src.services.summarizer import Summarizer
+from src.services.thread_history import ThreadHistoryService
 from src.services.topic_recommender import TopicRecommender
 from src.services.user_profiler import UserProfiler
+from src.services.web_crawler import WebCrawler
 from src.slack.app import create_app, start_socket_mode
 
 logger = logging.getLogger(__name__)
@@ -100,6 +104,26 @@ async def main() -> None:
         else:
             logger.info("MCP無効: ツール呼び出し機能はオフです")
 
+        # RAG初期化（有効時のみ）
+        rag_service: RAGKnowledgeService | None = None
+        if settings.rag_enabled:
+            embedding = get_embedding_provider(settings, settings.embedding_provider)
+            vector_store = VectorStore(embedding, settings.chromadb_persist_dir)
+            web_crawler = WebCrawler(
+                allowed_domains=settings.get_rag_allowed_domains(),
+                max_pages=settings.rag_max_crawl_pages,
+                crawl_delay=settings.rag_crawl_delay_sec,
+            )
+            rag_service = RAGKnowledgeService(
+                vector_store,
+                web_crawler,
+                chunk_size=settings.rag_chunk_size,
+                chunk_overlap=settings.rag_chunk_overlap,
+            )
+            logger.info("RAG有効: ナレッジベース機能が利用可能")
+        else:
+            logger.info("RAG無効: ナレッジベース機能はオフです")
+
         # Slack アプリ（ThreadHistoryService に必要なため先に作成）
         app = create_app(settings)
         slack_client = app.client
@@ -129,6 +153,7 @@ async def main() -> None:
             system_prompt=system_prompt,
             mcp_manager=mcp_manager,
             thread_history_service=thread_history_service,
+            rag_service=rag_service,
         )
 
         # ユーザー情報抽出サービス
@@ -167,6 +192,7 @@ async def main() -> None:
             bot_token=settings.slack_bot_token,
             timezone=settings.timezone,
             env_name=settings.env_name,
+            rag_service=rag_service,
         )
 
         # Socket Mode で起動

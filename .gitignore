@@ -18,6 +18,7 @@ ENV/
 # Database
 *.db
 *.sqlite3
+chroma_db/
 
 # IDE
 .vscode/

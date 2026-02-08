@@ -16,6 +16,7 @@ from src.llm.base import LLMProvider, LLMResponse, Message, ToolDefinition, Tool
 
 if TYPE_CHECKING:
     from src.mcp_bridge.client_manager import MCPClientManager
+    from src.services.rag_knowledge import RAGKnowledgeService
     from src.services.thread_history import ThreadHistoryService
 
 logger = logging.getLogger(__name__)
@@ -40,12 +41,14 @@ class ChatService:
         system_prompt: str = "",
         mcp_manager: MCPClientManager | None = None,
         thread_history_service: ThreadHistoryService | None = None,
+        rag_service: RAGKnowledgeService | None = None,
     ) -> None:
         self._llm = llm
         self._session_factory = session_factory
         self._system_prompt = system_prompt
         self._mcp_manager = mcp_manager
         self._thread_history = thread_history_service
+        self._rag_service = rag_service
 
     async def respond(
         self,
@@ -71,10 +74,24 @@ class ChatService:
             if history is None:
                 history = await self._load_history(session, thread_ts)
 
+            # RAGコンテキスト取得（オプショナル）
+            rag_context = ""
+            if self._rag_service:
+                try:
+                    rag_context = await self._rag_service.retrieve(text)
+                except Exception:
+                    logger.exception("Failed to retrieve RAG context")
+
             # メッセージリストを構築
             messages: list[Message] = []
             if self._system_prompt:
-                messages.append(Message(role="system", content=self._system_prompt))
+                system_content = self._system_prompt
+                if rag_context:
+                    system_content += (
+                        "\n\n以下は質問に関連する参考情報です。"
+                        "回答に役立つ場合は活用してください:\n" + rag_context
+                    )
+                messages.append(Message(role="system", content=system_content))
             messages.extend(history)
             messages.append(Message(role="user", content=text))
 

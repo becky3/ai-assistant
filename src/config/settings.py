@@ -85,6 +85,19 @@ class Settings(BaseSettings):
     embedding_provider: Literal["local", "online"] = "local"
     embedding_model_local: str = "nomic-embed-text"
     embedding_model_online: str = "text-embedding-3-small"
+    chromadb_persist_dir: str = "./chroma_db"
+    rag_chunk_size: int = Field(default=500, ge=1)
+    rag_chunk_overlap: int = Field(default=50, ge=0)
+    rag_retrieval_count: int = Field(default=5, ge=1)
+    rag_allowed_domains: str = ""
+    rag_max_crawl_pages: int = Field(default=50, ge=1)
+    rag_crawl_delay_sec: float = Field(default=1.0, ge=0)
+
+    def get_rag_allowed_domains(self) -> list[str]:
+        """RAG許可ドメインのリストを返す（カンマ区切りを解析）."""
+        if not self.rag_allowed_domains:
+            return []
+        return [d.strip() for d in self.rag_allowed_domains.split(",") if d.strip()]
 
     # Logging
     log_level: str = "INFO"
