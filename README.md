@@ -13,6 +13,7 @@ RSS記事の自動収集・要約配信、チャットでの質問応答、ユ�
 - **学習トピック提案** — プロファイルと最新記事をもとにおすすめトピックを提案（オンラインLLM）
 - **特定チャンネル自動返信** — 指定したチャンネルではメンションなしで全メッセージに自動応答
 - **外部ツール連携（MCP）** — MCPプロトコルで外部ツールを動的に呼び出し（天気予報サンプル付属）
+- **RAGナレッジ機能** — Webページを知識ベースに取り込み、質問に関連する情報を自動検索して回答に活用
 
 ## 動作環境
 
@@ -22,7 +23,7 @@ RSS記事の自動収集・要約配信、チャットでの質問応答、ユ�
 
 ## 技術スタック
 
-Python 3.11+ / uv / slack-bolt / OpenAI SDK / Anthropic SDK / SQLite + SQLAlchemy / APScheduler / feedparser / MCP SDK
+Python 3.11+ / uv / slack-bolt / OpenAI SDK / Anthropic SDK / SQLite + SQLAlchemy / APScheduler / feedparser / MCP SDK / ChromaDB / BeautifulSoup4
 
 ## セットアップ
 
@@ -41,6 +42,8 @@ cp .env.example .env  # 各種トークン・APIキーを設定
 | `SLACK_AUTO_REPLY_CHANNELS` | 自動返信を有効にするチャンネルID（カンマ区切り） |
 | `CHAT_LLM_PROVIDER` | チャット応答のLLMプロバイダー（`local` / `online`） |
 | `MCP_ENABLED` | MCP機能の有効/無効（`true` / `false`、デフォルト: `false`） |
+| `RAG_ENABLED` | RAG機能の有効/無効（`true` / `false`、デフォルト: `false`） |
+| `RAG_ALLOWED_DOMAINS` | クロール許可ドメイン（カンマ区切り、SSRF対策） |
 
 詳細は `.env.example` を参照してください。
 
@@ -65,6 +68,8 @@ src/
   llm/anthropic_provider.py
   llm/lmstudio_provider.py  # OpenAI SDK で base_url を localhost:1234 に向ける
   llm/factory.py     # プロバイダー生成ファクトリ
+  embedding/         # Embeddingプロバイダー（LM Studio / OpenAI）
+  rag/               # RAGインフラ（チャンキング、ChromaDBベクトルストア）
   mcp/
     __init__.py
     client_manager.py  # MCPサーバー接続管理
@@ -73,6 +78,8 @@ src/
   services/summarizer.py     # 記事要約 (ローカルLLM)
   services/user_profiler.py  # 会話からユーザー情報抽出 (ローカルLLM)
   services/topic_recommender.py # 学習トピック提案 (オンラインLLM)
+  services/web_crawler.py     # Webクローラー（RAG用）
+  services/rag_knowledge.py   # RAGナレッジサービス
   scheduler/jobs.py  # APScheduler 毎朝の収集・配信ジョブ
 mcp-servers/                 # MCPサーバー群（将来リポジトリ分離対象）
   weather/
@@ -135,6 +142,8 @@ uv run mypy src
 - [F5: MCP統合](docs/specs/f5-mcp-integration.md)
 - [F6: 特定チャンネル自動返信](docs/specs/f6-auto-reply.md)
 - [F7: ボットステータス](docs/specs/f7-bot-status.md)
+- [F8: スレッドサポート](docs/specs/f8-thread-support.md)
+- [F9: RAGナレッジ](docs/specs/f9-rag-knowledge.md)
 
 ### Claude Code 関連
 
