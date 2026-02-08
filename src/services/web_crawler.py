@@ -37,7 +37,6 @@ class WebCrawler:
     def __init__(
         self,
         timeout: float = 30.0,
-        allowed_domains: list[str] | None = None,
         max_pages: int = 50,
         crawl_delay: float = 1.0,
         max_concurrent: int = 5,
@@ -46,23 +45,20 @@ class WebCrawler:
 
         Args:
             timeout: HTTPリクエストのタイムアウト秒数
-            allowed_domains: クロールを許可するドメインのリスト（SSRF対策）
             max_pages: 1回のクロールで取得する最大ページ数
             crawl_delay: 同一ドメインへの連続リクエスト間の待機秒数
             max_concurrent: 同時接続数の上限
         """
         self._timeout = aiohttp.ClientTimeout(total=timeout)
-        self._allowed_domains = {d.strip().lower() for d in (allowed_domains or [])}
         self._max_pages = max_pages
         self._crawl_delay = crawl_delay
         self._semaphore = asyncio.Semaphore(max_concurrent)
 
     def validate_url(self, url: str) -> str:
-        """SSRF対策のURL検証. 問題なければ検証済みURLを返す.
+        """URL検証. 問題なければ検証済みURLを返す.
 
         検証内容:
         - スキームが http または https であること
-        - ホスト名が allowed_domains に含まれること
         - 検証失敗時は ValueError を送出
 
         Args:
@@ -86,26 +82,6 @@ class WebCrawler:
         hostname = parsed.hostname or ""
         if not hostname:
             raise ValueError("URLにホスト名が含まれていません。")
-
-        # allowed_domains が空の場合は全てのドメインを拒否
-        if not self._allowed_domains:
-            raise ValueError(
-                "クロールが許可されたドメインが設定されていません。"
-                "RAG_ALLOWED_DOMAINS を設定してください。"
-            )
-
-        # ドメイン検証（サブドメインも許可）
-        domain_allowed = False
-        for allowed in self._allowed_domains:
-            if hostname == allowed or hostname.endswith("." + allowed):
-                domain_allowed = True
-                break
-
-        if not domain_allowed:
-            raise ValueError(
-                f"ドメイン '{hostname}' はクロールが許可されていません。"
-                f"許可ドメイン: {', '.join(sorted(self._allowed_domains))}"
-            )
 
         return url
 
@@ -218,7 +194,8 @@ class WebCrawler:
             if pattern and not pattern.search(absolute_url):
                 continue
 
-            # URL検証（許可されていないドメインはスキップ）
+            # スキーム検証（http/https以外は除外）
+            # 将来のURL安全性チェック機能（Issue #159）に備えて検証を維持
             try:
                 self.validate_url(absolute_url)
             except ValueError:

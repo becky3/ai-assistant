@@ -113,7 +113,6 @@ async def main() -> None:
             embedding = get_embedding_provider(settings, settings.embedding_provider)
             vector_store = VectorStore(embedding, settings.chromadb_persist_dir)
             web_crawler = WebCrawler(
-                allowed_domains=settings.get_rag_allowed_domains(),
                 max_pages=settings.rag_max_crawl_pages,
                 crawl_delay=settings.rag_crawl_delay_sec,
             )

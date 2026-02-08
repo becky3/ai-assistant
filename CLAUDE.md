@@ -23,7 +23,6 @@
 
 - `RAG_ENABLED` — RAG機能の有効/無効（`true` / `false`、デフォルト: `false`）
 - `EMBEDDING_PROVIDER` — Embeddingプロバイダー（`"local"` / `"online"`、デフォルト: `"local"`）
-- `RAG_ALLOWED_DOMAINS` — クロール許可ドメインのカンマ区切りリスト（SSRF対策、未設定時はクロール拒否）
 - 詳細設定は `docs/specs/f9-rag-knowledge.md` を参照
 
 ## 開発ルール

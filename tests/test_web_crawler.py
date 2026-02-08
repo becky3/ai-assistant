@@ -145,15 +145,9 @@ class TestCrawledPage:
 class TestWebCrawlerValidation:
     """WebCrawler URL検証のテスト."""
 
-    def test_ac30_disallowed_domain_rejected(self) -> None:
-        """AC30: allowed_domains に含まれないドメインのURLがクロール拒否されること."""
-        crawler = WebCrawler(allowed_domains=["example.com"])
-        with pytest.raises(ValueError, match="クロールが許可されていません"):
-            crawler.validate_url("https://other-domain.com/page")
-
     def test_ac31_non_http_scheme_rejected(self) -> None:
         """AC31: http/https 以外のスキームが拒否されること."""
-        crawler = WebCrawler(allowed_domains=["example.com"])
+        crawler = WebCrawler()
 
         with pytest.raises(ValueError, match="許可されていないスキーム"):
             crawler.validate_url("file:///etc/passwd")
@@ -161,45 +155,23 @@ class TestWebCrawlerValidation:
         with pytest.raises(ValueError, match="許可されていないスキーム"):
             crawler.validate_url("ftp://example.com/file")
 
-    def test_ac33_empty_allowlist_rejects_all(self) -> None:
-        """AC33: allowed_domains が未設定の場合、全てのURLが拒否されること."""
-        crawler = WebCrawler(allowed_domains=[])
-        with pytest.raises(ValueError, match="クロールが許可されたドメインが設定されていません"):
-            crawler.validate_url("https://example.com/page")
-
-    def test_ac33_none_allowlist_rejects_all(self) -> None:
-        """AC33: allowed_domains が None の場合、全てのURLが拒否されること."""
-        crawler = WebCrawler(allowed_domains=None)
-        with pytest.raises(ValueError, match="クロールが許可されたドメインが設定されていません"):
-            crawler.validate_url("https://example.com/page")
-
     def test_valid_url_passes(self) -> None:
-        """許可されたドメインのURLが検証を通過すること."""
-        crawler = WebCrawler(allowed_domains=["example.com"])
+        """有効なURLが検証を通過すること."""
+        crawler = WebCrawler()
         result = crawler.validate_url("https://example.com/page")
         assert result == "https://example.com/page"
-
-    def test_subdomain_allowed(self) -> None:
-        """サブドメインも許可されること."""
-        crawler = WebCrawler(allowed_domains=["example.com"])
-        result = crawler.validate_url("https://sub.example.com/page")
-        assert result == "https://sub.example.com/page"
 
     def test_http_scheme_allowed(self) -> None:
         """http スキームも許可されること."""
-        crawler = WebCrawler(allowed_domains=["example.com"])
+        crawler = WebCrawler()
         result = crawler.validate_url("http://example.com/page")
         assert result == "http://example.com/page"
 
-    def test_allowed_domains_case_insensitive(self) -> None:
-        """allowed_domains は大文字小文字を区別しないこと."""
-        # 設定値が大文字混在でも、小文字のホスト名と一致する
-        crawler = WebCrawler(allowed_domains=["Example.COM", " OTHER.org "])
-        result = crawler.validate_url("https://example.com/page")
-        assert result == "https://example.com/page"
-
-        result2 = crawler.validate_url("https://other.org/page")
-        assert result2 == "https://other.org/page"
+    def test_any_domain_allowed(self) -> None:
+        """任意のドメインが許可されること."""
+        crawler = WebCrawler()
+        result = crawler.validate_url("https://any-domain.com/page")
+        assert result == "https://any-domain.com/page"
 
 
 class TestWebCrawlerTextExtraction:
@@ -207,7 +179,7 @@ class TestWebCrawlerTextExtraction:
 
     def test_extract_text_from_article(self) -> None:
         """<article> タグから本文を抽出すること."""
-        crawler = WebCrawler(allowed_domains=["example.com"])
+        crawler = WebCrawler()
         title, text = crawler._extract_text(SAMPLE_HTML_WITH_ARTICLE)
 
         assert title == "テスト記事"
@@ -222,7 +194,7 @@ class TestWebCrawlerTextExtraction:
 
     def test_extract_text_from_main(self) -> None:
         """<main> タグから本文を抽出すること（<article> がない場合）."""
-        crawler = WebCrawler(allowed_domains=["example.com"])
+        crawler = WebCrawler()
         title, text = crawler._extract_text(SAMPLE_HTML_WITH_MAIN)
 
         assert title == "メインコンテンツ"
@@ -231,7 +203,7 @@ class TestWebCrawlerTextExtraction:
 
     def test_extract_text_from_body(self) -> None:
         """<body> から本文を抽出すること（<article>, <main> がない場合）."""
-        crawler = WebCrawler(allowed_domains=["example.com"])
+        crawler = WebCrawler()
         title, text = crawler._extract_text(SAMPLE_HTML_BODY_ONLY)
 
         assert title == "ボディのみ"
@@ -244,7 +216,7 @@ class TestWebCrawlerCrawlIndexPage:
     @pytest.mark.asyncio
     async def test_ac12_crawl_index_page_extracts_urls(self) -> None:
         """AC12: リンク集ページからURLリストを抽出できること."""
-        crawler = WebCrawler(allowed_domains=["example.com"])
+        crawler = WebCrawler()
 
         with patch(
             "src.services.web_crawler.aiohttp.ClientSession",
@@ -252,18 +224,17 @@ class TestWebCrawlerCrawlIndexPage:
         ):
             urls = await crawler.crawl_index_page("https://example.com/articles")
 
-        # example.com ドメインのリンクのみ抽出される
-        assert len(urls) >= 3
+        # 全てのリンクが抽出される
+        assert len(urls) >= 4
         assert "https://example.com/article/1" in urls
         assert "https://example.com/article/2" in urls
         assert "https://example.com/article/3" in urls
-        # 許可されていないドメインは含まれない
-        assert "https://other-domain.com/page" not in urls
+        assert "https://other-domain.com/page" in urls
 
     @pytest.mark.asyncio
     async def test_ac13_url_pattern_filtering(self) -> None:
         """AC13: URLパターン（正規表現）によるフィルタリングが機能すること."""
-        crawler = WebCrawler(allowed_domains=["example.com"])
+        crawler = WebCrawler()
 
         with patch(
             "src.services.web_crawler.aiohttp.ClientSession",
@@ -279,24 +250,9 @@ class TestWebCrawlerCrawlIndexPage:
         assert all(url.endswith(".html") for url in urls)
 
     @pytest.mark.asyncio
-    async def test_ac32_extracted_links_validated(self) -> None:
-        """AC32: 抽出したリンクURLもドメインホワイトリストで検証されること."""
-        crawler = WebCrawler(allowed_domains=["example.com"])
-
-        with patch(
-            "src.services.web_crawler.aiohttp.ClientSession",
-            return_value=MockClientSession(200, SAMPLE_INDEX_HTML),
-        ):
-            urls = await crawler.crawl_index_page("https://example.com/articles")
-
-        # 許可されていないドメインのURLは含まれない
-        for url in urls:
-            assert "other-domain.com" not in url
-
-    @pytest.mark.asyncio
     async def test_ac34_max_crawl_pages_limit(self) -> None:
         """AC34: 1回のクロールで取得するページ数が max_pages で制限されること."""
-        crawler = WebCrawler(allowed_domains=["example.com"], max_pages=2)
+        crawler = WebCrawler(max_pages=2)
 
         with patch(
             "src.services.web_crawler.aiohttp.ClientSession",
@@ -306,14 +262,6 @@ class TestWebCrawlerCrawlIndexPage:
 
         assert len(urls) <= 2
 
-    @pytest.mark.asyncio
-    async def test_index_page_validation_failure(self) -> None:
-        """インデックスページのURL検証に失敗した場合、ValueError を送出すること."""
-        crawler = WebCrawler(allowed_domains=["example.com"])
-
-        with pytest.raises(ValueError, match="クロールが許可されていません"):
-            await crawler.crawl_index_page("https://malicious.com/articles")
-
 
 class TestWebCrawlerCrawlPage:
     """WebCrawler.crawl_page のテスト."""
@@ -321,7 +269,7 @@ class TestWebCrawlerCrawlPage:
     @pytest.mark.asyncio
     async def test_ac14_crawl_page_extracts_text(self) -> None:
         """AC14: 単一ページの本文テキストを取得できること."""
-        crawler = WebCrawler(allowed_domains=["example.com"])
+        crawler = WebCrawler()
 
         with patch(
             "src.services.web_crawler.aiohttp.ClientSession",
@@ -338,7 +286,7 @@ class TestWebCrawlerCrawlPage:
     @pytest.mark.asyncio
     async def test_crawl_page_returns_none_on_http_error(self) -> None:
         """HTTPエラー時に None を返すこと."""
-        crawler = WebCrawler(allowed_domains=["example.com"])
+        crawler = WebCrawler()
 
         with patch(
             "src.services.web_crawler.aiohttp.ClientSession",
@@ -349,18 +297,18 @@ class TestWebCrawlerCrawlPage:
         assert page is None
 
     @pytest.mark.asyncio
-    async def test_crawl_page_returns_none_on_validation_failure(self) -> None:
-        """URL検証失敗時に None を返すこと."""
-        crawler = WebCrawler(allowed_domains=["example.com"])
+    async def test_crawl_page_returns_none_on_scheme_validation_failure(self) -> None:
+        """スキーム検証失敗時に None を返すこと."""
+        crawler = WebCrawler()
 
-        page = await crawler.crawl_page("https://malicious.com/page")
+        page = await crawler.crawl_page("file:///etc/passwd")
 
         assert page is None
 
     @pytest.mark.asyncio
     async def test_crawl_page_rejects_redirect(self) -> None:
         """SSRF対策: リダイレクト応答を拒否すること."""
-        crawler = WebCrawler(allowed_domains=["example.com"])
+        crawler = WebCrawler()
 
         with patch(
             "src.services.web_crawler.aiohttp.ClientSession",
@@ -377,7 +325,7 @@ class TestWebCrawlerCrawlIndexPageRedirect:
     @pytest.mark.asyncio
     async def test_crawl_index_page_rejects_redirect(self) -> None:
         """SSRF対策: インデックスページのリダイレクト応答を拒否すること."""
-        crawler = WebCrawler(allowed_domains=["example.com"])
+        crawler = WebCrawler()
 
         with patch(
             "src.services.web_crawler.aiohttp.ClientSession",
@@ -394,7 +342,7 @@ class TestWebCrawlerCrawlPages:
     @pytest.mark.asyncio
     async def test_ac15_crawl_pages_isolates_errors(self) -> None:
         """AC15: 複数ページを並行クロールし、ページ単位のエラーを隔離すること."""
-        crawler = WebCrawler(allowed_domains=["example.com"], crawl_delay=0)
+        crawler = WebCrawler(crawl_delay=0)
 
         # 特定のURLを失敗させる（並行実行でも順序非依存）
         fail_url = "https://example.com/article/2"
@@ -448,7 +396,7 @@ class TestWebCrawlerCrawlPages:
     @pytest.mark.asyncio
     async def test_ac35_crawl_delay_between_requests(self) -> None:
         """AC35: 同一ドメインへの連続リクエスト間に crawl_delay の待機が挿入されること."""
-        crawler = WebCrawler(allowed_domains=["example.com", "other.com"], crawl_delay=0.1)
+        crawler = WebCrawler(crawl_delay=0.1)
 
         with patch(
             "src.services.web_crawler.aiohttp.ClientSession",
@@ -472,7 +420,7 @@ class TestWebCrawlerCrawlPages:
     @pytest.mark.asyncio
     async def test_crawl_pages_empty_list(self) -> None:
         """空のURLリストに対して空のリストを返すこと."""
-        crawler = WebCrawler(allowed_domains=["example.com"])
+        crawler = WebCrawler()
         pages = await crawler.crawl_pages([])
         assert pages == []
 
@@ -485,7 +433,6 @@ class TestWebCrawlerConcurrency:
         """Semaphore により同時接続数が制限されること."""
         max_concurrent = 2
         crawler = WebCrawler(
-            allowed_domains=["example.com"],
             max_concurrent=max_concurrent,
             crawl_delay=0,
         )
