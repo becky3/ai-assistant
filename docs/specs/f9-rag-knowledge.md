@@ -421,7 +421,7 @@ Slackコマンド経由でユーザーが任意のURLを指定できるため、
 **robots.txt対応方針**:
 
 - 初期実装では `robots.txt` の解析・遵守は行わない
-- User-Agentヘッダーに識別可能なボット名を設定する（例: `AI-Assistant-Crawler/1.0`）
+- User-Agentはaiohttpのデフォルト値を使用（ボット特定を回避しつつ、プログラムからのアクセスであることは示す）
 - 将来的に `robots.txt` の解析・遵守機能を追加予定
 
 **HTML本文抽出ロジック（BeautifulSoup4使用）**:
@@ -846,6 +846,6 @@ RAG_CRAWL_DELAY_SEC=1.0
 4. **Webクローラーの負荷配慮**: `asyncio.Semaphore` で同時接続数を制限し、対象サーバーへの過負荷を防ぐ
 5. **LLMコンテキストウィンドウ**: 多数のチャンクが注入されるとトークン上限に近づく可能性がある。`RAG_RETRIEVAL_COUNT` で検索件数を制限し、対応する
 6. **既存テストへの影響**: RAGサービスはオプショナル注入のため、既存テストに変更は不要
-7. **robots.txt**: 初期実装では `robots.txt` の解析・遵守は行わない。User-Agentにボット名を設定し、将来的に対応を検討する
+7. **robots.txt**: 初期実装では `robots.txt` の解析・遵守は行わない。User-Agentはaiohttpデフォルトを使用し、将来的に対応を検討する
 8. **SSRF対策**: `RAG_ALLOWED_DOMAINS` によるドメインホワイトリストが主防御。未設定時はクロールコマンドを拒否する
 9. **URL安全性チェック**: 将来実装予定。Google Safe Browsing API による判定機能を検討中

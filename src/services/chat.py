@@ -89,13 +89,17 @@ class ChatService:
 
             # メッセージリストを構築
             messages: list[Message] = []
-            if self._system_prompt:
-                system_content = self._system_prompt
-                if rag_context:
-                    system_content += (
-                        "\n\n以下は質問に関連する参考情報です。"
-                        "回答に役立つ場合は活用してください:\n" + rag_context
-                    )
+            # system_promptまたはrag_contextがあればシステムメッセージを追加
+            system_content = self._system_prompt or ""
+            if rag_context:
+                rag_prefix = (
+                    "\n\n以下は質問に関連する参考情報です。"
+                    "回答に役立つ場合は活用してください:\n"
+                    if system_content
+                    else "以下は質問に関連する参考情報です。回答に役立つ場合は活用してください:\n"
+                )
+                system_content += rag_prefix + rag_context
+            if system_content:
                 messages.append(Message(role="system", content=system_content))
             messages.extend(history)
             messages.append(Message(role="user", content=text))
