@@ -105,37 +105,39 @@ if re.search(r"<@[A-Za-z0-9]+>", text):
 
 ### アーキテクチャ
 
-```
-Slack メッセージ投稿
-    ↓
-┌─────────────────────────────────────────────────────────────┐
-│ Slack Bolt (Socket Mode)                                     │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  ┌─────────────────┐    ┌─────────────────────────────────┐ │
-│  │ app_mention     │    │ message                          │ │
-│  │ イベント         │    │ イベント                         │ │
-│  └────────┬────────┘    └────────┬──────────────────────────┘ │
-│           │                      │                           │
-│           │                      ▼                           │
-│           │             ┌────────────────────┐              │
-│           │             │ フィルタリング       │              │
-│           │             │ - bot_id チェック   │              │
-│           │             │ - subtype チェック  │              │
-│           │             │ - channel チェック  │              │
-│           │             │ - メンションチェック │              │
-│           │             └────────┬───────────┘              │
-│           │                      │                           │
-│           ▼                      ▼                           │
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │ 共通メッセージ処理ロジック                               │ │
-│  │ - キーワード判定                                        │ │
-│  │ - ChatService / UserProfiler / TopicRecommender 呼び出し │ │
-│  └─────────────────────────────────────────────────────────┘ │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
-    ↓
-スレッド内に応答
+```mermaid
+flowchart TD
+    subgraph Input["Slack メッセージ投稿"]
+        MSG[ユーザーがメッセージ送信]
+    end
+
+    subgraph Bolt["Slack Bolt (Socket Mode)"]
+        MENTION["app_mention<br/>イベント"]
+        MESSAGE["message<br/>イベント"]
+
+        subgraph Filter["フィルタリング"]
+            F1["bot_id チェック"]
+            F2["subtype チェック"]
+            F3["channel チェック"]
+            F4["メンションチェック"]
+        end
+
+        subgraph Handler["共通メッセージ処理ロジック"]
+            H1["キーワード判定"]
+            H2["ChatService / UserProfiler /<br/>TopicRecommender 呼び出し"]
+        end
+    end
+
+    subgraph Output["スレッド内に応答"]
+        RES[応答メッセージ]
+    end
+
+    MSG --> MENTION
+    MSG --> MESSAGE
+    MESSAGE --> Filter
+    Filter --> Handler
+    MENTION --> Handler
+    Handler --> RES
 ```
 
 ## 関連ファイル
