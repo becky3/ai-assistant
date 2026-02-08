@@ -83,13 +83,15 @@ uv run mypy src/
 変更ファイルに関連するテストのみを実行:
 ```bash
 # 変更ファイルの取得（以下の優先順位で試行）
-# 1. ベースブランチとの比較
-git diff --name-only $(git merge-base HEAD origin/main) HEAD
-# 2. ステージング済みの変更（1が失敗した場合）
+# 1. 作業ツリーの変更（未ステージ・ステージング両方）
+git diff --name-only
+# 2. ベースブランチとの比較（merge-base成功時のみ）
+base=$(git merge-base HEAD origin/main) && git diff --name-only "$base" HEAD
+# 3. ステージング済みの変更のみ
 git diff --cached --name-only
-# 3. 直近コミットの差分（フォールバック）
+# 4. 直近コミットの差分（フォールバック）
 git show --name-only --format="" HEAD
-# 4. すべて失敗した場合 → fullモードにフォールバック
+# 5. すべて失敗した場合 → fullモードにフォールバック
 
 # 推定されたテストファイルのみ実行
 uv run pytest {推定されたテストファイル}
@@ -110,11 +112,15 @@ uv run mypy {変更された src/**/*.py ファイル}
 1. **テスト対象の特定**
    - **diff モード**:
      - 変更ファイルの取得（以下の優先順位で試行）:
-       1. ベースブランチ（`origin/main`）との比較: `git diff --name-only $(git merge-base HEAD origin/main) HEAD`
-       2. ステージング済みの変更: `git diff --cached --name-only`
-       3. 直近コミットの差分（フォールバック）: `git show --name-only --format="" HEAD`
-       4. すべて失敗した場合は `full` モードにフォールバック
+       1. 作業ツリーの変更（未ステージ・ステージング両方）: `git diff --name-only`
+       2. ベースブランチ（`origin/main`）との比較: `base=$(git merge-base HEAD origin/main) && git diff --name-only "$base" HEAD`
+       3. ステージング済みの変更のみ: `git diff --cached --name-only`
+       4. 直近コミットの差分（フォールバック）: `git show --name-only --format="" HEAD`
+       5. すべて失敗した場合は `full` モードにフォールバック
      - 変更ファイルから対応テストを推定（下記マッピングルール参照）
+     - **変更ファイル0件の場合**:
+       - 明示的にテスト対象（ファイルパスや `-k` オプション等）が指定されていれば、その指定に従って実行
+       - 指定がなければ `full` モードにフォールバック
      - Pythonファイル以外（docs/, CLAUDE.md等）のみの変更 → テスト0件で正常終了（lint・型チェックもスキップ）
      - `pyproject.toml`, `conftest.py` の変更 → `full` モードにフォールバック
    - **full モード**:

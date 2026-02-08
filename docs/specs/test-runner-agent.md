@@ -77,16 +77,18 @@ permissionMode: default
 ### 差分テスト処理フロー
 
 1. **変更ファイルの取得**（以下の優先順位で試行）
-   - ベースブランチ（`origin/main`）との比較: `git diff --name-only $(git merge-base HEAD origin/main) HEAD`
-   - ステージング済みの変更: `git diff --cached --name-only`
+   - 作業ツリーの変更（未ステージ・ステージング両方）: `git diff --name-only`
+   - ベースブランチ（`origin/main`）との比較: `base=$(git merge-base HEAD origin/main) && git diff --name-only "$base" HEAD`
+   - ステージング済みの変更のみ: `git diff --cached --name-only`
    - 直近コミットの差分（フォールバック）: `git show --name-only --format="" HEAD`
    - すべて失敗した場合は `full` モードにフォールバック
+   - **変更ファイル0件の場合**: 明示的なテスト対象指定がなければ `full` モードにフォールバック
 
 2. **変更ファイルの分類**
    - `src/**/*.py` → 対応テストを推定
    - `tests/*.py` → そのまま実行対象に追加
    - `pyproject.toml`, `conftest.py` → 全テスト実行にフォールバック（設定変更とみなし安全側に倒す）
-   - その他（`docs/**`, `CLAUDE.md`, `*.md` 等） → テスト対象外（diffモードではテスト0件で正常終了、fullへのフォールバックは行わない）
+   - その他（`docs/**`, `CLAUDE.md`, `*.md` 等） → テスト対象外（diffモードではテスト0件で正常終了、lint・型チェックもスキップ、fullへのフォールバックは行わない）
 
 3. **テストファイルの推定（マッピングルール）**
 
@@ -109,6 +111,7 @@ permissionMode: default
    - `uv run mypy {変更された src/**/*.py ファイル}`
 
 6. **結果レポート生成**
+   - fullモードと同じ形式でレポートを生成
 
 **フォールバック条件:**
 以下の場合は全テスト実行にフォールバック:
@@ -128,6 +131,12 @@ test-runnerサブエージェントで差分テストを実行してください
 ```
 
 ### 処理フロー
+
+以下は主に `full` モードの処理フローを示す。`diff` モードの処理フローは「差分テスト処理フロー」セクションを参照。
+
+0. **実行モードの判定**
+   - 「差分テスト」「diffテスト」キーワードがあれば `diff` モード → 「差分テスト処理フロー」へ
+   - それ以外は `full` モード → 以下のフローを実行
 
 1. **テスト対象の特定**
    - 引数でファイルパスやテスト名が指定されていればそれを実行
