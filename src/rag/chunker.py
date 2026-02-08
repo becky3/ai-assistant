@@ -140,11 +140,25 @@ def _merge_into_chunks(
             current_chunk = current_chunk.strip()
 
             # それでもチャンクサイズを超える場合は強制分割
+            # スライディングウィンドウでチャンク間オーバーラップを維持する
             if len(current_chunk) > chunk_size:
-                sub_chunks = _split_by_characters(current_chunk, chunk_size - chunk_overlap)
-                for sub_chunk in sub_chunks[:-1]:
-                    chunks.append(sub_chunk)
-                current_chunk = sub_chunks[-1] if sub_chunks else ""
+                forced_chunks: list[str] = []
+                step = chunk_size - chunk_overlap
+                start = 0
+                while start < len(current_chunk):
+                    forced_chunk = current_chunk[start : start + chunk_size]
+                    if not forced_chunk:
+                        break
+                    forced_chunks.append(forced_chunk)
+                    # これ以上 chunk_size 分スライスできない場合は終了
+                    if start + chunk_size >= len(current_chunk):
+                        break
+                    start += step
+
+                for forced_chunk in forced_chunks[:-1]:
+                    chunks.append(forced_chunk)
+                current_chunk = forced_chunks[-1] if forced_chunks else ""
+                # 強制分割系列内のオーバーラップは上記スライディングウィンドウで確保済み
                 overlap_buffer = ""
 
     # 残りのチャンクを追加
