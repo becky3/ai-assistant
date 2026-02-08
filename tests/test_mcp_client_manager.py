@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.llm.base import ToolDefinition
-from src.mcp.client_manager import (
+from src.mcp_bridge.client_manager import (
     MCPClientManager,
     MCPServerConfig,
     MCPToolNotFoundError,
@@ -56,8 +56,8 @@ async def test_ac4_client_manager_connects_and_lists_tools() -> None:
     mock_session = _make_mock_session()
 
     with (
-        patch("src.mcp.client_manager.stdio_client") as mock_stdio,
-        patch("src.mcp.client_manager.ClientSession", return_value=mock_session),
+        patch("src.mcp_bridge.client_manager.stdio_client") as mock_stdio,
+        patch("src.mcp_bridge.client_manager.ClientSession", return_value=mock_session),
     ):
         # stdio_client をコンテキストマネージャーとしてモック
         mock_transport = AsyncMock()
@@ -94,8 +94,8 @@ async def test_ac5_client_manager_calls_tool() -> None:
     mock_session = _make_mock_session()
 
     with (
-        patch("src.mcp.client_manager.stdio_client") as mock_stdio,
-        patch("src.mcp.client_manager.ClientSession", return_value=mock_session),
+        patch("src.mcp_bridge.client_manager.stdio_client") as mock_stdio,
+        patch("src.mcp_bridge.client_manager.ClientSession", return_value=mock_session),
     ):
         mock_transport = AsyncMock()
         mock_transport.__aenter__ = AsyncMock(return_value=(AsyncMock(), AsyncMock()))
@@ -153,8 +153,8 @@ async def test_ac6_client_manager_handles_multiple_servers() -> None:
         return s
 
     with (
-        patch("src.mcp.client_manager.stdio_client") as mock_stdio,
-        patch("src.mcp.client_manager.ClientSession", side_effect=session_factory),
+        patch("src.mcp_bridge.client_manager.stdio_client") as mock_stdio,
+        patch("src.mcp_bridge.client_manager.ClientSession", side_effect=session_factory),
     ):
         mock_transport = AsyncMock()
         mock_transport.__aenter__ = AsyncMock(return_value=(AsyncMock(), AsyncMock()))
@@ -186,8 +186,8 @@ async def test_ac7_graceful_degradation_on_connection_failure() -> None:
     manager = MCPClientManager()
 
     with (
-        patch("src.mcp.client_manager.stdio_client") as mock_stdio,
-        patch("src.mcp.client_manager.logger") as mock_logger,
+        patch("src.mcp_bridge.client_manager.stdio_client") as mock_stdio,
+        patch("src.mcp_bridge.client_manager.logger") as mock_logger,
     ):
         # 接続失敗をシミュレート
         mock_stdio.side_effect = ConnectionError("Server not found")
@@ -217,7 +217,7 @@ async def test_ac7_http_transport_skipped() -> None:
     """AC7: HTTP トランスポートが指定された場合、warningログを出してスキップすること."""
     manager = MCPClientManager()
 
-    with patch("src.mcp.client_manager.logger") as mock_logger:
+    with patch("src.mcp_bridge.client_manager.logger") as mock_logger:
         config = MCPServerConfig(
             name="remote_server",
             transport="http",

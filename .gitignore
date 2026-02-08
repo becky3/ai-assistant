@@ -36,6 +36,9 @@ Thumbs.db
 !.claude/skills/
 !.claude/agents/
 
+# Process guard
+bot.pid
+
 # Testing
 .pytest_cache/
 .mypy_cache/

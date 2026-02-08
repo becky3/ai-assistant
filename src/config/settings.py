@@ -62,8 +62,10 @@ class Settings(BaseSettings):
     timezone: str = "Asia/Tokyo"
 
     # Feed delivery
-    feed_articles_per_category: int = Field(default=10, ge=1)
+    feed_articles_per_feed: int = Field(default=10, ge=1)
     feed_card_layout: Literal["vertical", "horizontal"] = "horizontal"
+    feed_summarize_timeout: int = Field(default=180, ge=0)  # 要約タイムアウト（秒、0=無制限）
+    feed_collect_days: int = Field(default=7, ge=1)  # 収集対象の日数（これより古い記事はスキップ）
 
     # Database
     database_url: str = "sqlite+aiosqlite:///./ai_assistant.db"

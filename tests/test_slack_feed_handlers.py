@@ -12,8 +12,10 @@ from src.slack.handlers import (
     _handle_feed_delete,
     _handle_feed_disable,
     _handle_feed_enable,
+    _handle_feed_export,
     _handle_feed_import,
     _handle_feed_list,
+    _handle_feed_replace,
     _parse_feed_command,
 )
 
@@ -79,6 +81,14 @@ def test_parse_feed_command_case_insensitive() -> None:
     """feedコマンド解析: サブコマンドは大文字小文字不問."""
     subcommand, _, _ = _parse_feed_command("feed ADD https://example.com/rss")
     assert subcommand == "add"
+
+
+def test_parse_feed_command_test() -> None:
+    """feedコマンド解析: test."""
+    subcommand, urls, category = _parse_feed_command("feed test")
+    assert subcommand == "test"
+    assert urls == []
+    assert category == "一般"
 
 
 def test_parse_feed_command_invalid() -> None:
@@ -448,3 +458,277 @@ async def test_ac13_7_handle_feed_import_summary(monkeypatch: pytest.MonkeyPatch
     assert "失敗: 1件" in result
     assert "行3:" in result  # 3行目（ヘッダー=1, 1件目=2, 2件目=3）
     assert "重複" in result
+
+
+# --- feed replace テスト (AC16) ---
+
+
+def test_parse_feed_command_replace() -> None:
+    """feedコマンド解析: replace."""
+    subcommand, urls, category = _parse_feed_command("feed replace")
+    assert subcommand == "replace"
+    assert urls == []
+    assert category == "一般"
+
+
+def test_parse_feed_command_export() -> None:
+    """feedコマンド解析: export."""
+    subcommand, urls, category = _parse_feed_command("feed export")
+    assert subcommand == "export"
+    assert urls == []
+    assert category == "一般"
+
+
+@pytest.mark.asyncio
+async def test_ac16_4_handle_feed_replace_no_files() -> None:
+    """feedハンドラ: replace ファイルなしエラー (AC16.4)."""
+    collector = AsyncMock(spec=FeedCollector)
+    result = await _handle_feed_replace(collector, None, "xoxb-token")
+    assert "エラー" in result
+    assert "CSVファイルを添付" in result
+
+
+@pytest.mark.asyncio
+async def test_ac16_5_handle_feed_replace_non_csv_file() -> None:
+    """feedハンドラ: replace CSV以外のファイルエラー (AC16.5)."""
+    collector = AsyncMock(spec=FeedCollector)
+    files: list[dict[str, object]] = [{"name": "image.png", "mimetype": "image/png", "url_private": "https://files.slack.com/test.png"}]
+    result = await _handle_feed_replace(collector, files, "xoxb-token")
+    assert "エラー" in result
+    assert "CSVファイルが見つかりません" in result
+
+
+@pytest.mark.asyncio
+async def test_ac16_1_handle_feed_replace_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    """feedハンドラ: replace 正常系（全削除→再登録）(AC16.1)."""
+    collector = AsyncMock(spec=FeedCollector)
+    collector.delete_all_feeds.return_value = 3
+    mock_feed = MagicMock()
+    mock_feed.url = "https://new.com/rss"
+    mock_feed.name = "New Feed"
+    mock_feed.category = "Tech"
+    collector.add_feed.return_value = mock_feed
+
+    csv_content = "url,name,category\nhttps://new.com/rss,New Feed,Tech"
+
+    mock_response = MagicMock()
+    mock_response.text = csv_content
+    mock_response.raise_for_status = MagicMock()
+
+    async def mock_get(*args: object, **kwargs: object) -> MagicMock:
+        return mock_response
+
+    mock_client = MagicMock()
+    mock_client.get = mock_get
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+
+    import httpx
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: mock_client)
+
+    files: list[dict[str, object]] = [{"name": "feeds.csv", "mimetype": "text/csv", "url_private": "https://files.slack.com/feeds.csv"}]
+    result = await _handle_feed_replace(collector, files, "xoxb-token")
+
+    assert "フィード置換完了" in result
+    assert "削除: 3件" in result
+    assert "登録成功: 1件" in result
+    assert "登録失敗: 0件" in result
+    collector.delete_all_feeds.assert_called_once()
+    collector.add_feed.assert_called_once_with("https://new.com/rss", "New Feed", "Tech")
+
+
+@pytest.mark.asyncio
+async def test_ac16_3_handle_feed_replace_summary(monkeypatch: pytest.MonkeyPatch) -> None:
+    """feedハンドラ: replace サマリー表示 (AC16.3)."""
+    collector = AsyncMock(spec=FeedCollector)
+    collector.delete_all_feeds.return_value = 5
+
+    mock_feed = MagicMock(url="https://ok.com/rss", name="OK Feed", category="Tech")
+    collector.add_feed.side_effect = [mock_feed, ValueError("重複")]
+
+    csv_content = "url,name,category\nhttps://ok.com/rss,OK Feed,Tech\nhttps://dup.com/rss,Dup Feed,Tech"
+
+    mock_response = MagicMock()
+    mock_response.text = csv_content
+    mock_response.raise_for_status = MagicMock()
+
+    async def mock_get(*args: object, **kwargs: object) -> MagicMock:
+        return mock_response
+
+    mock_client = MagicMock()
+    mock_client.get = mock_get
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+
+    import httpx
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: mock_client)
+
+    files: list[dict[str, object]] = [{"name": "feeds.csv", "mimetype": "text/csv", "url_private": "https://files.slack.com/feeds.csv"}]
+    result = await _handle_feed_replace(collector, files, "xoxb-token")
+
+    assert "フィード置換完了" in result
+    assert "削除: 5件" in result
+    assert "登録成功: 1件" in result
+    assert "登録失敗: 1件" in result
+    assert "行3:" in result
+    assert "重複" in result
+
+
+@pytest.mark.asyncio
+async def test_ac16_6_handle_feed_replace_import_partial_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """feedハンドラ: replace 一部登録失敗（削除は取り消されない）(AC16.6)."""
+    collector = AsyncMock(spec=FeedCollector)
+    collector.delete_all_feeds.return_value = 2
+    # 全件失敗
+    collector.add_feed.side_effect = ValueError("追加エラー")
+
+    csv_content = "url,name,category\nhttps://fail.com/rss,Fail Feed,Tech"
+
+    mock_response = MagicMock()
+    mock_response.text = csv_content
+    mock_response.raise_for_status = MagicMock()
+
+    async def mock_get(*args: object, **kwargs: object) -> MagicMock:
+        return mock_response
+
+    mock_client = MagicMock()
+    mock_client.get = mock_get
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+
+    import httpx
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: mock_client)
+
+    files: list[dict[str, object]] = [{"name": "feeds.csv", "mimetype": "text/csv", "url_private": "https://files.slack.com/feeds.csv"}]
+    result = await _handle_feed_replace(collector, files, "xoxb-token")
+
+    # 削除は実行されている（取り消されない）
+    collector.delete_all_feeds.assert_called_once()
+    assert "削除: 2件" in result
+    assert "登録成功: 0件" in result
+    assert "登録失敗: 1件" in result
+
+
+# --- feed export テスト (AC17) ---
+
+
+@pytest.mark.asyncio
+async def test_ac17_5_handle_feed_export_no_feeds() -> None:
+    """feedハンドラ: export フィード0件 (AC17.5)."""
+    collector = AsyncMock(spec=FeedCollector)
+    collector.get_all_feeds.return_value = []
+
+    slack_client = AsyncMock()
+
+    result = await _handle_feed_export(collector, slack_client, "C123", "1234.5678")
+
+    assert "エクスポートするフィードがありません" in result
+    slack_client.files_upload_v2.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_ac17_1_handle_feed_export_success() -> None:
+    """feedハンドラ: export 正常系 (AC17.1)."""
+    collector = AsyncMock(spec=FeedCollector)
+    mock_feed = MagicMock()
+    mock_feed.url = "https://example.com/rss"
+    mock_feed.name = "Example Feed"
+    mock_feed.category = "Tech"
+    collector.get_all_feeds.return_value = [mock_feed]
+
+    slack_client = AsyncMock()
+
+    result = await _handle_feed_export(collector, slack_client, "C123", "1234.5678")
+
+    assert result == ""
+    slack_client.files_upload_v2.assert_called_once()
+    call_kwargs = slack_client.files_upload_v2.call_args[1]
+    assert call_kwargs["channel"] == "C123"
+    assert call_kwargs["thread_ts"] == "1234.5678"
+    assert call_kwargs["filename"] == "feeds.csv"
+    assert "1件" in call_kwargs["initial_comment"]
+
+
+@pytest.mark.asyncio
+async def test_ac17_4_handle_feed_export_all_feeds() -> None:
+    """feedハンドラ: export 有効・無効の両方が含まれる (AC17.4)."""
+    collector = AsyncMock(spec=FeedCollector)
+    enabled_feed = MagicMock(url="https://enabled.com/rss", name="Enabled", category="Tech")
+    disabled_feed = MagicMock(url="https://disabled.com/rss", name="Disabled", category="Other")
+    collector.get_all_feeds.return_value = [enabled_feed, disabled_feed]
+
+    slack_client = AsyncMock()
+
+    result = await _handle_feed_export(collector, slack_client, "C123", "1234.5678")
+
+    assert result == ""
+    call_kwargs = slack_client.files_upload_v2.call_args[1]
+    csv_content = call_kwargs["content"]
+    assert "https://enabled.com/rss" in csv_content
+    assert "https://disabled.com/rss" in csv_content
+    assert "2件" in call_kwargs["initial_comment"]
+
+
+@pytest.mark.asyncio
+async def test_ac17_2_handle_feed_export_csv_format() -> None:
+    """feedハンドラ: export CSV形式の検証 (AC17.2)."""
+    collector = AsyncMock(spec=FeedCollector)
+    mock_feed = MagicMock(url="https://example.com/rss", category="Tech")
+    mock_feed.name = "Example Feed"
+    collector.get_all_feeds.return_value = [mock_feed]
+
+    slack_client = AsyncMock()
+
+    await _handle_feed_export(collector, slack_client, "C123", "1234.5678")
+
+    call_kwargs = slack_client.files_upload_v2.call_args[1]
+    csv_content = call_kwargs["content"]
+    lines = csv_content.strip().splitlines()
+    assert lines[0] == "url,name,category"
+    assert lines[1] == "https://example.com/rss,Example Feed,Tech"
+
+
+@pytest.mark.asyncio
+async def test_ac17_6_handle_feed_export_permission_error() -> None:
+    """feedハンドラ: export 権限不足エラー (AC17.6)."""
+    collector = AsyncMock(spec=FeedCollector)
+    mock_feed = MagicMock(url="https://example.com/rss", name="Example Feed", category="Tech")
+    collector.get_all_feeds.return_value = [mock_feed]
+
+    slack_client = AsyncMock()
+    slack_client.files_upload_v2.side_effect = Exception("missing_scope: files:write")
+
+    result = await _handle_feed_export(collector, slack_client, "C123", "1234.5678")
+
+    assert "エラー" in result
+    assert "files:write" in result
+
+
+# --- feed collect --skip-summary テスト (AC18) ---
+
+
+def test_parse_feed_command_collect() -> None:
+    """feedコマンド解析: collect."""
+    subcommand, urls, category = _parse_feed_command("feed collect --skip-summary")
+    assert subcommand == "collect"
+    assert urls == []
+    # カテゴリ省略時はデフォルト「一般」となり、--skip-summary はカテゴリとして扱われない
+    assert category == "一般"
+
+
+def test_ac18_1_parse_collect_skip_summary_flag() -> None:
+    """feedコマンド解析: --skip-summary がカテゴリに含まれない (AC18.1)."""
+    subcommand, urls, category = _parse_feed_command("feed collect --skip-summary")
+    assert subcommand == "collect"
+    assert "--skip-summary" not in category
+    assert category == "一般"
+
+
+def test_ac18_parse_collect_without_skip_summary() -> None:
+    """feedコマンド解析: collect without --skip-summary."""
+    subcommand, urls, category = _parse_feed_command("feed collect")
+    assert subcommand == "collect"
+    assert urls == []
+    assert category == "一般"
+
+

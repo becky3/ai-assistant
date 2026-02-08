@@ -415,6 +415,91 @@ async def test_ac7_13_add_feed_default_category(db_factory) -> None:  # type: ig
     assert feed.category == "一般"
 
 
+# ===== AC16: フィード一括置換のテスト =====
+
+
+async def test_ac16_delete_all_feeds(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC16: delete_all_feeds で全フィードが削除される."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    # 追加フィードを追加
+    await collector.add_feed("https://feed2.com/rss", "Feed 2", "Tech")
+
+    count = await collector.delete_all_feeds()
+
+    assert count == 2  # 初期フィード + feed2
+
+    async with db_factory() as session:
+        result = await session.execute(select(Feed))
+        assert list(result.scalars().all()) == []
+
+
+async def test_ac16_delete_all_feeds_cascades_articles(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC16: delete_all_feeds で関連記事もCASCADE削除される."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    # 記事を追加
+    async with db_factory() as session:
+        feed_result = await session.execute(select(Feed))
+        feed = feed_result.scalar_one()
+        session.add(Article(feed_id=feed.id, title="Article 1", url="https://example.com/a1"))
+        await session.commit()
+
+    count = await collector.delete_all_feeds()
+    assert count == 1
+
+    async with db_factory() as session:
+        article_result = await session.execute(select(Article))
+        assert list(article_result.scalars().all()) == []
+
+
+async def test_ac16_delete_all_feeds_empty(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC16: フィード0件時のdelete_all_feeds."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    # 初期フィードを削除
+    await collector.delete_feed("https://example.com/rss")
+
+    count = await collector.delete_all_feeds()
+    assert count == 0
+
+
+# ===== AC17: フィードエクスポートのテスト =====
+
+
+async def test_ac17_get_all_feeds(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC17: get_all_feeds で全フィードを取得できる."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    await collector.add_feed("https://feed2.com/rss", "Feed 2", "Tech")
+
+    feeds = await collector.get_all_feeds()
+    assert len(feeds) == 2
+    urls = {f.url for f in feeds}
+    assert "https://example.com/rss" in urls
+    assert "https://feed2.com/rss" in urls
+
+
+async def test_ac17_get_all_feeds_includes_disabled(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC17.4: get_all_feeds は無効フィードも含む."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    # 無効フィードを追加
+    async with db_factory() as session:
+        session.add(Feed(url="https://disabled.com/rss", name="Disabled", enabled=False))
+        await session.commit()
+
+    feeds = await collector.get_all_feeds()
+    assert len(feeds) == 2
+    urls = {f.url for f in feeds}
+    assert "https://disabled.com/rss" in urls
+
+
 # --- strip_html テスト ---
 
 
@@ -458,6 +543,250 @@ def test_strip_html_medium_like_content() -> None:
     assert "記事の概要テキスト" in result
     assert "<" not in result
     assert ">" not in result
+
+
+# ===== AC18: 要約スキップ収集のテスト =====
+
+
+async def test_ac18_1_collect_all_skip_summary(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC18.1: collect_all(skip_summary=True) で要約なし収集が実行できる."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    parsed = _make_parsed_feed([
+        {"link": "https://example.com/skip1", "title": "Skip Article 1", "summary": "概要テキスト"},
+        {"link": "https://example.com/skip2", "title": "Skip Article 2"},
+    ])
+
+    with patch("src.services.feed_collector.feedparser.parse", return_value=parsed):
+        with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
+            articles = await collector.collect_all(skip_summary=True)
+
+    assert len(articles) == 2
+
+    async with db_factory() as session:
+        result = await session.execute(select(Article))
+        db_articles = list(result.scalars().all())
+        assert len(db_articles) == 2
+
+
+async def test_ac18_2_skip_summary_no_llm_call(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC18.2: 要約なし収集時はLLMを呼び出さない."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    parsed = _make_parsed_feed([
+        {"link": "https://example.com/nollm", "title": "No LLM", "summary": "概要"},
+    ])
+
+    with patch("src.services.feed_collector.feedparser.parse", return_value=parsed):
+        with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
+            await collector.collect_all(skip_summary=True)
+
+    summarizer.summarize.assert_not_called()
+
+
+async def test_ac18_3_skip_summary_delivered_default(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC18.3: 要約スキップでも記事はdelivered=Falseで保存される（通常配信フローで投稿）."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    parsed = _make_parsed_feed([
+        {"link": "https://example.com/delivered", "title": "Delivered", "summary": "概要"},
+    ])
+
+    with patch("src.services.feed_collector.feedparser.parse", return_value=parsed):
+        with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
+            await collector.collect_all(skip_summary=True)
+
+    async with db_factory() as session:
+        result = await session.execute(
+            select(Article).where(Article.url == "https://example.com/delivered")
+        )
+        article = result.scalar_one()
+        assert article.delivered is False
+
+
+async def test_ac18_4_skip_summary_uses_description(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC18.4: summaryにはフィードのdescriptionが保存される."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    parsed = _make_parsed_feed([
+        {"link": "https://example.com/desc1", "title": "Desc Test", "summary": "記事の概要テキスト"},
+    ])
+
+    with patch("src.services.feed_collector.feedparser.parse", return_value=parsed):
+        with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
+            await collector.collect_all(skip_summary=True)
+
+    async with db_factory() as session:
+        result = await session.execute(
+            select(Article).where(Article.url == "https://example.com/desc1")
+        )
+        article = result.scalar_one()
+        assert article.summary == "記事の概要テキスト"
+
+
+async def test_ac18_4_skip_summary_placeholder_when_no_description(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC18.4: descriptionがない場合はプレースホルダが保存される."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    parsed = _make_parsed_feed([
+        {"link": "https://example.com/nodesc", "title": "No Desc"},
+    ])
+
+    with patch("src.services.feed_collector.feedparser.parse", return_value=parsed):
+        with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
+            await collector.collect_all(skip_summary=True)
+
+    async with db_factory() as session:
+        result = await session.execute(
+            select(Article).where(Article.url == "https://example.com/nodesc")
+        )
+        article = result.scalar_one()
+        assert article.summary == "（要約なし）"
+
+
+async def test_ac18_5_skip_summary_then_normal_collect(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC18.5: 要約なし収集後の通常収集で、新着記事のみが要約・配信対象になる."""
+    summarizer = AsyncMock(spec=Summarizer)
+    summarizer.summarize.return_value = "LLM要約"
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    # まず要約スキップ収集
+    parsed1 = _make_parsed_feed([
+        {"link": "https://example.com/old1", "title": "Old Article", "summary": "古い記事"},
+    ])
+
+    with patch("src.services.feed_collector.feedparser.parse", return_value=parsed1):
+        with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
+            await collector.collect_all(skip_summary=True)
+
+    # 次に通常収集（新着 + 既存の混在フィード）
+    parsed2 = _make_parsed_feed([
+        {"link": "https://example.com/old1", "title": "Old Article"},  # 既存記事
+        {"link": "https://example.com/new1", "title": "New Article", "summary": "新しい記事"},
+    ])
+
+    with patch("src.services.feed_collector.feedparser.parse", return_value=parsed2):
+        with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
+            articles = await collector.collect_all()
+
+    # 新着記事のみ収集される
+    assert len(articles) == 1
+    assert articles[0].url == "https://example.com/new1"
+    assert articles[0].summary == "LLM要約"
+    assert articles[0].delivered is False  # 通常収集なので未配信
+
+    # LLMは新着記事に対してのみ呼ばれる
+    summarizer.summarize.assert_called_once()
+
+
+async def test_ac18_6_skip_summary_result_summary(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC18.6: 処理結果のサマリー（フィード数・記事数）が返される."""
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    parsed = _make_parsed_feed([
+        {"link": "https://example.com/s1", "title": "S1", "summary": "概要1"},
+        {"link": "https://example.com/s2", "title": "S2", "summary": "概要2"},
+        {"link": "https://example.com/s3", "title": "S3"},
+    ])
+
+    with patch("src.services.feed_collector.feedparser.parse", return_value=parsed):
+        with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
+            articles = await collector.collect_all(skip_summary=True)
+
+    assert len({a.feed_id for a in articles}) == 1
+    assert len(articles) == 3
+
+
+async def test_ac18_skip_summary_duplicate_skipped(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC18: 要約スキップ収集でも既存記事はスキップする."""
+    # 既存記事を追加
+    async with db_factory() as session:
+        feed_result = await session.execute(select(Feed))
+        feed = feed_result.scalar_one()
+        session.add(Article(
+            feed_id=feed.id, title="Existing", url="https://example.com/existing",
+        ))
+        await session.commit()
+
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    parsed = _make_parsed_feed([
+        {"link": "https://example.com/existing", "title": "Existing Article"},
+        {"link": "https://example.com/new-skip", "title": "New Article", "summary": "新記事"},
+    ])
+
+    with patch("src.services.feed_collector.feedparser.parse", return_value=parsed):
+        with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
+            articles = await collector.collect_all(skip_summary=True)
+
+    assert len(articles) == 1
+
+    async with db_factory() as session:
+        result = await session.execute(select(Article))
+        db_articles = list(result.scalars().all())
+        assert len(db_articles) == 2  # 既存1 + 新規1
+
+
+async def test_ac18_skip_summary_feed_failure_continues(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC18: 要約スキップ収集でもフィード失敗時は他のフィードの処理を継続する."""
+    async with db_factory() as session:
+        session.add(Feed(url="https://bad.example.com/rss", name="Bad Feed", category="Other"))
+        await session.commit()
+
+    summarizer = AsyncMock(spec=Summarizer)
+    collector = FeedCollector(session_factory=db_factory, summarizer=summarizer)
+
+    good_parsed = _make_parsed_feed([
+        {"link": "https://example.com/good-skip", "title": "Good", "summary": "概要"},
+    ])
+
+    def mock_parse(url: str):  # type: ignore[no-untyped-def]
+        if "bad" in url:
+            raise ConnectionError("Feed unavailable")
+        return good_parsed
+
+    with patch("src.services.feed_collector.feedparser.parse", side_effect=mock_parse):
+        with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
+            articles = await collector.collect_all(skip_summary=True)
+
+    assert len(articles) == 1
+
+
+async def test_ac18_skip_summary_with_ogp(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """AC18: 要約スキップ収集でもOGP画像が取得される."""
+    summarizer = AsyncMock(spec=Summarizer)
+    ogp_extractor = AsyncMock(spec=OgpExtractor)
+    ogp_extractor.extract_image_url.return_value = "https://example.com/img.png"
+
+    collector = FeedCollector(
+        session_factory=db_factory,
+        summarizer=summarizer,
+        ogp_extractor=ogp_extractor,
+    )
+
+    parsed = _make_parsed_feed([
+        {"link": "https://example.com/ogp-skip", "title": "OGP Test", "summary": "概要"},
+    ])
+
+    with patch("src.services.feed_collector.feedparser.parse", return_value=parsed):
+        with patch("src.services.feed_collector.asyncio.to_thread", side_effect=lambda fn, *a: fn(*a)):
+            await collector.collect_all(skip_summary=True)
+
+    async with db_factory() as session:
+        result = await session.execute(
+            select(Article).where(Article.url == "https://example.com/ogp-skip")
+        )
+        article = result.scalar_one()
+        assert article.image_url == "https://example.com/img.png"
+
+    ogp_extractor.extract_image_url.assert_called_once()
 
 
 async def test_collect_feed_strips_html_from_description(db_factory) -> None:  # type: ignore[no-untyped-def]

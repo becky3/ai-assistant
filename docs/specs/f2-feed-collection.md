@@ -20,14 +20,15 @@ RSSフィードや特定サイトから学習関連の記事を自動収集し�
 **処理:**
 1. 各フィードからfeedparserで記事を取得
 2. 既にarticlesテーブルに存在するURLはスキップ（重複排除）
-3. 新規記事ごとにローカルLLMで要約を生成
+3. 新規記事ごとにローカルLLMで要約を生成（`FEED_SUMMARIZE_TIMEOUT` 秒でタイムアウト、超過時はそのフィードを中止）
    - 概要（description）がある場合: 概要に基づいて要約（推測は入れない）
    - 概要がない/不足している場合: タイトルから内容を推測して要約
    - 「情報が不足」「把握できません」等の非要約応答は禁止
-4. articlesテーブルに保存
+4. OGP画像URLを取得（取得可能な場合）
+5. articlesテーブルに保存
 
 **出力:**
-- articlesテーブルに新規記事レコード（title, url, summary, published_at, collected_at）
+- articlesテーブルに新規記事レコード（title, url, summary, image_url, published_at, collected_at）
 
 ### 毎朝配信
 
@@ -35,28 +36,39 @@ RSSフィードや特定サイトから学習関連の記事を自動収集し�
 - 未配信の記事（articlesテーブル、`delivered == False`）
 
 **処理:**
-1. カテゴリごとに記事をグループ化
-2. Slack用にフォーマット
+1. 有効なフィードを順に処理（1フィードずつ逐次）
+2. 各フィードのRSSエントリを取得し、新規記事ごとに要約生成→即Slack投稿（コールバック方式）
+3. フィード配信完了後、配信済み記事の `delivered` フラグを `True` に更新
 
-**出力（Slackメッセージ — カテゴリごとに別メッセージ、Block Kit形式）:**
+**出力（Slackメッセージ — フィードごとに親メッセージ＋スレッド、Block Kit形式）:**
 
 1. ヘッダーメッセージ（1通）:
 ```
-:newspaper: 今日の学習ニュース (2026-02-01)
+:newspaper: 今日のニュース (2026-02-01)
 ```
 
-2. カテゴリ別メッセージ（カテゴリ数分）:
+2. フィード別 親メッセージ（フィード数分、チャンネルに投稿）:
 ```
-📂 【Python】 — 2件の記事
-───
-:newspaper: *<https://example.com/article1|asyncioの新機能がPython 3.13で追加>*
-[OGP画像（取得できた場合）]
+:file_folder: *Python公式ブログ*
+```
+- フィード名のみのシンプルな投稿（件数はスレッドのリプライ数で把握可能）
+
+3. スレッド内 記事投稿（親メッセージへのリプライ、**1記事1投稿**）:
+```
+:newspaper: *<https://example.com/article1|asyncioの新機能がPython 3.14で追加>*
+02-05 14:30
+
 asyncioにTaskGroupが正式導入され...（要約全文）
-───
-:newspaper: *<https://example.com/article2|型ヒントの最新ベストプラクティス>*
-[OGP画像（取得できた場合）]
-Python 3.12以降の型ヒント...（要約全文）
+[OGP画像（取得できた場合、horizontalではaccessory配置）]
 ```
+- 各記事の全内容（タイトル・日時・画像・要約）をスレッド内に投稿
+- **1記事につき1つのSlackメッセージ**として投稿（一括ではない）
+- 投稿は**逐次型**（1記事の要約完了後に即投稿し、次の記事の要約に進む）
+- 日時フォーマット: `MM-dd HH:mm`（年なし、ハイフン区切り）
+- 更新日時は `published_at` を使用、`None` の場合は `collected_at` にフォールバック
+- 記事は投稿日時の昇順（古い→新しい）で表示
+- タイムゾーンは `Asia/Tokyo` (設定値 `Settings.timezone`)
+- スレッド投稿間に1秒のスリープ（Slack APIレート制限対策）
 
 **カード構成（`FEED_CARD_LAYOUT` で切り替え可能）:**
 
@@ -69,17 +81,16 @@ Python 3.12以降の型ヒント...（要約全文）
 - OGP画像がある場合は独立imageブロックとして表示（画像取得失敗時はスキップ）
 - 要約はSlackの上限に応じて切り詰め（`horizontal` と同じロジック）
 
-共通:
-- 記事間はdividerで区切り
-
-3. フッターメッセージ（1通）:
+4. フッターメッセージ（1通）:
 ```
 :bulb: 気になる記事があれば、スレッドで聞いてね！
 ```
 
 **設定値:**
-- `FEED_ARTICLES_PER_CATEGORY`: カテゴリあたりの最大表示件数（デフォルト10）
+- `FEED_ARTICLES_PER_FEED`: フィードあたりの最大表示件数（デフォルト10）
 - `FEED_CARD_LAYOUT`: 配信カードの表示形式（`"horizontal"` or `"vertical"`, デフォルト `"horizontal"`）
+- `FEED_SUMMARIZE_TIMEOUT`: 1記事あたりの要約タイムアウト秒数（デフォルト180、0=無制限）。タイムアウト時はそのフィードの収集を中止する
+- `FEED_COLLECT_DAYS`: 収集対象の日数（デフォルト7）。`published_at` がこの日数より古い記事は収集をスキップする。`published_at` がNULLの記事はスキップしない
 
 ### 手動配信テスト
 
@@ -92,7 +103,24 @@ Python 3.12以降の型ヒント...（要約全文）
 3. 完了後「配信が完了しました」と応答 / エラー時はエラーメッセージ
 
 **出力:**
-- 毎朝配信と同じBlock Kitメッセージが `SLACK_NEWS_CHANNEL_ID` に投稿される
+- 毎朝配信と同じBlock Kitメッセージ（フィード別・親メッセージ＋スレッド形式）が `SLACK_NEWS_CHANNEL_ID` に投稿される
+
+### フィードテスト配信
+
+**入力:**
+- Slackでボットにメンション + `feed test`
+
+**処理:**
+1. 「テスト配信を開始します...」と応答
+2. 有効フィードをID昇順で最大3件取得
+3. 各フィードの全記事を取得（`delivered` フラグに関わらず、各5件まで）
+4. 親メッセージ＋スレッド形式で投稿（通常配信と同じ共通関数を使用）
+5. `delivered` フラグは **更新しない**（副作用なし）
+6. ヘッダーは `:newspaper: 今日のニュース (YYYY-MM-DD)（テスト）` に変更
+7. 完了後「テスト配信が完了しました」と応答 / エラー時はエラーメッセージ
+
+**出力:**
+- テストヘッダー + フィード別親メッセージ＋スレッド形式のメッセージが `SLACK_NEWS_CHANNEL_ID` に投稿される
 
 ### 配信カード表示テスト（スクリプト）
 
@@ -120,6 +148,9 @@ uv run python scripts/test_delivery.py vertical     # 縦長形式を指定
 - `@bot feed enable <URL>` — フィード有効化（複数URL対応）
 - `@bot feed disable <URL>` — フィード無効化（複数URL対応）
 - `@bot feed import` + CSV添付 — フィード一括インポート
+- `@bot feed replace` + CSV添付 — フィード一括置換（全削除→再登録）
+- `@bot feed export` — フィード一覧CSVエクスポート
+- `@bot feed collect --skip-summary` — 要約なし一括収集（初回インポート用）
 
 **コマンド解析ルール:**
 - `http://` または `https://` で始まり、ドメインを含むトークンをURLとして認識
@@ -128,6 +159,9 @@ uv run python scripts/test_delivery.py vertical     # 縦長形式を指定
 
 **出力:**
 - 操作結果をスレッド内で応答（成功: ✓ / 失敗: ✗）
+- `feed list` は各フィードを `URL — フィード名` 形式で表示（有効/無効で分類）
+- フィード一覧はURL昇順でソートする（`feed list` / `feed export` / 配信処理で共通）
+- `feed collect --skip-summary` は `daily_collect_and_deliver(skip_summary=True)` で通常配信フローに要約スキップを適用する
 - 不明なサブコマンドの場合はヘルプメッセージを表示
 
 ### フィード一括インポート（CSV）
@@ -163,6 +197,77 @@ https://another.com/rss,Another Feed,News
   • 行12: 無効なURL形式です（invalid-url）
 ```
 
+### フィード一括置換（replace）
+
+**入力:**
+- Slackでボットにメンション + `feed replace` + CSVファイル添付
+
+**CSV形式:**
+- `feed import` と同一（`url,name,category`）
+
+**処理:**
+1. 添付ファイルの存在確認・CSV検証（`feed import` と共通処理）
+2. 既存の全フィード（関連記事含む）を削除（CASCADE削除）
+3. CSVの各行で `FeedCollector.add_feed()` を実行
+4. 全削除後のインポートで失敗しても、削除は取り消されない（非トランザクション）
+
+**出力例:**
+```
+フィード置換完了
+🗑️ 削除: 10件（既存フィード）
+✅ 登録成功: 25件
+❌ 登録失敗: 2件
+
+エラー詳細:
+  • 行5: 無効なURL形式です（invalid-url）
+  • 行12: url または name が空です
+```
+
+**異常系出力例（インポート中に予期せぬエラーが発生した場合）:**
+```
+フィード置換エラー
+🗑️ 削除: 10件（既存フィード）
+❌ インポート中に予期せぬエラーが発生しました。
+```
+
+### フィードエクスポート（export）
+
+**入力:**
+- Slackでボットにメンション + `feed export`
+
+**処理:**
+1. `FeedCollector.get_all_feeds()` で全フィード取得（有効・無効問わず）
+2. CSV文字列を生成（`url,name,category` ヘッダー付き、`feed import` / `feed replace` と同一形式）
+3. `slack_client.files_upload_v2()` でCSVファイルをスレッドに投稿
+
+**出力:**
+- CSVファイル（`feeds.csv`）がSlackにファイル添付として投稿される
+- フィードが0件の場合はエラーメッセージを表示
+
+**Slack API権限要件:**
+- `files:write` スコープが必須（`files_upload_v2()` に必要）
+- `files:read` スコープが推奨（`files_upload_v2()` の内部処理に使用）
+- 権限不足時は分かりやすいエラーメッセージを返す
+
+### 要約スキップ収集（collect --skip-summary）
+
+LLM要約をスキップして記事を収集・配信するモード。通常配信と同じ逐次投稿フローを使用し、要約部分のみスキップする。
+
+**入力:**
+- Slackでボットにメンション + `feed collect --skip-summary`
+
+**処理:**
+通常の収集・配信フロー（`daily_collect_and_deliver`）に `skip_summary=True` を渡して実行する。
+1. 有効フィードを順に処理（通常配信と同じ逐次型）
+2. 各フィードのRSSエントリを取得し、既存記事（URL重複）をスキップ
+3. 新規記事を要約なしでDBに保存
+   - LLM呼び出しなし
+   - `summary` には記事エントリの description（= RSS entry の summary/description, HTMLタグ除去済み）を保存。description が空の場合はプレースホルダ「（要約なし）」を保存
+   - OGP画像の取得も行う（通常収集と同様）
+4. 1記事収集完了ごとにSlackに逐次投稿する（通常配信と同じ `on_article_ready` コールバック）
+5. フィード単位でエラーが発生した場合はログに記録し、他のフィードの処理を継続する
+6. 全フィード処理後に完了メッセージをSlackに返答
+
 ### 情報源探索
 
 **入力:**
@@ -179,12 +284,12 @@ https://another.com/rss,Another Feed,News
 - [ ] AC2: 既に収集済みの記事はスキップする（URL重複チェック）
 - [ ] AC3: 新規記事をローカルLLMで要約し、articlesテーブルに保存する
 - [ ] AC4: 毎朝指定時刻にスケジューラが収集・配信ジョブを実行する
-- [ ] AC5: 専用チャンネルにBlock Kit形式でカテゴリごとに別メッセージとして記事要約を投稿する（`FEED_ARTICLES_PER_CATEGORY` 設定でカテゴリあたりの表示件数を制御、デフォルト10）
+- [ ] AC5: 専用チャンネルにBlock Kit形式でフィードごとに親メッセージ＋スレッド形式で記事要約を投稿する（`FEED_ARTICLES_PER_FEED` 設定でフィードあたりの表示件数を制御、デフォルト10）
 - [ ] AC6: ユーザーのリクエストに応じてオンラインLLMで新しい情報源を提案できる
 - [ ] AC7: フィードの追加・削除・有効/無効切替ができる
   - [ ] AC7.1: フィード追加（カテゴリ指定あり、省略時は「一般」）
   - [ ] AC7.2: 複数フィード一括追加
-  - [ ] AC7.3: フィード一覧を有効/無効で分類表示
+  - [ ] AC7.3: フィード一覧を有効/無効で分類し、各フィードは `URL — フィード名` 形式でURL昇順に表示
   - [ ] AC7.4: フィード削除（関連記事もCASCADE削除）
   - [ ] AC7.5: 複数フィード一括削除
   - [ ] AC7.6: フィード有効化
@@ -218,9 +323,45 @@ https://another.com/rss,Another Feed,News
   - [ ] AC12.3: `FEED_CARD_LAYOUT=horizontal` の場合、横長形式（タイトル+要約を1section、画像をaccessory）で配信される
   - [ ] AC12.4: 横長形式では画像がない記事もaccessoryなしで正常に表示される
   - [ ] AC12.5: 縦長形式では画像がない記事もタイトル+要約で正常に表示される
-  - [ ] AC12.6: `format_daily_digest` が layout を `_build_category_blocks` に渡す
+  - [ ] AC12.6: `format_daily_digest` が layout を `_build_article_blocks` に渡す
   - [ ] AC12.7: 手動配信コマンド（`deliver`）も設定された形式で配信される
   - [ ] AC12.8: 不正な値を設定した場合、起動時にValidationErrorが発生する
+- [ ] AC14: フィード毎に個別メッセージとして配信される（カテゴリ別ではない）
+  - [ ] AC14.1: 親メッセージにフィード名が表示される（`:file_folder:` アイコン）
+  - [ ] AC14.2: 記事の全内容（タイトル・日時・画像・要約）はスレッド内に1記事1投稿で投稿される
+  - [ ] AC14.3: 更新日時がタイトル直下に `MM-dd HH:mm` 形式で表示される
+  - [ ] AC14.4: published_at が無い場合は collected_at にフォールバックする
+  - [ ] AC14.5: 記事は投稿日時昇順（古い→新しい）で表示される
+- [ ] AC15: `feed test` コマンドでテスト配信ができる
+  - [ ] AC15.1: 要約生成（LLM呼び出し）を行わず、既存記事のみ出力する
+  - [ ] AC15.2: 配信済み記事も含めて出力する
+  - [ ] AC15.3: 上から3フィード・各5件まで対象とする
+  - [ ] AC15.4: delivered フラグを更新しない（副作用なし）
+  - [ ] AC15.5: 通常配信と同じ共通関数（`_deliver_feed_to_slack` 等）で出力する
+- [ ] AC16: フィード一括置換（replace）ができる
+  - [ ] AC16.1: `@bot feed replace` + CSV添付で既存フィードを全削除し、CSVのフィードを登録できる
+  - [ ] AC16.2: CSV形式は feed import と同一（url,name,category）
+  - [ ] AC16.3: 処理結果のサマリー（削除件数・登録成功数・失敗数）を返答
+  - [ ] AC16.4: 添付ファイルがない場合はエラーメッセージを表示
+  - [ ] AC16.5: CSV以外のファイルはエラーメッセージを表示
+  - [ ] AC16.6: 全削除後のインポートで失敗しても、削除は取り消されない（非トランザクション）
+- [ ] AC17: フィードエクスポート（export）ができる
+  - [ ] AC17.1: `@bot feed export` で全フィードをCSV形式で出力できる
+  - [ ] AC17.2: CSV形式は feed import / replace と同一（url,name,category）
+  - [ ] AC17.3: CSVファイルがSlackにファイル添付として投稿される
+  - [ ] AC17.4: 有効・無効問わず全フィードがエクスポートされる
+  - [ ] AC17.5: フィードが0件の場合はエラーメッセージを表示
+  - [ ] AC17.6: Slack API権限不足時に分かりやすいエラーメッセージを表示
+- [ ] AC18: 要約スキップ収集モード（`feed collect --skip-summary`）
+  - [ ] AC18.1: `@bot feed collect --skip-summary` コマンドで要約なし収集が実行できる
+  - [ ] AC18.2: 要約なし収集時は LLM を呼び出さない
+  - [ ] AC18.3: 収集された記事は通常配信と同じ逐次投稿フローでSlackに投稿される
+  - [ ] AC18.4: summary には記事エントリの description またはプレースホルダ「（要約なし）」が保存される
+  - [ ] AC18.5: 要約なし収集後の通常収集で、新着記事のみが要約・配信対象になる
+  - [ ] AC18.6: 処理結果のサマリー（収集フィード数・記事数）をSlackに返答する
+  - [ ] AC18.7: フィード処理中にエラーが発生した場合、該当フィードをスキップして他のフィードの処理を継続する
+  - [ ] AC18.8: 既にarticlesテーブルに存在するURLの記事はスキップする（重複排除）
+  - [ ] AC18.9: 要約スキップ収集時もOGP画像URLを取得する
 
 ## 使用LLMプロバイダー
 
@@ -254,3 +395,7 @@ https://another.com/rss,Another Feed,News
 - 配信済みフラグのユニットテスト: 記事作成時に delivered==False、配信後に delivered==True に更新されることを確認
 - 重複配信防止のエンドツーエンドテスト: 同じ記事セットで2回配信実行し、再配信が防止されることを確認
 - 配信カード形式テスト: vertical/horizontal 両形式のBlock Kit構造検証、画像あり/なしの検証、不正値のバリデーションエラー検証
+- フィード一括置換テスト: 全削除→再登録の正常系、CSV検証エラー、部分失敗時のサマリー
+- フィードエクスポートテスト: CSV生成・ファイル投稿の正常系、0件時エラー、権限不足エラー
+- FeedCollector の `delete_all_feeds()` / `get_all_feeds()` のユニットテスト
+- 要約スキップ収集テスト: LLM非呼び出し検証、delivered=True検証、summaryにdescription/プレースホルダ保存検証、通常収集との組み合わせ検証、URL重複スキップ検証、エラー時のフィードスキップ継続検証、OGP画像取得検証

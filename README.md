@@ -14,6 +14,12 @@ RSS記事の自動収集・要約配信、チャットでの質問応答、ユ�
 - **特定チャンネル自動返信** — 指定したチャンネルではメンションなしで全メッセージに自動応答
 - **外部ツール連携（MCP）** — MCPプロトコルで外部ツールを動的に呼び出し（天気予報サンプル付属）
 
+## 動作環境
+
+- **OS**: Windows 11（主要開発・運用環境）
+- **ランタイム**: Python 3.10+
+- **パッケージ管理**: uv
+
 ## 技術スタック
 
 Python 3.10+ / uv / slack-bolt / OpenAI SDK / Anthropic SDK / SQLite + SQLAlchemy / APScheduler / feedparser / MCP SDK

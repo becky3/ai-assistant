@@ -256,7 +256,7 @@ MCPサーバーの接続設定を外部ファイルで管理する。
 
 > 初期実装では `stdio` のみサポートする。`MCPClientManager` は `transport` フィールドで分岐できる構造にしておき、`"http"` が指定された場合はエラーログを出して警告する。
 
-### MCP例外クラス (`src/mcp/client_manager.py`)
+### MCP例外クラス (`src/mcp_bridge/client_manager.py`)
 
 ```python
 class MCPToolNotFoundError(Exception):
@@ -268,7 +268,7 @@ class MCPToolExecutionError(Exception):
     pass
 ```
 
-### MCPサーバー設定型 (`src/mcp/client_manager.py`)
+### MCPサーバー設定型 (`src/mcp_bridge/client_manager.py`)
 
 ```python
 @dataclass
@@ -282,7 +282,7 @@ class MCPServerConfig:
     url: str = ""                # http用: 接続URL（将来対応）
 ```
 
-### MCPクライアント管理 (`src/mcp/client_manager.py`)
+### MCPクライアント管理 (`src/mcp_bridge/client_manager.py`)
 
 複数のMCPサーバーを管理し、ツール一覧を統合するクライアントマネージャー。
 
@@ -438,8 +438,8 @@ class Settings(BaseSettings):
 
 | ファイル | 用途 |
 |---------|------|
-| `src/mcp/__init__.py` | MCPクライアントモジュール |
-| `src/mcp/client_manager.py` | MCPクライアント管理 + `MCPServerConfig` |
+| `src/mcp_bridge/__init__.py` | MCPクライアントモジュール |
+| `src/mcp_bridge/client_manager.py` | MCPクライアント管理 + `MCPServerConfig` |
 | `mcp-servers/weather/server.py` | 天気予報MCPサーバー |
 | `config/mcp_servers.json` | MCPサーバー接続設定 |
 | `tests/test_mcp_client_manager.py` | MCPクライアントのテスト |
@@ -553,7 +553,7 @@ class Settings(BaseSettings):
 3. テスト作成
 
 ### Step 3: MCPクライアント
-1. `src/mcp/client_manager.py` を作成（`MCPServerConfig` 含む）
+1. `src/mcp_bridge/client_manager.py` を作成（`MCPServerConfig` 含む）
 2. サーバー接続・ツール発見（`ToolDefinition` 変換）・ツール実行を実装
 3. テスト作成
 

@@ -15,17 +15,19 @@ import asyncio
 import random
 import sys
 import uuid
+from datetime import datetime, timezone
 
 from slack_sdk.web.async_client import AsyncWebClient
 
 from src.config.settings import get_settings
 from src.db.models import Article, Feed
 from src.db.session import get_session_factory, init_db
-from src.scheduler.jobs import format_daily_digest
+from src.scheduler.jobs import format_daily_digest, post_article_to_thread
 
 # --- テスト用ダミー記事データ ---
 DUMMY_ARTICLES = [
     {
+        "feed_name": "Python公式ブログ",
         "category": "Python",
         "title": "Python 3.14 で追加された新しいパターンマッチング構文",
         "url": f"https://example.com/python-pattern-matching-{uuid.uuid4().hex[:8]}",
@@ -37,6 +39,7 @@ DUMMY_ARTICLES = [
         "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Python-logo-notext.svg/1200px-Python-logo-notext.svg.png",
     },
     {
+        "feed_name": "Python公式ブログ",
         "category": "Python",
         "title": "asyncio 完全ガイド：非同期処理のベストプラクティス",
         "url": f"https://example.com/asyncio-guide-{uuid.uuid4().hex[:8]}",
@@ -47,6 +50,7 @@ DUMMY_ARTICLES = [
         "image_url": None,  # 画像なしのケース
     },
     {
+        "feed_name": "ML Weekly",
         "category": "機械学習",
         "title": "Transformer アーキテクチャの最新動向 2026",
         "url": f"https://example.com/transformer-2026-{uuid.uuid4().hex[:8]}",
@@ -58,6 +62,7 @@ DUMMY_ARTICLES = [
         "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8a/Dall-e_3_%28jan_%2724%29_artificial_intelligence_702489.png/1200px-Dall-e_3_%28jan_%2724%29_artificial_intelligence_702489.png",
     },
     {
+        "feed_name": "ML Weekly",
         "category": "機械学習",
         "title": "ローカルLLMの性能比較：Llama 4 vs Mistral 3",
         "url": f"https://example.com/local-llm-compare-{uuid.uuid4().hex[:8]}",
@@ -69,6 +74,7 @@ DUMMY_ARTICLES = [
         "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/ChatGPT_logo.svg/1200px-ChatGPT_logo.svg.png",
     },
     {
+        "feed_name": "Web Dev Digest",
         "category": "Web開発",
         "title": "Slack Block Kit デザインパターン集",
         "url": f"https://example.com/slack-blockkit-{uuid.uuid4().hex[:8]}",
@@ -110,25 +116,26 @@ async def main() -> None:
     test_article_ids: list[int] = []
 
     async with session_factory() as session:
-        # カテゴリごとにテスト用フィードを作成
-        categories = {a["category"] for a in DUMMY_ARTICLES}
-        for cat in categories:
+        # フィード名ごとにテスト用フィードを作成
+        feed_names = {(a["feed_name"], a["category"]) for a in DUMMY_ARTICLES}
+        for feed_name, cat in feed_names:
             test_url = f"https://test-feed-{uuid.uuid4().hex[:8]}.example.com/rss"
-            feed = Feed(url=test_url, name=f"テスト ({cat})", category=cat, enabled=True)
+            feed = Feed(url=test_url, name=feed_name, category=cat, enabled=True)
             session.add(feed)
             await session.flush()
-            test_feed_ids[cat] = feed.id
+            test_feed_ids[feed_name] = feed.id
 
         # ダミー記事をランダム順で追加
         shuffled = random.sample(DUMMY_ARTICLES, len(DUMMY_ARTICLES))
         for data in shuffled:
             article = Article(
-                feed_id=test_feed_ids[data["category"]],
+                feed_id=test_feed_ids[data["feed_name"]],
                 title=data["title"],
                 url=data["url"],
                 summary=data["summary"],
                 image_url=data["image_url"],
                 delivered=False,
+                published_at=datetime.now(tz=timezone.utc),
             )
             session.add(article)
             await session.flush()
@@ -177,39 +184,28 @@ async def main() -> None:
         ],
     )
 
-    # カテゴリごと
-    for category, blocks in digest.items():
+    # フィードごとに親メッセージ + スレッド
+    for feed_id, (parent_blocks, article_blocks_list) in digest.items():
+        feed = feeds.get(feed_id)
+        feed_name = feed.name if feed else "不明"
         try:
-            await client.chat_postMessage(
+            parent_result = await client.chat_postMessage(
                 channel=channel,
-                text=f"【{category}】",
-                blocks=blocks,
+                text=f"📰 {feed_name}",
+                blocks=parent_blocks,
                 unfurl_links=False,
                 unfurl_media=False,
             )
-            print(f"  投稿完了: {category}")
-        except Exception as exc:
-            error_msg = str(exc)
-            if "invalid_blocks" in error_msg or "downloading image" in error_msg:
-                # accessory付きsectionは accessory を除去して再投稿
-                clean_blocks = []
-                for b in blocks:
-                    if b.get("type") == "image":
-                        continue
-                    if "accessory" in b:
-                        b = {k: v for k, v in b.items() if k != "accessory"}
-                    clean_blocks.append(b)
+            parent_ts = parent_result["ts"]
+            print(f"  親メッセージ投稿完了: {feed_name}")
 
-                print(f"  画像エラー、画像なしで再投稿: {category}")
-                await client.chat_postMessage(
-                    channel=channel,
-                    text=f"【{category}】",
-                    blocks=clean_blocks,
-                    unfurl_links=False,
-                    unfurl_media=False,
+            for article_blocks in article_blocks_list:
+                await post_article_to_thread(
+                    client, channel, parent_ts, article_blocks,
                 )
-            else:
-                print(f"  投稿エラー: {category} - {error_msg}")
+            print(f"  スレッド記事投稿完了: {feed_name} ({len(article_blocks_list)}件)")
+        except Exception as exc:
+            print(f"  投稿エラー: {feed_name} - {exc}")
 
     # フッター
     await client.chat_postMessage(
