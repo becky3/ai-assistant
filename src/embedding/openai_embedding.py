@@ -36,5 +36,10 @@ class OpenAIEmbedding(EmbeddingProvider):
         return [item.embedding for item in response.data]
 
     async def is_available(self) -> bool:
-        """APIキーの存在で利用可能性を判定する."""
+        """APIキーの存在で利用可能性を判定する.
+
+        Note:
+            実際のAPI疎通確認は行わない（コスト・レイテンシ回避）。
+            APIキーの有効性は embed() 呼び出し時に検証される。
+        """
         return bool(self._client.api_key)

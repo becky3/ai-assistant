@@ -40,6 +40,6 @@ class LMStudioEmbedding(EmbeddingProvider):
         try:
             await self._client.models.list()
             return True
-        except Exception:
-            logger.debug("LM Studio embedding is not available")
+        except Exception as e:
+            logger.debug("LM Studio embedding is not available: %s", e)
             return False
