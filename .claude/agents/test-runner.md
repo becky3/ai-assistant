@@ -88,13 +88,13 @@ uv run mypy src/
 Markdownファイルの構文・スタイルチェック:
 
 ```bash
-npx markdownlint-cli2
+npx markdownlint-cli2@0.20.0
 ```
 
 自動修正可能な違反を修正:
 
 ```bash
-npx markdownlint-cli2 --fix
+npx markdownlint-cli2@0.20.0 --fix
 ```
 
 ### 9. 差分テスト実行

@@ -55,7 +55,7 @@
   ```
 
 - ruff でリント、mypy (strict) で型チェック
-- markdownlint でMarkdownチェック（`npx markdownlint-cli2` を使用、Node.js環境が必要）
+- markdownlint でMarkdownチェック（`npx markdownlint-cli2@0.20.0` を使用、Node.js環境が必要）
 
 ### 作業開始時の手順
 
