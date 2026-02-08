@@ -20,6 +20,7 @@ dependencies = [
     "mcp>=1.0,<2",
     "certifi>=2026.1.4",
     "chromadb>=0.5,<1",
+    "beautifulsoup4>=4.12,<5",
 ]
 
 [project.optional-dependencies]
