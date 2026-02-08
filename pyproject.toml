@@ -3,7 +3,7 @@ name = "ai-assistant"
 version = "0.1.0"
 description = "Slack AI learning assistant with intelligent LLM routing"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "slack-bolt>=1.18,<2",
     "openai>=1.12,<2",
@@ -40,11 +40,11 @@ build-backend = "hatchling.build"
 packages = ["src"]
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 line-length = 100
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 strict = true
 
 [tool.pytest.ini_options]

@@ -17,12 +17,12 @@ RSS記事の自動収集・要約配信、チャットでの質問応答、ユ�
 ## 動作環境
 
 - **OS**: Windows 11（主要開発・運用環境）
-- **ランタイム**: Python 3.10+
+- **ランタイム**: Python 3.11+
 - **パッケージ管理**: uv
 
 ## 技術スタック
 
-Python 3.10+ / uv / slack-bolt / OpenAI SDK / Anthropic SDK / SQLite + SQLAlchemy / APScheduler / feedparser / MCP SDK
+Python 3.11+ / uv / slack-bolt / OpenAI SDK / Anthropic SDK / SQLite + SQLAlchemy / APScheduler / feedparser / MCP SDK
 
 ## セットアップ
 
