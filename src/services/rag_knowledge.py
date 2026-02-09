@@ -210,16 +210,18 @@ class RAGKnowledgeService:
             logger.info("RAG retrieve: query=%r", query)
             for i, result in enumerate(results, start=1):
                 source_url = result.metadata.get("source_url", "不明")
-                text_preview = (
-                    result.text[:100] + "..." if len(result.text) > 100 else result.text
-                )
+                # INFOレベルではdistance・sourceのみ出力（PII漏洩リスク軽減）
                 logger.info(
-                    "RAG result %d: distance=%.3f source=%r text=%r",
+                    "RAG result %d: distance=%.3f source=%r",
                     i,
                     result.distance,
                     source_url,
-                    text_preview,
                 )
+                # テキストプレビューはDEBUGレベルに限定
+                text_preview = (
+                    result.text[:100] + "..." if len(result.text) > 100 else result.text
+                )
+                logger.debug("RAG result %d text: %r", i, text_preview)
                 logger.debug("RAG result %d full text: %r", i, result.text)
 
         # フォーマット済みテキストを構築

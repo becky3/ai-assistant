@@ -35,23 +35,25 @@ Phase 1 では「デバッグ・可視化」に焦点を当て、RAG検索結果
 
 ```
 INFO RAG retrieve: query="しれんのしろ アイテム"
-INFO RAG result 1: distance=0.234 source="https://example.com/page1" text="しれんのしろには以下のアイテムがあります..."[:100]
-INFO RAG result 2: distance=0.312 source="https://example.com/page2" text="ダンジョン攻略に必要な装備..."[:100]
+INFO RAG result 1: distance=0.234 source="https://example.com/page1"
+INFO RAG result 2: distance=0.312 source="https://example.com/page2"
+DEBUG RAG result 1 text: "しれんのしろには以下のアイテムがあります..."[:100]
 DEBUG RAG result 1 full text: "しれんのしろには以下のアイテムがあります。まず入口で..."
 ```
 
-- **INFO レベル**: クエリ、各結果の distance・source・テキスト先頭100文字
-- **DEBUG レベル**: チャンクの全文（詳細デバッグ用）
+- **INFO レベル**: クエリ、各結果の distance・source（PII漏洩リスク軽減のためテキストは含まない）
+- **DEBUG レベル**: テキストプレビュー（先頭100文字）、チャンクの全文
 
 #### 設定
 
 ```env
-# ログ出力の有効/無効（デフォルト: true）
-RAG_DEBUG_LOG_ENABLED=true
+# ログ出力の有効/無効（デフォルト: false）
+# 注意: true にするとクエリ内容がログに出力されるためPII漏洩リスクあり
+RAG_DEBUG_LOG_ENABLED=false
 ```
 
-- `true`: INFO/DEBUG レベルでログ出力
-- `false`: ログ出力なし（本番環境でパフォーマンス優先の場合）
+- `true`: INFO/DEBUG レベルでログ出力（開発・デバッグ用）
+- `false`: ログ出力なし（本番環境推奨）
 
 ### 2. Slack回答時のソース情報表示
 
@@ -259,10 +261,10 @@ async def respond(self, ...) -> str:
 
 | テストファイル | テスト | 対応AC |
 |--------------|--------|--------|
-| `tests/test_chat_rag_integration.py` | `test_ac5_chat_shows_sources` | AC5 |
-| `tests/test_chat_rag_integration.py` | `test_ac7_chat_hides_sources_when_disabled` | AC7 |
-| `tests/test_chat_rag_integration.py` | `test_ac8_backward_compatible` | AC8 |
-| `tests/test_chat_rag_integration.py` | `test_ac9_no_effect_when_rag_disabled` | AC9 |
+| `tests/test_rag_knowledge.py` | `test_ac5_chat_shows_sources` | AC5 |
+| `tests/test_rag_knowledge.py` | `test_ac7_chat_hides_sources_when_disabled` | AC7 |
+| `tests/test_rag_knowledge.py` | `test_ac8_backward_compatible` | AC8 |
+| `tests/test_rag_knowledge.py` | `test_ac9_no_effect_when_rag_disabled` | AC9 |
 
 ### テスト戦略
 

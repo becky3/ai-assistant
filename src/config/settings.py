@@ -93,7 +93,7 @@ class Settings(BaseSettings):
     rag_crawl_delay_sec: float = Field(default=1.0, ge=0)
 
     # RAG評価・デバッグ (Phase 1)
-    rag_debug_log_enabled: bool = True
+    rag_debug_log_enabled: bool = False  # 本番ではPII漏洩リスクのためデフォルト無効
     rag_show_sources: bool = False
 
     @model_validator(mode="after")

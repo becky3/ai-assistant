@@ -623,7 +623,10 @@ class TestRAGDebugLog:
         mock_settings_log_enabled: None,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """AC2: 各検索結果の distance、source_url、テキスト先頭100文字がINFOログに出力されること."""
+        """AC2: 各検索結果の distance、source_url がINFOログに出力されること.
+
+        Note: テキストプレビューはPII漏洩リスク軽減のためDEBUGレベルに移動された。
+        """
         # Arrange
         long_text = "A" * 150  # 100文字を超えるテキスト
         mock_vector_store.search.return_value = [
@@ -643,13 +646,13 @@ class TestRAGDebugLog:
         with caplog.at_level(logging.INFO, logger="src.services.rag_knowledge"):
             await rag_service.retrieve("test query", n_results=5)
 
-        # Assert
+        # Assert - INFOレベルではdistanceとsourceのみ（テキストは含まない）
         assert "RAG result 1: distance=0.234" in caplog.text
         assert "source='https://example.com/page1'" in caplog.text
-        assert "A" * 100 + "..." in caplog.text  # 100文字 + "..."
         assert "RAG result 2: distance=0.312" in caplog.text
         assert "source='https://example.com/page2'" in caplog.text
-        assert "Short text" in caplog.text
+        # テキストプレビューはINFOレベルには含まれない（DEBUGレベルで出力）
+        # assert "A" * 100 + "..." in caplog.text  # -> DEBUGレベルに移動
 
     async def test_ac3_retrieve_logs_full_text_debug(
         self,
@@ -918,10 +921,23 @@ class TestRAGShowSources:
 
         from src.config.settings import Settings
 
-        # デフォルト値をテスト
-        with patch.dict(os.environ, {}, clear=False):
-            settings = Settings()
+        # デフォルト値をテスト（.envファイルと環境変数の影響を排除）
+        # Settingsはenv_file=".env"を読み込むため、環境変数だけでなく
+        # .envファイルの影響も排除する必要がある
+        # 環境変数を削除し、.envファイルも読み込まないようにする
+        env_backup = {
+            k: os.environ.pop(k, None)
+            for k in ["RAG_SHOW_SOURCES", "RAG_DEBUG_LOG_ENABLED"]
+        }
+        try:
+            settings = Settings(_env_file=None)  # .envファイルを読み込まない
             assert settings.rag_show_sources is False
+            assert settings.rag_debug_log_enabled is False  # デフォルトはFalse
+        finally:
+            # 環境変数を復元
+            for k, v in env_backup.items():
+                if v is not None:
+                    os.environ[k] = v
 
     async def test_ac9_no_effect_when_rag_disabled(self) -> None:
         """AC9: RAG無効時（rag_enabled=false）は新機能が動作しないこと."""
