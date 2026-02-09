@@ -27,6 +27,7 @@ permissionMode: default
 「差分レビュー」「diffレビュー」というキーワードが含まれる場合に適用。
 
 1. 変更差分の取得（以下の優先順位で試行）
+   - 作業ツリーの変更（未ステージ）: `git diff -- <file>`
    - ベースブランチ（`origin/main`）との比較: `git diff "$(git merge-base HEAD origin/main)" HEAD -- <file>`
    - ステージング済みの変更: `git diff --cached -- <file>`
    - 直近コミットの差分（フォールバック）: `git show HEAD -- <file>`

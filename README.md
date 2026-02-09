@@ -148,6 +148,7 @@ uv run mypy src
 
 - [Claude Code Hooks](docs/specs/claude-code-hooks.md)
 - [Claude Code Actions](docs/specs/claude-code-actions.md)
+- [エージェントチーム](docs/specs/agent-teams.md)
 - [Planner サブエージェント](docs/specs/planner-agent.md)
 - [Doc Reviewer サブエージェント](docs/specs/doc-review-agent.md)
 - [Test Runner サブエージェント](docs/specs/test-runner-agent.md)
