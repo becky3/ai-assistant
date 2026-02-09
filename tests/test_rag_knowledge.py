@@ -1,16 +1,17 @@
 """RAGナレッジサービスのテスト
 
-仕様: docs/specs/f9-rag-knowledge.md
+仕様: docs/specs/f9-rag-knowledge.md, docs/specs/f9-rag-evaluation.md
 """
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from src.rag.vector_store import RetrievalResult, VectorStore
-from src.services.rag_knowledge import RAGKnowledgeService
+from src.services.rag_knowledge import RAGKnowledgeService, RAGRetrievalResult
 from src.services.web_crawler import CrawledPage, WebCrawler
 
 
@@ -248,11 +249,12 @@ class TestRetrieve:
         result = await rag_service.retrieve("test query", n_results=5)
 
         # Assert
-        assert "--- 参考情報 1 ---" in result
-        assert "出典: https://example.com/page1" in result
-        assert "This is relevant content 1." in result
-        assert "--- 参考情報 2 ---" in result
-        assert "出典: https://example.com/page2" in result
+        assert isinstance(result, RAGRetrievalResult)
+        assert "--- 参考情報 1 ---" in result.context
+        assert "出典: https://example.com/page1" in result.context
+        assert "This is relevant content 1." in result.context
+        assert "--- 参考情報 2 ---" in result.context
+        assert "出典: https://example.com/page2" in result.context
         mock_vector_store.search.assert_called_once_with("test query", n_results=5)
 
     async def test_ac19_retrieve_returns_empty_when_no_results(
@@ -260,7 +262,7 @@ class TestRetrieve:
         rag_service: RAGKnowledgeService,
         mock_vector_store: MagicMock,
     ) -> None:
-        """AC19: 結果がない場合は空文字列を返すこと."""
+        """AC19: 結果がない場合は空のRAGRetrievalResultを返すこと."""
         # Arrange
         mock_vector_store.search.return_value = []
 
@@ -268,7 +270,9 @@ class TestRetrieve:
         result = await rag_service.retrieve("unrelated query")
 
         # Assert
-        assert result == ""
+        assert isinstance(result, RAGRetrievalResult)
+        assert result.context == ""
+        assert result.sources == []
 
 
 class TestDeleteSource:
@@ -349,7 +353,10 @@ class TestChatServiceIntegration:
 
         mock_rag_service = MagicMock()
         mock_rag_service.retrieve = AsyncMock(
-            return_value="--- 参考情報 1 ---\n出典: https://example.com\nRelevant info"
+            return_value=RAGRetrievalResult(
+                context="--- 参考情報 1 ---\n出典: https://example.com\nRelevant info",
+                sources=["https://example.com"],
+            )
         )
 
         chat_service = ChatService(
@@ -362,7 +369,8 @@ class TestChatServiceIntegration:
         # Act - get_settingsをモックして決定的なテストにする
         mock_settings = MagicMock()
         mock_settings.rag_retrieval_count = 5
-        with patch("src.config.settings.get_settings", return_value=mock_settings):
+        mock_settings.rag_show_sources = False  # ソース情報非表示
+        with patch("src.services.chat.get_settings", return_value=mock_settings):
             response = await chat_service.respond(
                 user_id="U123",
                 text="What is Python?",
@@ -559,3 +567,420 @@ class TestConfiguration:
             assert settings.rag_chunk_size == 1000
             assert settings.rag_chunk_overlap == 100
             assert settings.rag_retrieval_count == 10
+
+
+class TestRAGDebugLog:
+    """RAG検索結果のログ出力テスト (AC1-4, f9-rag-evaluation.md)."""
+
+    @pytest.fixture
+    def mock_settings_log_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """ログ出力有効の設定をモックする."""
+        mock_settings = MagicMock()
+        mock_settings.rag_debug_log_enabled = True
+        monkeypatch.setattr(
+            "src.config.settings.get_settings",
+            lambda: mock_settings,
+        )
+
+    @pytest.fixture
+    def mock_settings_log_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """ログ出力無効の設定をモックする."""
+        mock_settings = MagicMock()
+        mock_settings.rag_debug_log_enabled = False
+        monkeypatch.setattr(
+            "src.config.settings.get_settings",
+            lambda: mock_settings,
+        )
+
+    async def test_ac1_retrieve_logs_query(
+        self,
+        rag_service: RAGKnowledgeService,
+        mock_vector_store: MagicMock,
+        mock_settings_log_enabled: None,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """AC1: RAG_DEBUG_LOG_ENABLED=true の場合、検索クエリがINFOログに出力されること."""
+        # Arrange
+        mock_vector_store.search.return_value = [
+            RetrievalResult(
+                text="Test content",
+                metadata={"source_url": "https://example.com/page1"},
+                distance=0.234,
+            ),
+        ]
+
+        # Act
+        with caplog.at_level(logging.INFO, logger="src.services.rag_knowledge"):
+            await rag_service.retrieve("しれんのしろ アイテム", n_results=5)
+
+        # Assert
+        assert "RAG retrieve: query='しれんのしろ アイテム'" in caplog.text
+
+    async def test_ac2_retrieve_logs_results(
+        self,
+        rag_service: RAGKnowledgeService,
+        mock_vector_store: MagicMock,
+        mock_settings_log_enabled: None,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """AC2: 各検索結果の distance、source_url がINFOログに出力されること.
+
+        Note: テキストプレビューはPII漏洩リスク軽減のためDEBUGレベルに移動された。
+        """
+        # Arrange
+        long_text = "A" * 150  # 100文字を超えるテキスト
+        mock_vector_store.search.return_value = [
+            RetrievalResult(
+                text=long_text,
+                metadata={"source_url": "https://example.com/page1"},
+                distance=0.234,
+            ),
+            RetrievalResult(
+                text="Short text",
+                metadata={"source_url": "https://example.com/page2"},
+                distance=0.312,
+            ),
+        ]
+
+        # Act
+        with caplog.at_level(logging.INFO, logger="src.services.rag_knowledge"):
+            await rag_service.retrieve("test query", n_results=5)
+
+        # Assert - INFOレベルではdistanceとsourceのみ（テキストは含まない）
+        assert "RAG result 1: distance=0.234" in caplog.text
+        assert "source='https://example.com/page1'" in caplog.text
+        assert "RAG result 2: distance=0.312" in caplog.text
+        assert "source='https://example.com/page2'" in caplog.text
+        # テキストプレビューはINFOレベルには含まれない（DEBUGレベルで出力）
+        # assert "A" * 100 + "..." in caplog.text  # -> DEBUGレベルに移動
+
+    async def test_ac3_retrieve_logs_full_text_debug(
+        self,
+        rag_service: RAGKnowledgeService,
+        mock_vector_store: MagicMock,
+        mock_settings_log_enabled: None,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """AC3: 各検索結果の全文がDEBUGログに出力されること."""
+        # Arrange
+        full_text = "This is the full text content that should appear in DEBUG log."
+        mock_vector_store.search.return_value = [
+            RetrievalResult(
+                text=full_text,
+                metadata={"source_url": "https://example.com/page1"},
+                distance=0.1,
+            ),
+        ]
+
+        # Act
+        with caplog.at_level(logging.DEBUG, logger="src.services.rag_knowledge"):
+            await rag_service.retrieve("test query", n_results=5)
+
+        # Assert
+        assert "RAG result 1 full text:" in caplog.text
+        assert full_text in caplog.text
+
+    async def test_ac4_retrieve_no_log_when_disabled(
+        self,
+        rag_service: RAGKnowledgeService,
+        mock_vector_store: MagicMock,
+        mock_settings_log_disabled: None,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """AC4: RAG_DEBUG_LOG_ENABLED=false の場合、ログが出力されないこと."""
+        # Arrange
+        mock_vector_store.search.return_value = [
+            RetrievalResult(
+                text="Test content",
+                metadata={"source_url": "https://example.com/page1"},
+                distance=0.1,
+            ),
+        ]
+
+        # Act
+        with caplog.at_level(logging.DEBUG, logger="src.services.rag_knowledge"):
+            await rag_service.retrieve("test query", n_results=5)
+
+        # Assert
+        assert "RAG retrieve:" not in caplog.text
+        assert "RAG result" not in caplog.text
+
+
+class TestRAGRetrievalResultSources:
+    """RAG検索結果のソース情報テスト (AC5-6, f9-rag-evaluation.md)."""
+
+    async def test_ac5_retrieve_returns_sources(
+        self,
+        rag_service: RAGKnowledgeService,
+        mock_vector_store: MagicMock,
+    ) -> None:
+        """AC5: retrieve() がソースURLリストを返すこと."""
+        # Arrange
+        mock_vector_store.search.return_value = [
+            RetrievalResult(
+                text="Content 1",
+                metadata={"source_url": "https://example.com/page1"},
+                distance=0.1,
+            ),
+            RetrievalResult(
+                text="Content 2",
+                metadata={"source_url": "https://example.com/page2"},
+                distance=0.2,
+            ),
+        ]
+
+        # Act
+        result = await rag_service.retrieve("test query", n_results=5)
+
+        # Assert
+        assert isinstance(result, RAGRetrievalResult)
+        assert len(result.sources) == 2
+        assert "https://example.com/page1" in result.sources
+        assert "https://example.com/page2" in result.sources
+
+    async def test_ac6_sources_are_unique(
+        self,
+        rag_service: RAGKnowledgeService,
+        mock_vector_store: MagicMock,
+    ) -> None:
+        """AC6: ソースURLは重複なく表示されること."""
+        # Arrange - 同じソースURLを持つ複数のチャンク
+        mock_vector_store.search.return_value = [
+            RetrievalResult(
+                text="Content 1 from page1",
+                metadata={"source_url": "https://example.com/page1"},
+                distance=0.1,
+            ),
+            RetrievalResult(
+                text="Content 2 from page1",
+                metadata={"source_url": "https://example.com/page1"},
+                distance=0.2,
+            ),
+            RetrievalResult(
+                text="Content from page2",
+                metadata={"source_url": "https://example.com/page2"},
+                distance=0.3,
+            ),
+        ]
+
+        # Act
+        result = await rag_service.retrieve("test query", n_results=5)
+
+        # Assert
+        assert len(result.sources) == 2  # 3件のチャンクだが、ソースは2件
+        assert result.sources.count("https://example.com/page1") == 1
+        assert result.sources.count("https://example.com/page2") == 1
+
+    async def test_sources_exclude_unknown(
+        self,
+        rag_service: RAGKnowledgeService,
+        mock_vector_store: MagicMock,
+    ) -> None:
+        """ソースURLが不明の場合はソースリストに含まれないこと."""
+        # Arrange
+        mock_vector_store.search.return_value = [
+            RetrievalResult(
+                text="Content with source",
+                metadata={"source_url": "https://example.com/page1"},
+                distance=0.1,
+            ),
+            RetrievalResult(
+                text="Content without source",
+                metadata={},  # source_url がない
+                distance=0.2,
+            ),
+        ]
+
+        # Act
+        result = await rag_service.retrieve("test query", n_results=5)
+
+        # Assert
+        assert len(result.sources) == 1
+        assert "https://example.com/page1" in result.sources
+        assert "不明" not in result.sources
+
+
+class TestRAGShowSources:
+    """Slack回答時のソース情報表示テスト (AC5, AC7-9, f9-rag-evaluation.md)."""
+
+    async def test_ac5_chat_shows_sources(self) -> None:
+        """AC5: RAG_SHOW_SOURCES=true の場合、Slack回答末尾にソースURLリストが表示されること."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from src.services.chat import ChatService
+
+        # Arrange
+        mock_llm = MagicMock()
+        mock_llm.complete = AsyncMock(
+            return_value=MagicMock(content="This is the answer.")
+        )
+
+        mock_session_factory = MagicMock()
+        mock_session = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_session_factory.return_value = mock_session
+
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = []
+        mock_session.execute = AsyncMock(return_value=mock_result)
+        mock_session.commit = AsyncMock()
+        mock_session.add = MagicMock()
+
+        mock_rag_service = MagicMock()
+        mock_rag_service.retrieve = AsyncMock(
+            return_value=RAGRetrievalResult(
+                context="--- 参考情報 1 ---\n出典: https://example.com/page1\nContent",
+                sources=["https://example.com/page1", "https://example.com/page2"],
+            )
+        )
+
+        chat_service = ChatService(
+            llm=mock_llm,
+            session_factory=mock_session_factory,
+            system_prompt="You are an assistant.",
+            rag_service=mock_rag_service,
+        )
+
+        # Act
+        mock_settings = MagicMock()
+        mock_settings.rag_retrieval_count = 5
+        mock_settings.rag_show_sources = True
+        with patch("src.services.chat.get_settings", return_value=mock_settings):
+            response = await chat_service.respond(
+                user_id="U123",
+                text="Test question",
+                thread_ts="1234567890.000000",
+            )
+
+        # Assert
+        assert "This is the answer." in response
+        assert "---" in response
+        assert "参照元:" in response
+        assert "• https://example.com/page1" in response
+        assert "• https://example.com/page2" in response
+
+    async def test_ac7_chat_hides_sources_when_disabled(self) -> None:
+        """AC7: RAG_SHOW_SOURCES=false の場合、ソース情報が表示されないこと（従来動作）."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from src.services.chat import ChatService
+
+        # Arrange
+        mock_llm = MagicMock()
+        mock_llm.complete = AsyncMock(
+            return_value=MagicMock(content="This is the answer.")
+        )
+
+        mock_session_factory = MagicMock()
+        mock_session = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_session_factory.return_value = mock_session
+
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = []
+        mock_session.execute = AsyncMock(return_value=mock_result)
+        mock_session.commit = AsyncMock()
+        mock_session.add = MagicMock()
+
+        mock_rag_service = MagicMock()
+        mock_rag_service.retrieve = AsyncMock(
+            return_value=RAGRetrievalResult(
+                context="--- 参考情報 1 ---\n出典: https://example.com/page1\nContent",
+                sources=["https://example.com/page1"],
+            )
+        )
+
+        chat_service = ChatService(
+            llm=mock_llm,
+            session_factory=mock_session_factory,
+            system_prompt="You are an assistant.",
+            rag_service=mock_rag_service,
+        )
+
+        # Act
+        mock_settings = MagicMock()
+        mock_settings.rag_retrieval_count = 5
+        mock_settings.rag_show_sources = False  # ソース表示無効
+        with patch("src.services.chat.get_settings", return_value=mock_settings):
+            response = await chat_service.respond(
+                user_id="U123",
+                text="Test question",
+                thread_ts="1234567890.000000",
+            )
+
+        # Assert
+        assert response == "This is the answer."
+        assert "参照元:" not in response
+
+    async def test_ac8_backward_compatible(self) -> None:
+        """AC8: 新設定のデフォルト値により、既存の動作に影響がないこと（rag_show_sources=false）."""
+        import os
+        from unittest.mock import patch
+
+        from src.config.settings import Settings
+
+        # デフォルト値をテスト（.envファイルと環境変数の影響を排除）
+        # Settingsはenv_file=".env"を読み込むため、環境変数だけでなく
+        # .envファイルの影響も排除する必要がある
+        # 環境変数を削除し、.envファイルも読み込まないようにする
+        env_backup = {
+            k: os.environ.pop(k, None)
+            for k in ["RAG_SHOW_SOURCES", "RAG_DEBUG_LOG_ENABLED"]
+        }
+        try:
+            settings = Settings(_env_file=None)  # .envファイルを読み込まない
+            assert settings.rag_show_sources is False
+            assert settings.rag_debug_log_enabled is False  # デフォルトはFalse
+        finally:
+            # 環境変数を復元
+            for k, v in env_backup.items():
+                if v is not None:
+                    os.environ[k] = v
+
+    async def test_ac9_no_effect_when_rag_disabled(self) -> None:
+        """AC9: RAG無効時（rag_enabled=false）は新機能が動作しないこと."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from src.services.chat import ChatService
+
+        # Arrange
+        mock_llm = MagicMock()
+        mock_llm.complete = AsyncMock(
+            return_value=MagicMock(content="Normal response")
+        )
+
+        mock_session_factory = MagicMock()
+        mock_session = AsyncMock()
+        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_session_factory.return_value = mock_session
+
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = []
+        mock_session.execute = AsyncMock(return_value=mock_result)
+        mock_session.commit = AsyncMock()
+        mock_session.add = MagicMock()
+
+        # rag_service=None（RAG無効）
+        chat_service = ChatService(
+            llm=mock_llm,
+            session_factory=mock_session_factory,
+            system_prompt="You are an assistant.",
+            rag_service=None,
+        )
+
+        # Act
+        mock_settings = MagicMock()
+        mock_settings.rag_show_sources = True  # 有効でも効果なし
+        with patch("src.services.chat.get_settings", return_value=mock_settings):
+            response = await chat_service.respond(
+                user_id="U123",
+                text="Hello",
+                thread_ts="1234567890.000000",
+            )
+
+        # Assert
+        assert response == "Normal response"
+        assert "参照元:" not in response

@@ -1,6 +1,6 @@
 """RAGナレッジ管理サービス
 
-仕様: docs/specs/f9-rag-knowledge.md
+仕様: docs/specs/f9-rag-knowledge.md, docs/specs/f9-rag-evaluation.md
 """
 
 from __future__ import annotations
@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from src.rag.chunker import chunk_text
@@ -17,6 +18,21 @@ if TYPE_CHECKING:
     from src.services.web_crawler import CrawledPage, WebCrawler
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class RAGRetrievalResult:
+    """RAG検索結果.
+
+    仕様: docs/specs/f9-rag-evaluation.md
+
+    Attributes:
+        context: フォーマット済みテキスト（システムプロンプト注入用）
+        sources: ユニークなソースURLリスト（表示用）
+    """
+
+    context: str
+    sources: list[str]
 
 
 class RAGKnowledgeService:
@@ -167,32 +183,62 @@ class RAGKnowledgeService:
         logger.info("Ingested page %s: %d chunks", page.url, count)
         return count
 
-    async def retrieve(self, query: str, n_results: int = 5) -> str:
-        """関連知識を検索し、フォーマット済みテキストとして返す.
+    async def retrieve(self, query: str, n_results: int = 5) -> RAGRetrievalResult:
+        """関連知識を検索し、結果を返す.
 
-        ChatService から呼ばれる。結果なしの場合は空文字列。
+        ChatService から呼ばれる。結果なしの場合は空のRAGRetrievalResult。
+
+        仕様: docs/specs/f9-rag-evaluation.md
 
         Args:
             query: 検索クエリ
             n_results: 返却する結果の最大数
 
         Returns:
-            フォーマット済みの関連知識テキスト。結果がない場合は空文字列。
+            RAGRetrievalResult: コンテキストとソース情報
         """
+        from src.config.settings import get_settings
+
+        settings = get_settings()
         results = await self._vector_store.search(query, n_results=n_results)
 
         if not results:
-            return ""
+            return RAGRetrievalResult(context="", sources=[])
+
+        # デバッグログ出力
+        if settings.rag_debug_log_enabled:
+            logger.info("RAG retrieve: query=%r", query)
+            for i, result in enumerate(results, start=1):
+                source_url = result.metadata.get("source_url", "不明")
+                # INFOレベルではdistance・sourceのみ出力（PII漏洩リスク軽減）
+                logger.info(
+                    "RAG result %d: distance=%.3f source=%r",
+                    i,
+                    result.distance,
+                    source_url,
+                )
+                # テキストプレビューはDEBUGレベルに限定
+                text_preview = (
+                    result.text[:100] + "..." if len(result.text) > 100 else result.text
+                )
+                logger.debug("RAG result %d text: %r", i, text_preview)
+                logger.debug("RAG result %d full text: %r", i, result.text)
 
         # フォーマット済みテキストを構築
         formatted_parts: list[str] = []
+        sources: list[str] = []
         for i, result in enumerate(results, start=1):
-            source_url = result.metadata.get("source_url", "不明")
+            source_url = str(result.metadata.get("source_url", "不明"))
             formatted_parts.append(
                 f"--- 参考情報 {i} ---\n出典: {source_url}\n{result.text}"
             )
+            if source_url != "不明" and source_url not in sources:
+                sources.append(source_url)
 
-        return "\n\n".join(formatted_parts)
+        return RAGRetrievalResult(
+            context="\n\n".join(formatted_parts),
+            sources=sources,
+        )
 
     async def delete_source(self, source_url: str) -> int:
         """ソースURL指定で知識を削除.

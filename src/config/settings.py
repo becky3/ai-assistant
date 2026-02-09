@@ -92,6 +92,10 @@ class Settings(BaseSettings):
     rag_max_crawl_pages: int = Field(default=50, ge=1)
     rag_crawl_delay_sec: float = Field(default=1.0, ge=0)
 
+    # RAG評価・デバッグ (Phase 1)
+    rag_debug_log_enabled: bool = False  # 本番ではPII漏洩リスクのためデフォルト無効
+    rag_show_sources: bool = False
+
     @model_validator(mode="after")
     def validate_chunk_settings(self) -> "Settings":
         """チャンク設定の相関バリデーション."""
