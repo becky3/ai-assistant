@@ -47,6 +47,9 @@ reviews:
     - path: "mcp-servers/**"
       instructions: |
         MCPサーバー実装。src/のモジュールをimportしないこと（将来のリポジトリ分離制約）。
+  tools:
+    ruff:
+      enabled: true
 
 chat:
   auto_reply: true
@@ -59,10 +62,6 @@ tone_instructions: |
   - エラーハンドリング（except pass禁止、適切なログ出力）
   - 境界値・バリデーション漏れ
   軽微なスタイルの指摘は控えめに。
-
-tools:
-  ruff:
-    enabled: true
 
 knowledge_base:
   learnings:
