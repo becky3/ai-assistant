@@ -203,9 +203,12 @@ async def main() -> None:
             rag_service=rag_service,
         )
 
-        # Socket Mode で起動
+        # Socket Mode で起動（グレースフルシャットダウン対応）
         async with socket_mode_handler(app, settings) as handler:
-            await handler.start_async()  # type: ignore[no-untyped-call]
+            try:
+                await handler.start_async()  # type: ignore[no-untyped-call]
+            except asyncio.CancelledError:
+                logger.info("シャットダウンシグナルを受信しました")
     finally:
         if mcp_manager:
             try:
