@@ -10,6 +10,7 @@ import hashlib
 import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
+from urllib.parse import urldefrag
 
 from src.rag.chunker import chunk_text
 from src.rag.vector_store import DocumentChunk, VectorStore
@@ -125,7 +126,7 @@ class RAGKnowledgeService:
             ValueError: URL検証に失敗した場合
         """
         # URL検証を先に行い、失敗時は例外を投げる（ユーザーにエラー理由を伝えるため）
-        # 戻り値を以降の処理で使用（将来の正規化対応に備える）
+        # 戻り値（正規化済みURL）を以降の処理で使用
         validated_url = self._web_crawler.validate_url(url)
 
         page = await self._web_crawler.crawl_page(validated_url)
@@ -156,15 +157,18 @@ class RAGKnowledgeService:
             logger.info("No chunks generated for page: %s", page.url)
             return 0
 
+        # URLからフラグメントを除去して正規化（上流で除去済みだが防御的に再適用）
+        normalized_url, _ = urldefrag(page.url)
+
         # DocumentChunkに変換
         # SHA256の先頭16文字を使用（衝突確率が十分に低い）
-        url_hash = hashlib.sha256(page.url.encode()).hexdigest()[:16]
+        url_hash = hashlib.sha256(normalized_url.encode()).hexdigest()[:16]
         document_chunks = [
             DocumentChunk(
                 id=f"{url_hash}_{i}",
                 text=chunk,
                 metadata={
-                    "source_url": page.url,
+                    "source_url": normalized_url,
                     "title": page.title,
                     "chunk_index": i,
                     "crawled_at": page.crawled_at,
@@ -178,9 +182,9 @@ class RAGKnowledgeService:
         count = await self._vector_store.add_documents(document_chunks)
 
         # upsert成功後、古いチャンクを削除（チャンク数が減った場合）
-        await self._vector_store.delete_stale_chunks(page.url, new_ids)
+        await self._vector_store.delete_stale_chunks(normalized_url, new_ids)
 
-        logger.info("Ingested page %s: %d chunks", page.url, count)
+        logger.info("Ingested page %s: %d chunks", normalized_url, count)
         return count
 
     async def retrieve(self, query: str, n_results: int = 5) -> RAGRetrievalResult:
@@ -249,8 +253,10 @@ class RAGKnowledgeService:
         Returns:
             削除チャンク数
         """
-        count = await self._vector_store.delete_by_source(source_url)
-        logger.info("Deleted %d chunks from source: %s", count, source_url)
+        # フラグメントを除去して正規化
+        normalized_url, _ = urldefrag(source_url)
+        count = await self._vector_store.delete_by_source(normalized_url)
+        logger.info("Deleted %d chunks from source: %s", count, normalized_url)
         return count
 
     async def get_stats(self) -> dict[str, int]:

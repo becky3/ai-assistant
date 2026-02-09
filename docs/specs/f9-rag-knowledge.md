@@ -366,6 +366,7 @@ class WebCrawler:
         検証内容:
         - スキームが http または https であること
         - ホスト名がプライベートIP/localhost/リンクローカルでないこと（SSRF対策）
+        - フラグメント(`#...`)を `urllib.parse.urldefrag()` で除去し、正規化済みURLを返す
         - 検証失敗時は ValueError を送出
         """
 
@@ -375,7 +376,8 @@ class WebCrawler:
         """リンク集ページ内の <a> タグからURLリストを抽出する（深度1のみ、再帰クロールは行わない）.
 
         - index_url を validate_url() で検証（http/https スキームのみ許可）
-        - ページ内の <a> タグから抽出した各リンクURLも validate_url() で検証し、不正なURLは除外する
+        - ページ内の <a> タグから抽出した各リンクURLも validate_url() で検証・正規化し、不正なURLは除外する
+        - validate_url() によるフラグメント除去で、同一ページのアンカー違い（例: `/page#a`, `/page#b`）は1つのURLに正規化される
         - 抽出URL数が max_pages を超える場合は先頭 max_pages 件に制限
 
         Args:
@@ -675,6 +677,11 @@ RAG_CRAWL_DELAY_SEC=1.0
 - [ ] **AC34**: 1回のクロールで取得するページ数が `RAG_MAX_CRAWL_PAGES` で制限されること
 - [ ] **AC35**: 同一ドメインへの連続リクエスト間に `RAG_CRAWL_DELAY_SEC` の待機が挿入されること
 
+### URL正規化
+
+- [ ] **AC36**: `validate_url()` がURLからフラグメント(`#...`)を除去した正規化済みURLを返すこと
+- [ ] **AC37**: `rag crawl` 実行時、同一ページのアンカー違い（例: `/page#a`, `/page#b`）が1つのページとして取り込まれること
+
 ### RAGナレッジサービス（オーケストレーション）
 
 - [ ] **AC16**: `ingest_from_index()` がリンク集ページから記事を一括クロール→チャンキング→ベクトル保存できること
@@ -773,6 +780,11 @@ RAG_CRAWL_DELAY_SEC=1.0
 | `tests/test_web_crawler.py` | `test_crawl_index_page_rejects_redirect` | AC33 |
 | `tests/test_web_crawler.py` | `test_ac34_max_crawl_pages_limit` | AC34 |
 | `tests/test_web_crawler.py` | `test_ac35_crawl_delay_between_requests` | AC35 |
+| `tests/test_web_crawler.py` | `test_ac36_validate_url_strips_fragment` | AC36 |
+| `tests/test_web_crawler.py` | `test_ac37_crawl_index_page_deduplicates_fragment_urls` | AC37 |
+| `tests/test_rag_knowledge.py` | `test_ac36_ingest_page_normalizes_fragment_url` | AC36 |
+| `tests/test_rag_knowledge.py` | `test_ac37_ingest_crawled_page_uses_normalized_url_for_hash` | AC37 |
+| `tests/test_rag_knowledge.py` | `test_ac37_delete_source_normalizes_fragment_url` | AC37 |
 
 ### 統合テスト
 
@@ -844,3 +856,9 @@ RAG_CRAWL_DELAY_SEC=1.0
 6. **既存テストへの影響**: RAGサービスはオプショナル注入のため、既存テストに変更は不要
 7. **robots.txt**: 初期実装では `robots.txt` の解析・遵守は行わない。User-Agentはaiohttpデフォルトを使用し、将来的に対応を検討する
 8. **SSRF対策**: スキーム検証（http/httpsのみ）とリダイレクト無効化で対応。将来的にGoogle Safe Browsing APIによるURL安全性チェックを検討中（Issue #159）
+
+## 変更履歴
+
+| 日付 | 内容 |
+|------|------|
+| 2026-02-09 | URL正規化（フラグメント除去）による重複取り込み防止を追加 (#161) |

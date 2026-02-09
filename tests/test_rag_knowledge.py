@@ -983,3 +983,88 @@ class TestRAGShowSources:
         # Assert
         assert response == "Normal response"
         assert "参照元:" not in response
+
+
+class TestFragmentNormalization:
+    """URL フラグメント正規化のテスト (AC36, AC37)."""
+
+    async def test_ac36_ingest_page_normalizes_fragment_url(
+        self,
+        rag_service: RAGKnowledgeService,
+        mock_vector_store: MagicMock,
+        mock_web_crawler: MagicMock,
+    ) -> None:
+        """AC36: ingest_page() がフラグメント付きURLを正規化して処理すること."""
+        # Arrange
+        # fixtureデフォルトの side_effect（入力をそのまま返す）をリセットし、
+        # フラグメント除去後の正規化済みURLを返すようにする
+        mock_web_crawler.validate_url.side_effect = None
+        mock_web_crawler.validate_url.return_value = "https://example.com/page"
+        mock_web_crawler.crawl_page.return_value = CrawledPage(
+            url="https://example.com/page",
+            title="Test Page",
+            text="This is test content.",
+            crawled_at="2024-01-01T00:00:00+00:00",
+        )
+        mock_vector_store.add_documents.return_value = 1
+
+        # Act
+        result = await rag_service.ingest_page("https://example.com/page#section")
+
+        # Assert
+        assert result == 1
+        # validate_url にフラグメント付きURLが渡される
+        mock_web_crawler.validate_url.assert_called_once_with("https://example.com/page#section")
+        # crawl_page にはフラグメント除去済みURLが渡される
+        mock_web_crawler.crawl_page.assert_called_once_with("https://example.com/page")
+
+    async def test_ac37_ingest_crawled_page_uses_normalized_url_for_hash(
+        self,
+        rag_service: RAGKnowledgeService,
+        mock_vector_store: MagicMock,
+        mock_web_crawler: MagicMock,
+    ) -> None:
+        """AC37: _ingest_crawled_page() がフラグメント除去済みURLでハッシュ計算すること."""
+        import hashlib
+
+        # Arrange: フラグメント付きURLのCrawledPage
+        mock_vector_store.add_documents.return_value = 1
+        page = CrawledPage(
+            url="https://example.com/page#fragment",
+            title="Test Page",
+            text="Test content.",
+            crawled_at="2024-01-01T00:00:00+00:00",
+        )
+
+        # Act
+        await rag_service._ingest_crawled_page(page)
+
+        # Assert: add_documents に渡されたチャンクのIDとメタデータを検証
+        call_args = mock_vector_store.add_documents.call_args[0][0]
+        chunk = call_args[0]
+        # フラグメント除去済みURLでハッシュ計算されていること
+        expected_hash = hashlib.sha256("https://example.com/page".encode()).hexdigest()[:16]
+        assert chunk.id.startswith(expected_hash)
+        # メタデータもフラグメント除去済みURL
+        assert chunk.metadata["source_url"] == "https://example.com/page"
+
+        # delete_stale_chunks もフラグメント除去済みURLで呼ばれる
+        mock_vector_store.delete_stale_chunks.assert_called_once()
+        stale_call_args = mock_vector_store.delete_stale_chunks.call_args[0]
+        assert stale_call_args[0] == "https://example.com/page"
+
+    async def test_ac37_delete_source_normalizes_fragment_url(
+        self,
+        rag_service: RAGKnowledgeService,
+        mock_vector_store: MagicMock,
+    ) -> None:
+        """AC37: delete_source() がフラグメント付きURLを正規化して削除すること."""
+        # Arrange
+        mock_vector_store.delete_by_source.return_value = 5
+
+        # Act
+        result = await rag_service.delete_source("https://example.com/page#section")
+
+        # Assert
+        assert result == 5
+        mock_vector_store.delete_by_source.assert_called_once_with("https://example.com/page")

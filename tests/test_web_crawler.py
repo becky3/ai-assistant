@@ -236,6 +236,24 @@ class TestWebCrawlerValidation:
         with pytest.raises(ValueError, match="リンクローカルアドレス"):
             crawler.validate_url("http://169.254.169.254/latest/meta-data/")
 
+    def test_ac36_validate_url_strips_fragment(self) -> None:
+        """AC36: validate_url() がURLフラグメントを除去すること."""
+        crawler = WebCrawler()
+        result = crawler.validate_url("https://example.com/page#section1")
+        assert result == "https://example.com/page"
+
+    def test_ac36_validate_url_strips_fragment_with_path(self) -> None:
+        """AC36: パス付きURLのフラグメントも除去されること."""
+        crawler = WebCrawler()
+        result = crawler.validate_url("https://example.com/path/to/page#anchor")
+        assert result == "https://example.com/path/to/page"
+
+    def test_ac36_validate_url_without_fragment_unchanged(self) -> None:
+        """AC36: フラグメントのないURLはそのまま返されること."""
+        crawler = WebCrawler()
+        result = crawler.validate_url("https://example.com/page")
+        assert result == "https://example.com/page"
+
 
 class TestWebCrawlerTextExtraction:
     """WebCrawler テキスト抽出のテスト."""
@@ -319,6 +337,36 @@ class TestWebCrawlerCrawlIndexPage:
         assert all(url.endswith(".html") for url in urls)
 
     @pytest.mark.asyncio
+    async def test_ac37_crawl_index_page_deduplicates_fragment_urls(self) -> None:
+        """AC37: アンカー違いの同一ページURLが重複除去されること."""
+        crawler = WebCrawler()
+
+        # アンカー違いのリンクを含むHTML
+        html_with_fragments = """
+        <!DOCTYPE html>
+        <html>
+        <head><title>リンク集</title></head>
+        <body>
+            <a href="https://example.com/page#section1">セクション1</a>
+            <a href="https://example.com/page#section2">セクション2</a>
+            <a href="https://example.com/page#section3">セクション3</a>
+            <a href="https://example.com/other">他のページ</a>
+        </body>
+        </html>
+        """
+
+        with patch(
+            "src.services.web_crawler.aiohttp.ClientSession",
+            return_value=MockClientSession(200, html_with_fragments),
+        ):
+            urls = await crawler.crawl_index_page("https://example.com/index")
+
+        # アンカー違いは1つに統合される
+        assert len(urls) == 2
+        assert "https://example.com/page" in urls
+        assert "https://example.com/other" in urls
+
+    @pytest.mark.asyncio
     async def test_ac34_max_crawl_pages_limit(self) -> None:
         """AC34: 1回のクロールで取得するページ数が max_pages で制限されること."""
         crawler = WebCrawler(max_pages=2)
@@ -373,6 +421,20 @@ class TestWebCrawlerCrawlPage:
         page = await crawler.crawl_page("file:///etc/passwd")
 
         assert page is None
+
+    @pytest.mark.asyncio
+    async def test_crawl_page_strips_fragment_from_url(self) -> None:
+        """crawl_page() がフラグメント除去済みURLをCrawledPage.urlに格納すること."""
+        crawler = WebCrawler()
+
+        with patch(
+            "src.services.web_crawler.aiohttp.ClientSession",
+            return_value=MockClientSession(200, SAMPLE_HTML_WITH_ARTICLE),
+        ):
+            page = await crawler.crawl_page("https://example.com/article/1#section")
+
+        assert page is not None
+        assert page.url == "https://example.com/article/1"
 
     @pytest.mark.asyncio
     async def test_crawl_page_rejects_redirect(self) -> None:
