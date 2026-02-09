@@ -197,7 +197,7 @@ PRに対するレビュー指摘（Copilot、人間問わず）への対応は `
 
 エージェントチームは、リーダー1名と複数のチームメンバー（独立した Claude Code インスタンス）で構成される協調作業システムです。
 
-**有効化**: `.claude/settings.json` で `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1"` を設定（設定済み）
+**有効化**: `.claude/settings.json` で `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1"` を設定する
 
 **サブエージェントとの使い分け**:
 
