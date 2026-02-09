@@ -173,6 +173,50 @@ class TestWebCrawlerValidation:
         result = crawler.validate_url("https://any-domain.com/page")
         assert result == "https://any-domain.com/page"
 
+    def test_localhost_rejected(self) -> None:
+        """SSRF対策: localhostへのアクセスが拒否されること."""
+        crawler = WebCrawler()
+
+        with pytest.raises(ValueError, match="localhost"):
+            crawler.validate_url("http://localhost/admin")
+
+        with pytest.raises(ValueError, match="localhost"):
+            crawler.validate_url("https://localhost:8080/api")
+
+    def test_loopback_ip_rejected(self) -> None:
+        """SSRF対策: ループバックIP (127.0.0.1) へのアクセスが拒否されること."""
+        crawler = WebCrawler()
+
+        with pytest.raises(ValueError, match="ループバックアドレス"):
+            crawler.validate_url("http://127.0.0.1/admin")
+
+        with pytest.raises(ValueError, match="ループバックアドレス"):
+            crawler.validate_url("http://127.0.0.2/admin")
+
+    def test_private_ip_rejected(self) -> None:
+        """SSRF対策: プライベートIP (RFC1918) へのアクセスが拒否されること."""
+        crawler = WebCrawler()
+
+        # 10.0.0.0/8
+        with pytest.raises(ValueError, match="プライベートIPアドレス"):
+            crawler.validate_url("http://10.0.0.1/internal")
+
+        # 172.16.0.0/12
+        with pytest.raises(ValueError, match="プライベートIPアドレス"):
+            crawler.validate_url("http://172.16.0.1/internal")
+
+        # 192.168.0.0/16
+        with pytest.raises(ValueError, match="プライベートIPアドレス"):
+            crawler.validate_url("http://192.168.1.1/internal")
+
+    def test_link_local_ip_rejected(self) -> None:
+        """SSRF対策: リンクローカルIP (169.254.0.0/16) へのアクセスが拒否されること."""
+        crawler = WebCrawler()
+
+        # AWS metadata endpoint
+        with pytest.raises(ValueError, match="リンクローカルアドレス"):
+            crawler.validate_url("http://169.254.169.254/latest/meta-data/")
+
 
 class TestWebCrawlerTextExtraction:
     """WebCrawler テキスト抽出のテスト."""
@@ -224,12 +268,18 @@ class TestWebCrawlerCrawlIndexPage:
         ):
             urls = await crawler.crawl_index_page("https://example.com/articles")
 
-        # 全てのリンクが抽出される
-        assert len(urls) >= 4
-        assert "https://example.com/article/1" in urls
-        assert "https://example.com/article/2" in urls
-        assert "https://example.com/article/3" in urls
-        assert "https://other-domain.com/page" in urls
+        # SAMPLE_INDEX_HTML には6つのリンクがある
+        # 期待されるURLを厳密に検証
+        expected_urls = {
+            "https://example.com/article/1",
+            "https://example.com/article/2",
+            "https://example.com/article/3",
+            "https://other-domain.com/page",
+            "https://example.com/doc/guide.html",
+            "https://example.com/doc/faq.html",
+        }
+        assert set(urls) == expected_urls
+        assert len(urls) == 6
 
     @pytest.mark.asyncio
     async def test_ac13_url_pattern_filtering(self) -> None:

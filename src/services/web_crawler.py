@@ -6,8 +6,10 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 import re
+import socket
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from urllib.parse import urljoin, urlparse
@@ -59,6 +61,7 @@ class WebCrawler:
 
         検証内容:
         - スキームが http または https であること
+        - ホスト名がプライベートIP/localhost/リンクローカルでないこと（SSRF対策）
         - 検証失敗時は ValueError を送出
 
         Args:
@@ -83,7 +86,73 @@ class WebCrawler:
         if not hostname:
             raise ValueError("URLにホスト名が含まれていません。")
 
+        # SSRF対策: プライベートIP/localhost/リンクローカルをブロック
+        self._validate_hostname_not_private(hostname)
+
         return url
+
+    def _validate_hostname_not_private(self, hostname: str) -> None:
+        """ホスト名がプライベートIP/localhost/リンクローカルでないことを検証する.
+
+        SSRF対策として、以下のアドレスへのアクセスをブロック:
+        - localhost / 127.0.0.0/8 (ループバック)
+        - 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16 (RFC1918 プライベート)
+        - 169.254.0.0/16 (リンクローカル)
+        - ::1 (IPv6 ループバック)
+        - fc00::/7 (IPv6 ユニークローカル)
+        - fe80::/10 (IPv6 リンクローカル)
+
+        Args:
+            hostname: 検証するホスト名
+
+        Raises:
+            ValueError: プライベートアドレスへのアクセスが検出された場合
+        """
+        # localhost の文字列チェック
+        if hostname.lower() in ("localhost", "localhost.localdomain"):
+            raise ValueError("localhost へのアクセスは許可されていません。")
+
+        # DNS解決してIPアドレスを取得
+        try:
+            # getaddrinfo で IPv4/IPv6 両方を取得
+            addr_infos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        except socket.gaierror:
+            # DNS解決に失敗した場合は通す（接続時にエラーになる）
+            return
+
+        # 全ての解決済みIPアドレスをチェック
+        for addr_info in addr_infos:
+            ip_str = addr_info[4][0]
+            try:
+                ip = ipaddress.ip_address(ip_str)
+            except ValueError:
+                continue
+
+            # プライベート/予約済みIPをブロック
+            # 注: 順序が重要。is_private は is_loopback/is_link_local を含むため、
+            # より具体的なチェックを先に行う
+            if ip.is_loopback:
+                raise ValueError(
+                    f"ループバックアドレス ({ip_str}) へのアクセスは許可されていません。"
+                )
+            if ip.is_link_local:
+                raise ValueError(
+                    f"リンクローカルアドレス ({ip_str}) へのアクセスは許可されていません。"
+                )
+            # IPv4の場合、169.254.0.0/16 (リンクローカル) も追加チェック
+            if isinstance(ip, ipaddress.IPv4Address):
+                if ip in ipaddress.ip_network("169.254.0.0/16"):
+                    raise ValueError(
+                        f"リンクローカルアドレス ({ip_str}) へのアクセスは許可されていません。"
+                    )
+            if ip.is_private:
+                raise ValueError(
+                    f"プライベートIPアドレス ({ip_str}) へのアクセスは許可されていません。"
+                )
+            if ip.is_reserved:
+                raise ValueError(
+                    f"予約済みアドレス ({ip_str}) へのアクセスは許可されていません。"
+                )
 
     def _extract_text(self, html: str) -> tuple[str, str]:
         """HTMLから本文テキストを抽出する.

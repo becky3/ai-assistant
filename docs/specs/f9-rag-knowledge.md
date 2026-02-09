@@ -368,6 +368,7 @@ class WebCrawler:
 
         検証内容:
         - スキームが http または https であること
+        - ホスト名がプライベートIP/localhost/リンクローカルでないこと（SSRF対策）
         - 検証失敗時は ValueError を送出
         """
 
@@ -377,6 +378,7 @@ class WebCrawler:
         """リンク集ページ内の <a> タグからURLリストを抽出する（深度1のみ、再帰クロールは行わない）.
 
         - index_url を validate_url() で検証（http/https スキームのみ許可）
+        - ページ内の <a> タグから抽出した各リンクURLも validate_url() で検証し、不正なURLは除外する
         - 抽出URL数が max_pages を超える場合は先頭 max_pages 件に制限
 
         Args:
@@ -387,7 +389,7 @@ class WebCrawler:
     async def crawl_page(self, url: str) -> CrawledPage | None:
         """単一ページの本文テキストを取得する. 失敗時は None.
 
-        - _validate_url() でURL検証後にHTTPアクセスを行う
+        - validate_url() でURL検証後にHTTPアクセスを行う
         """
 
     async def crawl_pages(self, urls: list[str]) -> list[CrawledPage]:
@@ -402,6 +404,11 @@ class WebCrawler:
 Slackコマンド経由でユーザーが任意のURLを指定できるため、サーバーサイドからのリクエストを安全に制限する。
 
 - **スキーム制限**: `http://` と `https://` のみ許可。`file:`, `ftp:` 等は拒否する
+- **プライベートIPブロック**: DNS解決後のIPアドレスを検証し、以下へのアクセスを拒否する
+  - localhost / 127.0.0.0/8（ループバック）
+  - 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16（RFC1918 プライベート）
+  - 169.254.0.0/16（リンクローカル、AWS metadata endpoint 等）
+  - IPv6 ループバック (::1)、ユニークローカル (fc00::/7)、リンクローカル (fe80::/10)
 - **リダイレクト無効化**: SSRFを防ぐため、HTTPリダイレクトの追従を無効化する
 - **URL安全性チェック（将来実装予定）**: Google Safe Browsing API によるマルウェア・フィッシング判定機能を検討中（Issue #159）
 

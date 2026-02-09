@@ -70,7 +70,7 @@ flowchart LR
 
 **主な機能**:
 
-- SSRF対策（許可ドメインのホワイトリスト）
+- SSRF対策（スキーム制限、プライベートIPブロック）
 - リダイレクト追従の無効化（セキュリティ）
 - 本文領域の自動特定（`<article>` → `<main>` → `<body>`）
 - 不要タグの除去（`<script>`, `<style>`, `<nav>`等）
@@ -278,9 +278,6 @@ RAG_ENABLED=true
 
 # Embeddingプロバイダー (local / online)
 EMBEDDING_PROVIDER=local
-
-# クロール許可ドメイン (SSRF対策)
-RAG_ALLOWED_DOMAINS=docs.python.org,example.com
 
 # チャンク設定
 RAG_CHUNK_SIZE=500
