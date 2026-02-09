@@ -23,7 +23,6 @@
 
 - `RAG_ENABLED` — RAG機能の有効/無効（`true` / `false`、デフォルト: `false`）
 - `EMBEDDING_PROVIDER` — Embeddingプロバイダー（`"local"` / `"online"`、デフォルト: `"local"`）
-- `RAG_ALLOWED_DOMAINS` — クロール許可ドメインのカンマ区切りリスト（SSRF対策、未設定時はクロール拒否）
 - 詳細設定は `docs/specs/f9-rag-knowledge.md` を参照
 
 ## 開発ルール
@@ -109,8 +108,8 @@
 
 ### レビュー指摘対応
 
-PRに対するレビュー指摘（Copilot、人間問わず）への対応は `/fix-reviews` スキルを使用する。
-ユーザーが以下のような表現でレビュー対応を依頼した場合、自律的に `/fix-reviews` スキルを呼び出すこと:
+PRに対するレビュー指摘（Copilot、人間問わず）への対応は `/check-pr` スキルを使用する。
+ユーザーが以下のような表現でレビュー対応を依頼した場合、自律的に `/check-pr` スキルを呼び出すこと:
 
 - 「指摘をチェックして」「レビューを確認して」「レビュー指摘に対応して」
 - 「コメントを修正して」「レビューコメントを直して」
@@ -170,11 +169,11 @@ PRに対するレビュー指摘（Copilot、人間問わず）への対応は `
 |--------|------|--------|
 | `/doc-gen` | ドキュメント新規作成（仕様書・レトロ） | `/doc-gen spec feed-collection` |
 | `/doc-edit` | 既存ドキュメントの更新・修正 | `/doc-edit docs/specs/f2-feed-collection.md` |
-| `/fix-reviews` | PRレビュー指摘の確認・修正対応 | `/fix-reviews` |
+| `/check-pr` | PRの内容確認・レビュー指摘対応・実装継続 | `/check-pr 123` |
 
 **定義ファイル**: `.claude/skills/` 配下
 **仕様書**: `docs/specs/doc-gen-skill.md`（`/doc-gen`, `/doc-edit` 用）
-**補足**: `/fix-reviews` は `.claude/skills/fix-reviews/SKILL.md` の定義のみで、`docs/specs/` 配下に専用の仕様書はありません。
+**補足**: `/check-pr` は `.claude/skills/check-pr/SKILL.md` の定義のみで、`docs/specs/` 配下に専用の仕様書はありません。
 
 ### サブエージェント（自動委譲タスク）
 
@@ -195,4 +194,4 @@ PRに対するレビュー指摘（Copilot、人間問わず）への対応は `
 - **スキル**: ユーザーが `/コマンド名` で明示的に実行するワークフロー（ドキュメント生成、レビュー対応など）
 - **サブエージェント**: 実装作業中に Claude が自律的に呼び出す専門家（テスト実行、計画立案、品質レビューなど）
 
-例: レビュー指摘対応では `/fix-reviews` スキルが起動し、その中で **test-runner** や **doc-reviewer** サブエージェントが自動的に呼び出されます。
+例: PR確認・レビュー対応では `/check-pr` スキルが起動し、その中で **test-runner** や **doc-reviewer** サブエージェントが自動的に呼び出されます。
