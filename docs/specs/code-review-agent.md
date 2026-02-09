@@ -6,7 +6,7 @@ Claude Code が生成・変更したコードに対して、コミット前に�
 
 ## 背景
 
-AI Assistantプロジェクトでは、Claude Code が生成したコードがPR作成後に Copilot レビューで初めて問題を指摘されるケースが頻発している。
+AI Assistantプロジェクトでは、Claude Code が生成したコードがPR作成後に 自動レビューツール（CodeRabbit等）で初めて問題を指摘されるケースが頻発している。
 
 PR #140（Bot重複起動検知）で検出された典型的な問題:
 
