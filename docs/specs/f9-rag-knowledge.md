@@ -108,10 +108,6 @@ bot: 削除しました: https://example.com/guide/getting-started (8チャン�
 ### 出力例（エラー系）
 
 ```
-bot: エラー: 指定されたURLのドメインが許可リストに含まれていません。
-     URL: https://malicious-site.com/page
-     許可ドメイン: example.com, docs.python.org
-
 bot: エラー: RAG機能が無効です。管理者に連絡してください。
 
 bot: エラー: クロールに失敗しました。
@@ -357,21 +353,19 @@ class WebCrawler:
     def __init__(
         self,
         timeout: float = 30.0,
-        allowed_domains: list[str] | None = None,
         max_pages: int = 50,
         crawl_delay: float = 1.0,
     ) -> None:
         self._timeout = aiohttp.ClientTimeout(total=timeout)
-        self._allowed_domains = set(allowed_domains or [])
         self._max_pages = max_pages
         self._crawl_delay = crawl_delay
 
-    def _validate_url(self, url: str) -> str:
-        """SSRF対策のURL検証. 問題なければ正規化済みURLを返す.
+    def validate_url(self, url: str) -> str:
+        """URL検証. 問題なければ正規化済みURLを返す.
 
         検証内容:
         - スキームが http または https であること
-        - ホスト名が allowed_domains に含まれること
+        - ホスト名がプライベートIP/localhost/リンクローカルでないこと（SSRF対策）
         - 検証失敗時は ValueError を送出
         """
 
@@ -380,7 +374,8 @@ class WebCrawler:
     ) -> list[str]:
         """リンク集ページ内の <a> タグからURLリストを抽出する（深度1のみ、再帰クロールは行わない）.
 
-        - index_url および抽出したリンクURLを _validate_url() で検証
+        - index_url を validate_url() で検証（http/https スキームのみ許可）
+        - ページ内の <a> タグから抽出した各リンクURLも validate_url() で検証し、不正なURLは除外する
         - 抽出URL数が max_pages を超える場合は先頭 max_pages 件に制限
 
         Args:
@@ -391,7 +386,7 @@ class WebCrawler:
     async def crawl_page(self, url: str) -> CrawledPage | None:
         """単一ページの本文テキストを取得する. 失敗時は None.
 
-        - _validate_url() でURL検証後にHTTPアクセスを行う
+        - validate_url() でURL検証後にHTTPアクセスを行う
         """
 
     async def crawl_pages(self, urls: list[str]) -> list[CrawledPage]:
@@ -405,10 +400,14 @@ class WebCrawler:
 
 Slackコマンド経由でユーザーが任意のURLを指定できるため、サーバーサイドからのリクエストを安全に制限する。
 
-- **ドメインホワイトリスト（必須）**: `RAG_ALLOWED_DOMAINS` に設定されたドメインのみクロールを許可する。未設定の場合は `rag crawl` / `rag add` コマンドを拒否する
 - **スキーム制限**: `http://` と `https://` のみ許可。`file:`, `ftp:` 等は拒否する
-- **リンク先の検証**: `crawl_index_page()` で抽出したリンクURLについても同じドメインホワイトリストで検証する
-- **URL安全性チェック（将来実装予定）**: Google Safe Browsing API によるマルウェア・フィッシング判定機能を検討中
+- **プライベートIPブロック**: DNS解決後のIPアドレスを検証し、以下へのアクセスを拒否する
+  - localhost / 127.0.0.0/8（ループバック）
+  - 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16（RFC1918 プライベート）
+  - 169.254.0.0/16（リンクローカル、AWS metadata endpoint 等）
+  - IPv6 ループバック (::1)、ユニークローカル (fc00::/7)、リンクローカル (fe80::/10)
+- **リダイレクト無効化**: SSRFを防ぐため、HTTPリダイレクトの追従を無効化する
+- **URL安全性チェック（将来実装予定）**: Google Safe Browsing API によるマルウェア・フィッシング判定機能を検討中（Issue #159）
 
 **クロール制御**:
 
@@ -588,7 +587,6 @@ if settings.rag_enabled:
     embedding = get_embedding_provider(settings, settings.embedding_provider)
     vector_store = VectorStore(embedding, settings.chromadb_persist_dir)
     web_crawler = WebCrawler(
-        allowed_domains=settings.rag_allowed_domains,
         max_pages=settings.rag_max_crawl_pages,
         crawl_delay=settings.rag_crawl_delay_sec,
     )
@@ -620,7 +618,6 @@ class Settings(BaseSettings):
     rag_chunk_size: int = 500
     rag_chunk_overlap: int = 50
     rag_retrieval_count: int = 5
-    rag_allowed_domains: str = ""  # カンマ区切り、get_rag_allowed_domains()でlist変換
     rag_max_crawl_pages: int = 50
     rag_crawl_delay_sec: float = 1.0
 ```
@@ -637,7 +634,6 @@ CHROMADB_PERSIST_DIR=./chroma_db
 RAG_CHUNK_SIZE=500
 RAG_CHUNK_OVERLAP=50
 RAG_RETRIEVAL_COUNT=5
-RAG_ALLOWED_DOMAINS=example.com,docs.python.org
 RAG_MAX_CRAWL_PAGES=50
 RAG_CRAWL_DELAY_SEC=1.0
 ```
@@ -673,10 +669,9 @@ RAG_CRAWL_DELAY_SEC=1.0
 
 ### セキュリティ・クロール制御
 
-- [ ] **AC30**: `RAG_ALLOWED_DOMAINS` に含まれないドメインのURLがクロール拒否されること
 - [ ] **AC31**: `http` / `https` 以外のスキーム（`file:`, `ftp:` 等）が拒否されること
-- [ ] **AC32**: `crawl_index_page()` で抽出したリンクURLもドメインホワイトリストで検証されること
-- [ ] **AC33**: `RAG_ALLOWED_DOMAINS` が未設定の場合、`rag crawl` / `rag add` コマンドが拒否されること
+- [ ] **AC32**: プライベートIP（127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16）へのアクセスが拒否されること
+- [ ] **AC33**: HTTPリダイレクトの追従が無効化されていること
 - [ ] **AC34**: 1回のクロールで取得するページ数が `RAG_MAX_CRAWL_PAGES` で制限されること
 - [ ] **AC35**: 同一ドメインへの連続リクエスト間に `RAG_CRAWL_DELAY_SEC` の待機が挿入されること
 
@@ -769,10 +764,13 @@ RAG_CRAWL_DELAY_SEC=1.0
 | `tests/test_web_crawler.py` | `test_ac13_url_pattern_filtering` | AC13 |
 | `tests/test_web_crawler.py` | `test_ac14_crawl_page_extracts_text` | AC14 |
 | `tests/test_web_crawler.py` | `test_ac15_crawl_pages_isolates_errors` | AC15 |
-| `tests/test_web_crawler.py` | `test_ac30_disallowed_domain_rejected` | AC30 |
 | `tests/test_web_crawler.py` | `test_ac31_non_http_scheme_rejected` | AC31 |
-| `tests/test_web_crawler.py` | `test_ac32_extracted_links_validated` | AC32 |
-| `tests/test_web_crawler.py` | `test_ac33_empty_allowlist_rejects_all` | AC33 |
+| `tests/test_web_crawler.py` | `test_localhost_rejected` | AC32 |
+| `tests/test_web_crawler.py` | `test_loopback_ip_rejected` | AC32 |
+| `tests/test_web_crawler.py` | `test_private_ip_rejected` | AC32 |
+| `tests/test_web_crawler.py` | `test_link_local_ip_rejected` | AC32 |
+| `tests/test_web_crawler.py` | `test_crawl_page_rejects_redirect` | AC33 |
+| `tests/test_web_crawler.py` | `test_crawl_index_page_rejects_redirect` | AC33 |
 | `tests/test_web_crawler.py` | `test_ac34_max_crawl_pages_limit` | AC34 |
 | `tests/test_web_crawler.py` | `test_ac35_crawl_delay_between_requests` | AC35 |
 
@@ -845,5 +843,4 @@ RAG_CRAWL_DELAY_SEC=1.0
 5. **LLMコンテキストウィンドウ**: 多数のチャンクが注入されるとトークン上限に近づく可能性がある。`RAG_RETRIEVAL_COUNT` で検索件数を制限し、対応する
 6. **既存テストへの影響**: RAGサービスはオプショナル注入のため、既存テストに変更は不要
 7. **robots.txt**: 初期実装では `robots.txt` の解析・遵守は行わない。User-Agentはaiohttpデフォルトを使用し、将来的に対応を検討する
-8. **SSRF対策**: `RAG_ALLOWED_DOMAINS` によるドメインホワイトリストが主防御。未設定時はクロールコマンドを拒否する
-9. **URL安全性チェック**: 将来実装予定。Google Safe Browsing API による判定機能を検討中
+8. **SSRF対策**: スキーム検証（http/httpsのみ）とリダイレクト無効化で対応。将来的にGoogle Safe Browsing APIによるURL安全性チェックを検討中（Issue #159）

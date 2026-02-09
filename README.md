@@ -43,7 +43,6 @@ cp .env.example .env  # 各種トークン・APIキーを設定
 | `CHAT_LLM_PROVIDER` | チャット応答のLLMプロバイダー（`local` / `online`） |
 | `MCP_ENABLED` | MCP機能の有効/無効（`true` / `false`、デフォルト: `false`） |
 | `RAG_ENABLED` | RAG機能の有効/無効（`true` / `false`、デフォルト: `false`） |
-| `RAG_ALLOWED_DOMAINS` | クロール許可ドメイン（カンマ区切り、SSRF対策） |
 
 詳細は `.env.example` を参照してください。
 
