@@ -13,41 +13,38 @@
 
 ### RAGアーキテクチャの概要
 
-```
-┌─────────────────────────────────────────────────┐
-│              Slack (ユーザーインターフェース)         │
-│  rag crawl / rag add / rag status / rag delete  │
-└───────────────────────┬─────────────────────────┘
-                        │
-┌───────────────────────▼─────────────────────────┐
-│          RAGKnowledgeService（オーケストレーション）   │
-│  - ingest_from_index()  - retrieve()            │
-│  - ingest_page()        - get_stats()           │
-└──┬──────────────┬───────────────┬───────────────┘
-   │              │               │
-┌──▼────┐  ┌─────▼──────┐  ┌────▼────────┐
-│ Web   │  │ Chunker    │  │ VectorStore │
-│Crawler│  │ (テキスト   │  │ (ChromaDB)  │
-│       │  │  分割)     │  │             │
-└───────┘  └────────────┘  └──────┬──────┘
-                                  │
-                           ┌──────▼──────┐
-                           │ Embedding   │
-                           │ Provider    │
-                           │ (LM Studio  │
-                           │  / OpenAI)  │
-                           └─────────────┘
+```mermaid
+flowchart TB
+    subgraph Slack["Slack (ユーザーインターフェース)"]
+        CMD["rag crawl / rag add / rag status / rag delete"]
+    end
+
+    subgraph RAG["RAGKnowledgeService（オーケストレーション）"]
+        INGEST["ingest_from_index() / ingest_page()"]
+        RETRIEVE["retrieve() / get_stats()"]
+    end
+
+    CRAWLER["WebCrawler"]
+    CHUNKER["Chunker<br/>(テキスト分割)"]
+    VECTOR["VectorStore<br/>(ChromaDB)"]
+    EMBED["Embedding Provider<br/>(LM Studio / OpenAI)"]
+
+    Slack --> RAG
+    RAG --> CRAWLER
+    RAG --> CHUNKER
+    RAG --> VECTOR
+    VECTOR --> EMBED
 ```
 
 **チャット応答時のフロー**:
 
-```
-1. ユーザーがSlackで質問
-2. ChatService が RAGKnowledgeService.retrieve(質問文) を呼び出し
-3. 質問文をEmbedding → ChromaDBで類似チャンク検索
-4. 関連知識をシステムプロンプトに付加
-5. LLMが関連知識を踏まえて応答を生成
-6. 応答をSlackに投稿
+```mermaid
+flowchart LR
+    A["1. ユーザーがSlackで質問"] --> B["2. ChatService が<br/>retrieve(質問文) 呼び出し"]
+    B --> C["3. 質問文をEmbedding →<br/>ChromaDBで類似チャンク検索"]
+    C --> D["4. 関連知識を<br/>システムプロンプトに付加"]
+    D --> E["5. LLMが関連知識を<br/>踏まえて応答を生成"]
+    E --> F["6. 応答をSlackに投稿"]
 ```
 
 ## ユーザーストーリー

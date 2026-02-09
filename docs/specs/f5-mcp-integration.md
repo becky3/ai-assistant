@@ -16,18 +16,19 @@ Model Context Protocol (MCP) を活用して、チャットボットが外部ツ
 
 MCPは3層のクライアント・サーバーモデルで構成される：
 
-```
-┌─────────────────────────────────────────┐
-│           MCP Host（AIアプリ）             │
-│  ┌──────────┐  ┌──────────┐             │
-│  │MCP Client│  │MCP Client│  ...        │
-│  └────┬─────┘  └────┬─────┘             │
-└───────┼──────────────┼──────────────────┘
-        │              │
-  ┌─────▼─────┐  ┌─────▼─────┐
-  │MCP Server │  │MCP Server │
-  │ (天気予報) │  │ (将来拡張) │
-  └───────────┘  └───────────┘
+```mermaid
+flowchart TB
+    subgraph Host["MCP Host（AIアプリ）"]
+        CLIENT1["MCP Client"]
+        CLIENT2["MCP Client"]
+        CLIENTN["..."]
+    end
+
+    SERVER1["MCP Server<br/>(天気予報)"]
+    SERVER2["MCP Server<br/>(将来拡張)"]
+
+    CLIENT1 --> SERVER1
+    CLIENT2 --> SERVER2
 ```
 
 - **Host**: AI Assistant（Slackボット）がホストとして機能
