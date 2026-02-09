@@ -4,6 +4,9 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
+
 from slack_bolt.async_app import AsyncApp
 from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 
@@ -23,3 +26,15 @@ async def start_socket_mode(app: AsyncApp, settings: Settings) -> None:
     """Socket Mode でアプリを起動する."""
     handler = AsyncSocketModeHandler(app, settings.slack_app_token)
     await handler.start_async()  # type: ignore[no-untyped-call]
+
+
+@asynccontextmanager
+async def socket_mode_handler(
+    app: AsyncApp, settings: Settings
+) -> AsyncIterator[AsyncSocketModeHandler]:
+    """Socket Mode ハンドラーのコンテキストマネージャー."""
+    handler = AsyncSocketModeHandler(app, settings.slack_app_token)
+    try:
+        yield handler
+    finally:
+        await handler.close_async()  # type: ignore[no-untyped-call]

@@ -38,7 +38,7 @@ from src.services.topic_recommender import TopicRecommender
 from src.services.user_profiler import UserProfiler
 from src.services.web_crawler import WebCrawler
 from src.services.safe_browsing import create_safe_browsing_client
-from src.slack.app import create_app, start_socket_mode
+from src.slack.app import create_app, socket_mode_handler
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +204,8 @@ async def main() -> None:
         )
 
         # Socket Mode で起動
-        await start_socket_mode(app, settings)
+        async with socket_mode_handler(app, settings) as handler:
+            await handler.start_async()  # type: ignore[no-untyped-call]
     finally:
         if mcp_manager:
             try:
