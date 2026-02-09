@@ -81,22 +81,36 @@ class MockResponse:
     """モックHTTPレスポンス."""
 
     def __init__(
-        self, status: int = 200, text: str = "", headers: dict[str, str] | None = None
+        self,
+        status: int = 200,
+        text: str = "",
+        headers: dict[str, str] | None = None,
+        raw_bytes: bytes | None = None,
     ) -> None:
         self.status = status
         self._text = text
         self.headers: dict[str, str] = headers or {}
+        self._raw_bytes = raw_bytes
 
     async def text(self, errors: str = "strict") -> str:  # noqa: ARG002
         return self._text
+
+    async def read(self) -> bytes:
+        """レスポンスボディをバイト列として返す."""
+        if self._raw_bytes is not None:
+            return self._raw_bytes
+        return self._text.encode("utf-8")
 
 
 class MockClientSession:
     """モックaiohttpクライアントセッション."""
 
-    def __init__(self, status: int = 200, text: str = "") -> None:
+    def __init__(
+        self, status: int = 200, text: str = "", raw_bytes: bytes | None = None
+    ) -> None:
         self._status = status
         self._text = text
+        self._raw_bytes = raw_bytes
 
     async def __aenter__(self) -> "MockClientSession":
         return self
@@ -105,21 +119,26 @@ class MockClientSession:
         pass
 
     def get(self, url: str, **kwargs: object) -> "MockContextManager":  # noqa: ARG002
-        return MockContextManager(self._status, self._text)
+        return MockContextManager(self._status, self._text, raw_bytes=self._raw_bytes)
 
 
 class MockContextManager:
     """モックコンテキストマネージャ（session.get()の戻り値）."""
 
     def __init__(
-        self, status: int, text: str, headers: dict[str, str] | None = None
+        self,
+        status: int,
+        text: str,
+        headers: dict[str, str] | None = None,
+        raw_bytes: bytes | None = None,
     ) -> None:
         self._status = status
         self._text = text
         self._headers = headers
+        self._raw_bytes = raw_bytes
 
     async def __aenter__(self) -> MockResponse:
-        return MockResponse(self._status, self._text, self._headers)
+        return MockResponse(self._status, self._text, self._headers, self._raw_bytes)
 
     async def __aexit__(self, *args: object) -> None:
         pass
@@ -530,3 +549,145 @@ class TestWebCrawlerConcurrency:
 
         # 同時実行数が max_concurrent を超えていないことを確認
         assert max_observed_concurrent <= max_concurrent
+
+
+# エンコーディング検出用のHTMLサンプル
+SAMPLE_HTML_SHIFT_JIS = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="Shift_JIS">
+    <title>日本語ページ</title>
+</head>
+<body>
+    <article>
+        <h1>Shift_JISエンコード</h1>
+        <p>これはShift_JISでエンコードされたページです。</p>
+    </article>
+</body>
+</html>
+"""
+
+SAMPLE_HTML_EUC_JP = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="EUC-JP">
+    <title>EUC-JPページ</title>
+</head>
+<body>
+    <article>
+        <h1>EUC-JPエンコード</h1>
+        <p>これはEUC-JPでエンコードされたページです。</p>
+    </article>
+</body>
+</html>
+"""
+
+
+class TestWebCrawlerEncodingDetection:
+    """WebCrawler エンコーディング自動検出のテスト."""
+
+    @pytest.mark.asyncio
+    async def test_ac14_shift_jis_encoding_detected(self) -> None:
+        """AC14: Shift_JISエンコードされたHTMLが正しくデコードされること."""
+        crawler = WebCrawler()
+
+        # Shift_JISでエンコードされたバイト列を作成
+        shift_jis_bytes = SAMPLE_HTML_SHIFT_JIS.encode("shift_jis")
+
+        with patch(
+            "src.services.web_crawler.aiohttp.ClientSession",
+            return_value=MockClientSession(200, raw_bytes=shift_jis_bytes),
+        ):
+            page = await crawler.crawl_page("https://example.com/shift_jis_page")
+
+        assert page is not None
+        assert page.title == "日本語ページ"
+        assert "Shift_JISエンコード" in page.text
+        assert "これはShift_JISでエンコードされたページです" in page.text
+
+    @pytest.mark.asyncio
+    async def test_ac14_utf8_encoding_detected(self) -> None:
+        """AC14: UTF-8エンコードされたHTMLが正しくデコードされること."""
+        crawler = WebCrawler()
+
+        # UTF-8でエンコードされたバイト列を作成
+        utf8_bytes = SAMPLE_HTML_WITH_ARTICLE.encode("utf-8")
+
+        with patch(
+            "src.services.web_crawler.aiohttp.ClientSession",
+            return_value=MockClientSession(200, raw_bytes=utf8_bytes),
+        ):
+            page = await crawler.crawl_page("https://example.com/utf8_page")
+
+        assert page is not None
+        assert page.title == "テスト記事"
+        assert "これは記事の本文です" in page.text
+
+    @pytest.mark.asyncio
+    async def test_ac14_euc_jp_encoding_detected(self) -> None:
+        """AC14: EUC-JPエンコードされたHTMLが正しくデコードされること."""
+        crawler = WebCrawler()
+
+        # EUC-JPでエンコードされたバイト列を作成
+        euc_jp_bytes = SAMPLE_HTML_EUC_JP.encode("euc_jp")
+
+        with patch(
+            "src.services.web_crawler.aiohttp.ClientSession",
+            return_value=MockClientSession(200, raw_bytes=euc_jp_bytes),
+        ):
+            page = await crawler.crawl_page("https://example.com/euc_jp_page")
+
+        assert page is not None
+        assert page.title == "EUC-JPページ"
+        assert "EUC-JPエンコード" in page.text
+        assert "これはEUC-JPでエンコードされたページです" in page.text
+
+    @pytest.mark.asyncio
+    async def test_ac14_encoding_detection_fallback(self) -> None:
+        """AC14: エンコーディング検出に失敗した場合、UTF-8でフォールバックすること."""
+        crawler = WebCrawler()
+
+        # 無効なバイト列（UTF-8として解釈できない部分を含む）
+        # 0x80-0xFFの単独バイトはUTF-8として不正
+        invalid_bytes = b"<html><body>Test content with invalid byte: \x80\xff</body></html>"
+
+        with patch(
+            "src.services.web_crawler.aiohttp.ClientSession",
+            return_value=MockClientSession(200, raw_bytes=invalid_bytes),
+        ):
+            page = await crawler.crawl_page("https://example.com/invalid_encoding")
+
+        # フォールバックでデコードされ、置換文字が使用されることを確認
+        assert page is not None
+        assert "Test content" in page.text
+
+    @pytest.mark.asyncio
+    async def test_ac14_crawl_index_page_with_shift_jis(self) -> None:
+        """AC14: crawl_index_pageでもShift_JISが正しくデコードされること."""
+        crawler = WebCrawler()
+
+        # Shift_JISでエンコードされたリンク集ページ
+        shift_jis_index = """
+<!DOCTYPE html>
+<html>
+<head><title>リンク集</title></head>
+<body>
+    <a href="/article/1">記事1</a>
+    <a href="/article/2">記事2</a>
+</body>
+</html>
+"""
+        shift_jis_bytes = shift_jis_index.encode("shift_jis")
+
+        with patch(
+            "src.services.web_crawler.aiohttp.ClientSession",
+            return_value=MockClientSession(200, raw_bytes=shift_jis_bytes),
+        ):
+            urls = await crawler.crawl_index_page("https://example.com/index")
+
+        # URLが正しく抽出されていることを確認
+        assert len(urls) == 2
+        assert "https://example.com/article/1" in urls
+        assert "https://example.com/article/2" in urls

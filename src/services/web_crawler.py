@@ -16,6 +16,7 @@ from urllib.parse import urljoin, urlparse
 
 import aiohttp
 from bs4 import BeautifulSoup
+from charset_normalizer import from_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +91,24 @@ class WebCrawler:
         self._validate_hostname_not_private(hostname)
 
         return url
+
+    async def _decode_response(self, resp: aiohttp.ClientResponse) -> str:
+        """レスポンスボディをエンコーディング自動検出でデコードする.
+
+        charset_normalizerを使用してエンコーディングを自動検出し、
+        日本語サイトのShift_JIS/EUC-JP等にも対応する。
+
+        Args:
+            resp: aiohttpのレスポンスオブジェクト
+
+        Returns:
+            デコードされたHTML文字列
+        """
+        raw_bytes = await resp.read()
+        detected = from_bytes(raw_bytes).best()
+        if detected:
+            return str(detected)
+        return raw_bytes.decode("utf-8", errors="replace")
 
     def _validate_hostname_not_private(self, hostname: str) -> None:
         """ホスト名がプライベートIP/localhost/リンクローカルでないことを検証する.
@@ -241,7 +260,7 @@ class WebCrawler:
                 if resp.status != 200:
                     logger.warning("Failed to fetch index page: %s (status=%d)", index_url, resp.status)
                     return []
-                html = await resp.text(errors="replace")
+                html = await self._decode_response(resp)
 
         # リンク抽出
         soup = BeautifulSoup(html, "html.parser")
@@ -314,7 +333,7 @@ class WebCrawler:
                         if resp.status != 200:
                             logger.warning("Failed to fetch page: %s (status=%d)", url, resp.status)
                             return None
-                        html = await resp.text(errors="replace")
+                        html = await self._decode_response(resp)
 
             title, text = self._extract_text(html)
             crawled_at = datetime.now(tz=timezone.utc).isoformat()
