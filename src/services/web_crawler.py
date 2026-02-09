@@ -12,7 +12,7 @@ import re
 import socket
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urldefrag, urljoin, urlparse
 
 import aiohttp
 from bs4 import BeautifulSoup
@@ -58,9 +58,10 @@ class WebCrawler:
         self._semaphore = asyncio.Semaphore(max_concurrent)
 
     def validate_url(self, url: str) -> str:
-        """URL検証. 問題なければ検証済みURLを返す.
+        """URL検証・正規化. 問題なければ正規化済みURLを返す.
 
-        検証内容:
+        検証・正規化内容:
+        - URLフラグメント（#以降）を除去
         - スキームが http または https であること
         - ホスト名がプライベートIP/localhost/リンクローカルでないこと（SSRF対策）
         - 検証失敗時は ValueError を送出
@@ -69,12 +70,14 @@ class WebCrawler:
             url: 検証するURL
 
         Returns:
-            検証済みURL（現時点では入力URLをそのまま返す）
+            正規化済みURL（フラグメント除去済み）
 
         Raises:
             ValueError: URL検証に失敗した場合
         """
-        parsed = urlparse(url)
+        # フラグメント除去（#以降を除去して正規化）
+        defragmented_url, _ = urldefrag(url)
+        parsed = urlparse(defragmented_url)
 
         # スキーム検証
         if parsed.scheme not in ("http", "https"):
@@ -90,7 +93,7 @@ class WebCrawler:
         # SSRF対策: プライベートIP/localhost/リンクローカルをブロック
         self._validate_hostname_not_private(hostname)
 
-        return url
+        return defragmented_url
 
     async def _decode_response(self, resp: aiohttp.ClientResponse) -> str:
         """レスポンスボディをエンコーディング自動検出でデコードする.
@@ -274,23 +277,26 @@ class WebCrawler:
             # 相対URLを絶対URLに変換
             absolute_url = urljoin(index_url, href)
 
-            # 重複スキップ
-            if absolute_url in seen:
+            # フラグメント除去（DNS解決を含むvalidate_url()より先に実行）
+            normalized_url, _ = urldefrag(absolute_url)
+
+            # 正規化済みURLで重複スキップ
+            if normalized_url in seen:
                 continue
 
-            # パターンフィルタリング
-            if pattern and not pattern.search(absolute_url):
+            # パターンフィルタリング（正規化済みURLに対して適用）
+            if pattern and not pattern.search(normalized_url):
                 continue
 
-            # スキーム検証（http/https以外は除外）
-            # 将来のURL安全性チェック機能（Issue #159）に備えて検証を維持
+            # スキーム検証・SSRF対策（DNS解決を含むので最後に実行）
+            # 重複・パターンで弾かれたURLには問い合わせしない
             try:
-                self.validate_url(absolute_url)
+                self.validate_url(normalized_url)
             except ValueError:
                 continue
 
-            seen.add(absolute_url)
-            urls.append(absolute_url)
+            seen.add(normalized_url)
+            urls.append(normalized_url)
 
             # max_pages に達したら終了
             if len(urls) >= self._max_pages:
@@ -339,7 +345,7 @@ class WebCrawler:
             crawled_at = datetime.now(tz=timezone.utc).isoformat()
 
             return CrawledPage(
-                url=url,
+                url=validated_url,
                 title=title,
                 text=text,
                 crawled_at=crawled_at,
