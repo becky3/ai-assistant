@@ -36,6 +36,7 @@ Thumbs.db
 !.claude/scripts/
 !.claude/skills/
 !.claude/agents/
+!.claude/team-themes/
 
 # Process guard
 bot.pid
