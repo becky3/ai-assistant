@@ -209,3 +209,24 @@ PRに対するレビュー指摘（Copilot、人間問わず）への対応は `
 | 複数視点でのバグ調査 | **エージェントチーム** | 仮説の議論が必要 |
 
 **詳細仕様・プロンプトテンプレート**: `docs/specs/agent-teams.md`
+
+### GitHub Actions 環境（claude-code-action）
+
+GitHub Actions で `anthropics/claude-code-action` を使用する場合の制約事項。
+
+**対話不可の制約**:
+
+- `AskUserQuestion` ツールは使用不可（`permission_denials` で拒否される）
+- 不明点があっても質問せずに、以下の原則で自分で判断して進めること:
+  - 情報不足で判断できない場合は、最も妥当な選択を行い、その判断理由をコメントに明記する
+  - 曖昧な指示は、CLAUDE.md のルールに基づいて解釈する
+  - 完璧を求めず、まず動くものを作ることを優先する
+
+**タスク完了時の必須アクション**:
+
+- PRを作成したら、必ず対応したIssueに「新規コメント」として完了報告を投稿すること
+- 既存コメントの編集ではなく、新しいコメントを追加する（編集では通知が飛ばないため）
+- コマンド: `gh issue comment <Issue番号> --body "対応が完了しました。PR #<PR番号> をご確認ください。"`
+
+**設定ファイル**: `.github/workflows/claude.yml`
+**レトロスペクティブ**: `docs/retro/claude-code-action.md`

@@ -12,6 +12,7 @@ GitHub Actions で `anthropics/claude-code-action` を使用した自動化ワ�
 - PR #180: AskUserQuestion 制約の明示
 - PR #181: claude-code-action バージョン更新
 - PR #182: コミットSHA修正
+- PR #183: prompt 削除・Slack通知追加（根本原因対応）
 
 ---
 
@@ -162,12 +163,73 @@ gh api repos/anthropics/claude-code-action/git/refs/tags/v1.0.46 --jq '.object.s
 
 ---
 
+## 2026-02-09: Agent Mode ではコメントが投稿されない問題（根本原因）
+
+### 発生した問題
+
+AskUserQuestion 制約の追加、バージョン更新、コミットSHA修正を行っても、Claude の処理結果が GitHub コメントとして投稿されなかった。
+
+### 原因（根本原因）
+
+`prompt` パラメータを設定すると **Agent Mode** が有効になり、**コメント投稿機能が設計上無効化される**。
+
+claude-code-action のソースコード調査により判明：
+
+- **Tag Mode**（`@claude` メンション、`prompt` なし）: `commentId` を追跡し、コメントを投稿・更新する
+- **Agent Mode**（`prompt` あり）: `commentId: undefined` を返し、コメント投稿をスキップする
+
+これは**バグではなく仕様**。Agent Mode は CI/CD パイプライン等での自動処理を想定しており、対話的なコメント投稿は想定されていない。
+
+### 解決策
+
+1. **`prompt` パラメータを削除**: Tag Mode に戻し、コメント投稿機能を復活させる
+2. **Slack 通知を追加**: ワークフロー完了時に Slack で通知を受け取る
+3. **制約を CLAUDE.md に移動**: GitHub Actions 環境の制約は CLAUDE.md に記載し、Tag Mode でも読み込まれるようにする
+
+```yaml
+# prompt パラメータを削除（Tag Mode に戻す）
+- uses: anthropics/claude-code-action@5994afaaa7f44611addc97a696a135acff5fd218 # v1.0.46
+  with:
+    claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+    github_token: ${{ secrets.GITHUB_TOKEN }}
+    # prompt パラメータなし → Tag Mode
+
+# Slack 通知を追加
+- name: Slack notification
+  if: always()
+  uses: 8398a7/action-slack@v3
+  with:
+    status: ${{ job.status }}
+    fields: repo,message,commit,author,action,eventName,ref,workflow
+  env:
+    SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+```
+
+### 学び
+
+1. **Tag Mode と Agent Mode の違いを理解する**: `prompt` パラメータの有無でモードが切り替わる
+2. **Agent Mode はコメント投稿しない**: これは仕様であり、バグではない
+3. **通知が必要なら別の手段を使う**: Slack 通知、メール通知等を併用する
+4. **制約は永続的な場所に書く**: prompt ではなく CLAUDE.md に書けば、どのモードでも読み込まれる
+
+---
+
 ## 次に活かすこと
 
-- claude-code-action の設定変更時は、**対話型/オートメーションの両モードの挙動**を確認する
-- `prompt` パラメータを使う場合は、元のトリガー内容を含めることを忘れない
+### claude-code-action の設定
+
+- **Tag Mode と Agent Mode の違いを理解する**: `prompt` パラメータの有無でモードが切り替わり、挙動が大きく異なる
+- **Agent Mode はコメント投稿しない**: コメント通知が必要なら Tag Mode を使うか、Slack 等の別手段を併用する
+- **制約は CLAUDE.md に書く**: prompt に書くと Agent Mode になってしまう。CLAUDE.md なら Tag Mode でも読み込まれる
 - GitHub Actions のワークフロー変更後は、実際にトリガーして動作確認する（ログを確認）
-- **非対話環境の制約を明示する**: GitHub Actions 等では `AskUserQuestion` が使えないことを prompt で伝える
+
+### GitHub Actions 環境
+
+- **非対話環境の制約を CLAUDE.md に明示する**: `AskUserQuestion` が使えないことを記載する
 - **ログの `permission_denials` を確認**: ツール拒否が発生していないかチェックする
+
+### バージョン管理
+
 - **定期的にバージョンを更新する**: `@v1` 等のメジャータグは古い可能性がある
 - **Copilot の提案は検証する**: 特にコミットSHA等の具体的な値は `gh api` で確認してから適用する
+- **SHA の取得方法**: `gh api repos/{owner}/{repo}/git/refs/tags/{tag} --jq '.object.sha'`
