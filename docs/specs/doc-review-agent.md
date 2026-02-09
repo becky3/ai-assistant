@@ -36,7 +36,7 @@ AI Assistantプロジェクトは仕様駆動開発を採用しており、す�
 name: doc-reviewer
 description: 仕様書(docs/specs/*.md)とREADME.mdの品質レビュー専門家。仕様駆動開発の観点から不足・過剰な情報を検出し、改善提案を行う。ドキュメント作成・更新後に積極的に使用する。
 tools: Read, Grep, Glob, Bash
-permissionMode: default
+permissionMode: bypassPermissions
 ```
 
 ※ `model` フィールドは省略（デフォルトモデルを使用）。これはプロジェクト全体で統一された方針であり、許容パターンとして定義されている。
