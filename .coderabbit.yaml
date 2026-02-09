@@ -1,0 +1,72 @@
+# CodeRabbit Configuration
+# https://docs.coderabbit.ai/guides/configure-coderabbit
+
+language: ja-JP
+
+reviews:
+  profile: chill
+  high_level_summary: true
+  poem: false
+  sequence_diagrams: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+    ignore_title_keywords:
+      - WIP
+      - "[WIP]"
+      - "Draft"
+  path_filters:
+    - "!**/__pycache__/**"
+    - "!**/.venv/**"
+    - "!**/*.pyc"
+    - "!**/*.pyo"
+    - "!**/*.db"
+    - "!**/chroma_db/**"
+    - "!**/.pytest_cache/**"
+    - "!**/.mypy_cache/**"
+    - "!**/.ruff_cache/**"
+    - "!**/node_modules/**"
+    - "!**/*.egg-info/**"
+    - "!**/dist/**"
+    - "!**/build/**"
+    - "!**/*.log"
+    - "!**/bot.pid"
+  path_instructions:
+    - path: "src/**"
+      instructions: |
+        Python 3.11+のコード。型アノテーション必須、mypy strict準拠。
+        セキュリティ、エラーハンドリング、型安全性を重視してレビュー。
+    - path: "tests/**"
+      instructions: |
+        pytestテストコード。テスト名はAC番号と対応（test_ac1_*, test_ac2_*等）。
+        テストカバレッジと境界値テストを確認。
+    - path: "docs/specs/**"
+      instructions: |
+        仕様書。受け入れ条件(AC)の明確さ、実装との整合性を確認。
+    - path: "mcp-servers/**"
+      instructions: |
+        MCPサーバー実装。src/のモジュールをimportしないこと（将来のリポジトリ分離制約）。
+  tools:
+    ruff:
+      enabled: true
+
+chat:
+  auto_reply: true
+
+tone_instructions: |
+  簡潔に、重要な問題に集中してレビューしてください。
+  特に以下を重視:
+  - セキュリティ上の問題（インジェクション、認証・認可の不備など）
+  - 型安全性（mypy strictに準拠しているか）
+  - エラーハンドリング（except pass禁止、適切なログ出力）
+  - 境界値・バリデーション漏れ
+  軽微なスタイルの指摘は控えめに。
+
+knowledge_base:
+  learnings:
+    scope: auto
+  issues:
+    scope: auto
+  pull_requests:
+    scope: auto

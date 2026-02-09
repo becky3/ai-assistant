@@ -917,7 +917,6 @@ class TestRAGShowSources:
     async def test_ac8_backward_compatible(self) -> None:
         """AC8: 新設定のデフォルト値により、既存の動作に影響がないこと（rag_show_sources=false）."""
         import os
-        from unittest.mock import patch
 
         from src.config.settings import Settings
 
