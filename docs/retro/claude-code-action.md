@@ -62,8 +62,49 @@ prompt: |
 
 ---
 
+## 2026-02-09: AskUserQuestion 拒否による処理中断問題
+
+### 発生した問題
+
+トリガーコメント内容は正しく渡されるようになったが、Claude が `AskUserQuestion` ツールで質問しようとして `permission_denials` で拒否され、処理が中断するようになった。
+
+### 原因
+
+GitHub Actions 環境では対話ができないため、`AskUserQuestion` ツールは使用不可。しかし Claude はこの制約を認識しておらず、曖昧な指示に対して質問しようとする。
+
+ログの該当部分：
+
+```json
+"permission_denials": [{
+  "tool_name": "AskUserQuestion",
+  "tool_input": {
+    "questions": [{"question": "「Claude導入に必要な手続き」とは何を指していますか？"...}]
+  }
+}]
+```
+
+### 解決策
+
+`prompt` パラメータに GitHub Actions 環境の制約を明示：
+
+```yaml
+【GitHub Actions環境の制約】
+この環境では対話ができない。AskUserQuestionツールは使用不可。
+不明点があっても質問せずに、自分で判断して進めること。
+```
+
+### 学び
+
+1. **GitHub Actions では対話不可**: `AskUserQuestion` は `permission_denials` で拒否される
+2. **制約の明示が必要**: Claude に環境の制約を明示的に伝えないと、使えないツールを使おうとする
+3. **曖昧な指示への対応**: 質問できない環境では「自分で判断して進める」よう指示する
+
+---
+
 ## 次に活かすこと
 
 - claude-code-action の設定変更時は、**対話型/オートメーションの両モードの挙動**を確認する
 - `prompt` パラメータを使う場合は、元のトリガー内容を含めることを忘れない
 - GitHub Actions のワークフロー変更後は、実際にトリガーして動作確認する（ログを確認）
+- **非対話環境の制約を明示する**: GitHub Actions 等では `AskUserQuestion` が使えないことを prompt で伝える
+- **ログの `permission_denials` を確認**: ツール拒否が発生していないかチェックする
