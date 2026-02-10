@@ -204,6 +204,8 @@ class HybridSearchEngine:
         doc_map: dict[str, dict[str, float | None | dict[str, str | int] | str]] = {}
 
         # ベクトル検索結果を処理
+        # 閾値を満たした結果だけでランクを進める（_convert_vector_only_resultsと一貫性を保つ）
+        vector_rank = 0
         for i, vr in enumerate(vector_results):
             # VectorStoreと同じ形式でdoc_idを生成
             source_url = str(vr.metadata.get("source_url", ""))
@@ -212,10 +214,12 @@ class HybridSearchEngine:
 
             # 閾値チェック（フィルタリングではなく、スコア計算に影響）
             if similarity_threshold is not None and vr.distance > similarity_threshold:
-                # 閾値を超えている場合はベクトル検索のランクを下げる
+                # 閾値を超えている場合はベクトル検索のRRFスコアを0に
                 vector_rank_bonus = 0.0
             else:
-                vector_rank_bonus = self._vector_weight / (self._rrf_k + i + 1)
+                # 閾値を満たした結果のみでランクを計算
+                vector_rank_bonus = self._vector_weight / (self._rrf_k + vector_rank + 1)
+                vector_rank += 1
 
             doc_map[doc_id] = {
                 "text": vr.text,

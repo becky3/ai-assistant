@@ -9,8 +9,8 @@ from src.rag.bm25_index import BM25Index, tokenize_japanese
 class TestTokenizeJapanese:
     """tokenize_japanese関数のテスト."""
 
-    def test_empty_text_returns_empty_list(self) -> None:
-        """空のテキストは空リストを返す."""
+    def test_ac7_empty_text_returns_empty_list(self) -> None:
+        """AC7: 空のテキストは空リストを返す."""
         assert tokenize_japanese("") == []
         assert tokenize_japanese("   ") == []
 
@@ -21,8 +21,8 @@ class TestTokenizeJapanese:
         # 何らかのトークンが生成される
         assert len(tokens) > 0
 
-    def test_stopwords_removed(self) -> None:
-        """ストップワードが除去される."""
+    def test_ac7_stopwords_removed(self) -> None:
+        """AC7: ストップワードが除去される."""
         tokens = tokenize_japanese("これは本です")
 
         # 「これ」「は」「です」はストップワード
@@ -30,8 +30,8 @@ class TestTokenizeJapanese:
         assert "は" not in tokens
         assert "です" not in tokens
 
-    def test_mixed_text_tokenized(self) -> None:
-        """日本語と英数字の混合テキストがトークン化される."""
+    def test_ac7_mixed_text_tokenized(self) -> None:
+        """AC7: 日本語と英数字の混合テキストがトークン化される."""
         tokens = tokenize_japanese("Python3とJavaScript")
 
         # 何らかのトークンが生成される
@@ -79,14 +79,14 @@ class TestBM25Index:
         # 残りは1件
         assert index.get_document_count() == 1
 
-    def test_search_empty_index_returns_empty_list(self) -> None:
-        """空のインデックスへの検索は空リストを返す."""
+    def test_ac6_search_empty_index_returns_empty_list(self) -> None:
+        """AC6: 空のインデックスへの検索は空リストを返す."""
         index = BM25Index()
         results = index.search("テスト")
         assert results == []
 
-    def test_search_with_no_matches_returns_empty_list(self) -> None:
-        """マッチするドキュメントがない場合は空リストを返す."""
+    def test_ac6_search_with_no_matches_returns_empty_list(self) -> None:
+        """AC6: マッチするドキュメントがない場合は空リストを返す."""
         index = BM25Index()
         index.add_documents([("doc1", "りゅうおう", "source1")])
 
@@ -99,8 +99,8 @@ class TestBM25Index:
         # 結果があってもスコアが0より大きいもののみ
         assert all(r.score > 0 for r in results)
 
-    def test_update_existing_document(self) -> None:
-        """既存ドキュメントの更新."""
+    def test_ac6_update_existing_document(self) -> None:
+        """AC6: 既存ドキュメントの更新."""
         index = BM25Index()
 
         # 3つ以上のドキュメントを追加（BM25のIDF計算にはN>=3が必要）

@@ -17,7 +17,11 @@ from src.rag.content_detector import (
     split_by_content_type,
 )
 from src.rag.heading_chunker import HeadingChunk, chunk_by_headings
-from src.rag.hybrid_search import HybridSearchResult, reciprocal_rank_fusion
+from src.rag.hybrid_search import (
+    HybridSearchEngine,
+    HybridSearchResult,
+    reciprocal_rank_fusion,
+)
 from src.rag.table_chunker import TableChunk, chunk_table_data
 
 
@@ -26,9 +30,6 @@ def __getattr__(name: str) -> object:
     if name in ("DocumentChunk", "RetrievalResult", "VectorStore"):
         from src.rag import vector_store
         return getattr(vector_store, name)
-    if name == "HybridSearchEngine":
-        from src.rag import hybrid_search
-        return hybrid_search.HybridSearchEngine
     if name in (
         "EvaluationDatasetQuery",
         "EvaluationReport",

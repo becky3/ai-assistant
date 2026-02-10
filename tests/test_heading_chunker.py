@@ -103,8 +103,8 @@ class TestChunkByHeadings:
         assert chunks[0].heading_level == 0
         assert "通常のテキスト" in chunks[0].content
 
-    def test_large_content_split_by_max_chunk_size(self) -> None:
-        """大きなコンテンツはmax_chunk_sizeで分割される."""
+    def test_ac15_large_content_split_by_max_chunk_size(self) -> None:
+        """AC15: 大きなコンテンツはmax_chunk_sizeで分割される."""
         # 500文字を超える本文を生成
         long_paragraph = "これは長い段落です。" * 50  # 約500文字
         text = f"""# 見出し
@@ -120,8 +120,8 @@ class TestChunkByHeadings:
         for chunk in chunks:
             assert "見出し" in chunk.heading
 
-    def test_formatted_text_includes_breadcrumb(self) -> None:
-        """フォーマット済みテキストにパンくずリストが含まれる."""
+    def test_ac4_formatted_text_includes_breadcrumb(self) -> None:
+        """AC4: フォーマット済みテキストにパンくずリストが含まれる."""
         text = """# 親見出し
 ## 子見出し
 内容"""
@@ -133,8 +133,8 @@ class TestChunkByHeadings:
         assert "[親見出し]" in child_chunk.formatted_text
         assert "# 子見出し" in child_chunk.formatted_text
 
-    def test_small_chunks_merged(self) -> None:
-        """小さすぎるチャンクは前のチャンクと結合される."""
+    def test_ac5_small_chunks_merged(self) -> None:
+        """AC5: 小さすぎるチャンクは前のチャンクと結合される."""
         text = """# 見出し1
 これは十分な長さの本文です。最低限のサイズを超えています。
 
