@@ -75,7 +75,11 @@ def chunk_table_data(
         entity_name = row[0] if row else ""
 
         # フォーマットされたテキストを生成
-        formatted_text = _format_table_chunk(headers, row, context_rows, entity_name)
+        # context_rows内でのメイン行のインデックス
+        main_row_index_in_context = i - start_idx
+        formatted_text = _format_table_chunk(
+            headers, row, context_rows, entity_name, main_row_index_in_context
+        )
 
         chunks.append(
             TableChunk(
@@ -233,6 +237,7 @@ def _format_table_chunk(
     main_row: list[str],
     context_rows: list[list[str]],
     entity_name: str,
+    main_row_index_in_context: int,
 ) -> str:
     """テーブルチャンクを検索しやすいテキスト形式にフォーマットする.
 
@@ -260,8 +265,10 @@ def _format_table_chunk(
     if attributes:
         parts.append(", ".join(attributes))
 
-    # 周辺行をコンテキストとして追加（メイン行以外）
-    other_rows = [row for row in context_rows if row != main_row]
+    # 周辺行をコンテキストとして追加（メイン行以外をインデックスで除外）
+    other_rows = [
+        row for idx, row in enumerate(context_rows) if idx != main_row_index_in_context
+    ]
     if other_rows:
         context_parts: list[str] = []
         for row in other_rows:
