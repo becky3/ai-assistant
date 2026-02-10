@@ -270,6 +270,9 @@ class WebCrawler:
         urls: list[str] = []
         seen: set[str] = set()
 
+        # インデックスページのホスト名を取得（同一ドメインチェック用）
+        index_hostname = urlparse(validated_url).hostname or ""
+
         for a_tag in soup.find_all("a", href=True):
             href = a_tag.get("href")
             if not isinstance(href, str):
@@ -279,6 +282,16 @@ class WebCrawler:
 
             # フラグメント除去（DNS解決を含むvalidate_url()より先に実行）
             normalized_url, _ = urldefrag(absolute_url)
+
+            # 同一ドメインチェック: インデックスページと異なるドメインのリンクはスキップ
+            link_hostname = urlparse(normalized_url).hostname or ""
+            if link_hostname != index_hostname:
+                logger.debug(
+                    "Skipping external domain link: %s (index: %s)",
+                    link_hostname,
+                    index_hostname,
+                )
+                continue
 
             # 正規化済みURLで重複スキップ
             if normalized_url in seen:

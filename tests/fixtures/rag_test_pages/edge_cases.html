@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>エッジケース</title>
+</head>
+<body>
+    <h1>エッジケーステスト</h1>
+    <p>RAGチャンキングのエッジケースをテストするためのページです。</p>
+
+    <h2>空のセクション</h2>
+    <!-- 意図的に空のセクション -->
+
+    <h2>非常に短いテキスト</h2>
+    <p>短い。</p>
+
+    <h2>特殊文字</h2>
+    <p>様々な特殊文字のテスト: &lt;script&gt;alert('XSS')&lt;/script&gt;</p>
+    <p>記号: !"#$%&amp;'()*+,-./:;&lt;=&gt;?@[\]^_`{|}~</p>
+    <p>日本語記号: 、。「」『』【】・ー〜</p>
+    <p>絵文字: 🎮 🎯 🎲 🃏 🎴</p>
+
+    <h2>数式と技術的な表記</h2>
+    <p>E = mc² (エネルギーと質量の等価性)</p>
+    <p>O(n log n) (計算量表記)</p>
+    <p>π ≈ 3.14159265358979</p>
+    <p>∑(i=1 to n) i = n(n+1)/2</p>
+
+    <h2>URLとパス</h2>
+    <p>URL: https://example.com/path?param=value&amp;foo=bar#anchor</p>
+    <p>ファイルパス: /home/user/documents/file.txt</p>
+    <p>Windowsパス: C:\Users\user\Documents\file.txt</p>
+
+    <h2>コードブロック</h2>
+    <pre><code>
+def hello_world():
+    print("Hello, World!")
+
+if __name__ == "__main__":
+    hello_world()
+    </code></pre>
+
+    <h2>入れ子構造</h2>
+    <div>
+        <div>
+            <div>
+                <p>深くネストされたテキスト。この文章は複数のdivタグの中に入っています。</p>
+            </div>
+        </div>
+    </div>
+
+    <h2>リスト</h2>
+    <ul>
+        <li>箇条書き1
+            <ul>
+                <li>入れ子1-1</li>
+                <li>入れ子1-2</li>
+            </ul>
+        </li>
+        <li>箇条書き2</li>
+        <li>箇条書き3</li>
+    </ul>
+
+    <ol>
+        <li>番号付き1</li>
+        <li>番号付き2</li>
+        <li>番号付き3</li>
+    </ol>
+
+    <h2>定義リスト</h2>
+    <dl>
+        <dt>用語1</dt>
+        <dd>用語1の説明です。</dd>
+        <dt>用語2</dt>
+        <dd>用語2の説明です。</dd>
+    </dl>
+
+    <h2>引用</h2>
+    <blockquote>
+        <p>これは引用文です。引用文は特別なスタイルで表示されることがあります。</p>
+        <cite>— 引用元</cite>
+    </blockquote>
+
+    <h2>空白文字の多いテキスト</h2>
+    <p>   これは    たくさんの    空白を    含む    テキスト    です   。   </p>
+
+    <h2>改行の多いテキスト</h2>
+    <p>
+        1行目
+
+        3行目（2行目は空）
+
+
+        5行目（3-4行目は空）
+    </p>
+
+    <h2>非常に長い単語</h2>
+    <p>supercalifragilisticexpialidocious</p>
+    <p>あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん</p>
+
+    <h2>タブ区切りデータ</h2>
+    <pre>名前	値1	値2	値3
+データA	100	200	300
+データB	150	250	350
+データC	180	280	380</pre>
+
+    <h2>最後のセクション</h2>
+    <p>このページの最後のセクションです。</p>
+</body>
+</html>

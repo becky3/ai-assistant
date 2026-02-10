@@ -305,18 +305,18 @@ class TestWebCrawlerCrawlIndexPage:
         ):
             urls = await crawler.crawl_index_page("https://example.com/articles")
 
-        # SAMPLE_INDEX_HTML には6つのリンクがある
-        # 期待されるURLを厳密に検証
+        # SAMPLE_INDEX_HTML には6つのリンクがあるが、
+        # 外部ドメイン (other-domain.com) はスキップされる
         expected_urls = {
             "https://example.com/article/1",
             "https://example.com/article/2",
             "https://example.com/article/3",
-            "https://other-domain.com/page",
+            # "https://other-domain.com/page" は外部ドメインのためスキップ
             "https://example.com/doc/guide.html",
             "https://example.com/doc/faq.html",
         }
         assert set(urls) == expected_urls
-        assert len(urls) == 6
+        assert len(urls) == 5  # 外部ドメイン1件を除く
 
     @pytest.mark.asyncio
     async def test_ac13_url_pattern_filtering(self) -> None:
@@ -335,6 +335,39 @@ class TestWebCrawlerCrawlIndexPage:
 
         assert len(urls) == 2
         assert all(url.endswith(".html") for url in urls)
+
+    @pytest.mark.asyncio
+    async def test_ac41_crawl_index_page_skips_external_domain_links(self) -> None:
+        """AC41: 外部ドメインのリンクがスキップされること（クロール範囲の制御）."""
+        crawler = WebCrawler()
+
+        # 外部ドメインへのリンクを含むHTML
+        html_with_external_links = """
+        <!DOCTYPE html>
+        <html>
+        <head><title>リンク集</title></head>
+        <body>
+            <a href="/internal/page1">内部リンク1</a>
+            <a href="https://example.com/internal/page2">内部リンク2</a>
+            <a href="https://external-site.com/page">外部サイト1</a>
+            <a href="https://another-external.org/doc">外部サイト2</a>
+            <a href="https://malicious.web.fc2.com/exploit">悪意のあるサイト</a>
+        </body>
+        </html>
+        """
+
+        with patch(
+            "src.services.web_crawler.aiohttp.ClientSession",
+            return_value=MockClientSession(200, html_with_external_links),
+        ):
+            urls = await crawler.crawl_index_page("https://example.com/links")
+
+        # 内部リンクのみ抽出され、外部ドメインはスキップされる
+        assert len(urls) == 2
+        assert all("example.com" in url for url in urls)
+        assert not any("external-site.com" in url for url in urls)
+        assert not any("another-external.org" in url for url in urls)
+        assert not any("fc2.com" in url for url in urls)
 
     @pytest.mark.asyncio
     async def test_ac37_crawl_index_page_deduplicates_fragment_urls(self) -> None:
