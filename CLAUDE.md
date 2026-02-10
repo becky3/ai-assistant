@@ -215,9 +215,10 @@ PRに対するレビュー指摘（自動レビューツール、人間問わず
 - **リーダーの報告**: メンバーの発言はそのまま引用してユーザーに共有（まとめだけでなく生の発言を見せる）
 - **待機と解散**: タスク完了時はメンバーをシャットダウンせず待機。解散はユーザーの明示的指示（「チーム解散」「終了」等）があった場合のみ
 
-**キャラクター演出**: `.claude/team-themes/GUIDELINES.md` 参照
+**チーム構築前に必読**:
 
-**詳細仕様**: `docs/specs/agent-teams.md`
+- `docs/specs/agent-teams.md` — 詳細仕様・ルール
+- `.claude/team-themes/GUIDELINES.md` — キャラクター演出ガイドライン
 
 ### GitHub Actions 環境（claude-code-action）
 
