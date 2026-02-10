@@ -171,7 +171,7 @@ PRに対するレビュー指摘（自動レビューツール、人間問わず
 | `/doc-gen` | ドキュメント新規作成（仕様書・レトロ） | `/doc-gen spec feed-collection` |
 | `/doc-edit` | 既存ドキュメントの更新・修正 | `/doc-edit docs/specs/f2-feed-collection.md` |
 | `/check-pr` | PRの内容確認・レビュー指摘対応・実装継続 | `/check-pr 123` |
-| `/topic` | 学びトピックの自動抽出・Zenn記事生成 | `/topic`, `/topic 3`, `/topic done 3 <url>` |
+| `/topic` | 学びトピックの自動抽出・Zenn記事生成 | `/topic`, `/topic 3` |
 
 **定義ファイル**: `.claude/skills/` 配下
 **仕様書**: `docs/specs/doc-gen-skill.md`（`/doc-gen`, `/doc-edit` 用）、`docs/specs/topic-skill.md`（`/topic` 用）

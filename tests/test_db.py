@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from src.db.models import Article, Base, Conversation, Feed, LearningTopic, UserProfile
+from src.db.models import Article, Base, Conversation, Feed, UserProfile
 from src.db import session as session_mod
 
 
@@ -70,76 +70,6 @@ async def test_ac4_conversation(session: AsyncSession) -> None:
     result = await session.execute(select(Conversation))
     c = result.scalar_one()
     assert c.role == "user"
-
-
-async def test_ac13_learning_topic_crud(session: AsyncSession) -> None:
-    """AC13: LearningTopic テーブルの CRUD."""
-    topic = LearningTopic(
-        topic="RSS 1.0形式での日付取得失敗",
-        source="docs/retro/f2.md#3",
-        priority=3,
-    )
-    session.add(topic)
-    await session.commit()
-
-    result = await session.execute(select(LearningTopic))
-    t = result.scalar_one()
-    assert t.topic == "RSS 1.0形式での日付取得失敗"
-    assert t.source == "docs/retro/f2.md#3"
-    assert t.priority == 3
-    assert t.article_status == "pending"
-    assert t.article_url is None
-
-
-async def test_ac14_learning_topic_status_update(session: AsyncSession) -> None:
-    """AC14: LearningTopic のステータス更新."""
-    from datetime import datetime
-
-    topic = LearningTopic(
-        topic="skip-summary実装時のコード重複",
-        source="docs/retro/f2.md#1",
-    )
-    session.add(topic)
-    await session.commit()
-
-    # draft に更新
-    topic.article_status = "draft"
-    await session.commit()
-
-    result = await session.execute(
-        select(LearningTopic).where(LearningTopic.topic == "skip-summary実装時のコード重複")
-    )
-    t = result.scalar_one()
-    assert t.article_status == "draft"
-
-    # published に更新
-    t.article_status = "published"
-    t.article_url = "https://zenn.dev/becky3/articles/skip-summary"
-    t.published_at = datetime(2024, 1, 15, 12, 0, 0)
-    await session.commit()
-
-    result = await session.execute(
-        select(LearningTopic).where(LearningTopic.topic == "skip-summary実装時のコード重複")
-    )
-    t2 = result.scalar_one()
-    assert t2.article_status == "published"
-    assert t2.article_url == "https://zenn.dev/becky3/articles/skip-summary"
-    assert t2.published_at is not None
-
-
-async def test_ac15_learning_topic_unique_constraint(session: AsyncSession) -> None:
-    """AC15: LearningTopic の topic 列の UNIQUE 制約."""
-    from sqlalchemy.exc import IntegrityError
-
-    topic1 = LearningTopic(topic="重複テスト", source="docs/retro/test.md#1")
-    session.add(topic1)
-    await session.commit()
-
-    topic2 = LearningTopic(topic="重複テスト", source="docs/retro/test.md#2")
-    session.add(topic2)
-
-    with pytest.raises(IntegrityError):
-        await session.commit()
 
 
 async def test_ac5_init_db_and_get_session(monkeypatch: pytest.MonkeyPatch) -> None:

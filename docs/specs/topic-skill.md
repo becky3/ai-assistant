@@ -10,14 +10,12 @@
 
 - レトロに蓄積された学びを効率的に記事化
 - 発信のハードルを下げる（「見て選ぶだけ」）
-- 記事化状況をトラッキングし、重複を防止
+- 記事化履歴を参照できる
 
 ## ユーザーストーリー
 
 - 開発者として、`/topic` でレトロから記事化候補を自動抽出・表示したい
 - 開発者として、`/topic <番号>` で選んだトピックの記事を生成したい
-- 開発者として、`/topic done <番号> <url>` でZenn公開後に記録を残したい
-- 開発者として、`/topic history` で公開済み記事の一覧を確認したい
 
 ## 技術仕様
 
@@ -28,7 +26,7 @@ name: topic
 description: 学びトピックの自動抽出・Zenn記事生成
 user-invocable: true
 allowed-tools: Bash, Read, Edit, Write, Grep, Glob
-argument-hint: "[番号|done <番号> <url>|history]"
+argument-hint: "[番号]"
 ```
 
 ### コマンド体系
@@ -37,8 +35,6 @@ argument-hint: "[番号|done <番号> <url>|history]"
 |---------|------|
 | `/topic` | 候補を自動抽出・表示 |
 | `/topic <番号>` | 選んで記事生成 |
-| `/topic done <番号> <url>` | 公開記録 |
-| `/topic history` | 公開済み一覧 |
 
 ### 処理フロー
 
@@ -47,54 +43,34 @@ flowchart TD
     A[/topic 実行] --> B{引数チェック}
     B -->|引数なし| C[トピック抽出]
     B -->|番号| D[記事生成]
-    B -->|done| E[公開記録]
-    B -->|history| F[履歴表示]
 
     C --> C1[retro/*.md スキャン]
     C1 --> C2[MEMORY.md スキャン]
     C2 --> C3[優先度スコアリング]
-    C3 --> C4[DB登録済み除外]
+    C3 --> C4[published.txt除外]
     C4 --> C5[候補一覧表示]
 
     D --> D1[トピック情報取得]
     D1 --> D2[ソースセクション読込]
     D2 --> D3[Zenn記事生成]
     D3 --> D4[docs/zenn-drafts/に保存]
-    D4 --> D5[DB article_status=draft]
-
-    E --> E1[ステータス更新]
-    E1 --> E2[published_at記録]
-    E2 --> E3[確認メッセージ]
-
-    F --> F1[DB検索 status=published]
-    F1 --> F2[一覧表示]
+    D4 --> D5[published.txtに追記]
 ```
 
-### DB設計
+### 記事化済みトピック管理
 
-```python
-class LearningTopic(Base):
-    """学びトピック（自動抽出 + 記事化トラッキング）"""
-    __tablename__ = "learning_topics"
+DBは使用せず、ファイルベースでシンプルに管理する。
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+**ファイル:** `docs/zenn-drafts/published.txt`
 
-    # トピック情報（自動抽出）
-    topic: Mapped[str] = mapped_column(String(256), unique=True, nullable=False)
-    source: Mapped[str] = mapped_column(String(512), nullable=False)
-    priority: Mapped[int] = mapped_column(Integer, default=1)
-
-    # 記事化ステータス
-    article_status: Mapped[str] = mapped_column(String(32), default="pending")
-    # pending: 未着手, draft: 下書き中, published: 公開済み
-
-    article_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-
-    # メタ情報
-    scanned_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+```text
+# 記事化済みトピック（ソース参照）
+docs/retro/process-guard.md#1
+docs/retro/f2-feed-collection.md#3
 ```
+
+- 記事生成時にソース参照をこのファイルに追記
+- トピック抽出時にこのファイルを読み、記載済みのソースは候補から除外
 
 ### トピック抽出ロジック
 
@@ -108,7 +84,7 @@ class LearningTopic(Base):
 1. `## 改善点` `## ハマったこと` セクションを検出
 2. 配下の `###` 見出しをトピック候補として抽出
 3. 優先度スコアリング（下表参照）
-4. 既にDB登録済み（`article_status != "pending"`）のトピックは除外
+4. `docs/zenn-drafts/published.txt` に記載済みのソースは候補から除外
 
 **優先度スコアリング:**
 
@@ -184,51 +160,25 @@ published: false
 
 - [ ] AC4: 選択したトピックの記事が `docs/zenn-drafts/` に生成される
 - [ ] AC5: 生成される記事がZennフロントマター形式に準拠する
-- [ ] AC6: `article_status` が `"draft"` に更新される
+- [ ] AC6: ソース参照が `published.txt` に追記される
 - [ ] AC7: 不正な番号の場合にエラーメッセージが表示される
-
-### 公開記録（`/topic done <番号> <url>`）
-
-- [ ] AC8: `article_status` が `"published"` に更新される
-- [ ] AC9: `article_url` と `published_at` が記録される
-- [ ] AC10: 不正なURLの場合にエラーメッセージが表示される
-
-### 履歴表示（`/topic history`）
-
-- [ ] AC11: 公開済み記事の一覧が表示される
-- [ ] AC12: 公開日順（降順）でソートされる
-
-### DBモデル（LearningTopic）
-
-- [ ] AC13: LearningTopicモデルのCRUD操作が正常に動作する
-- [ ] AC14: ステータス更新（pending → draft → published）とメタ情報記録が機能する
-- [ ] AC15: topic列のUNIQUE制約が機能する
 
 ## 関連ファイル
 
 | ファイル | 役割 |
 |---------|------|
 | `.claude/skills/topic/SKILL.md` | topicスキル定義 |
-| `src/db/models.py` | LearningTopicモデル |
 | `docs/retro/*.md` | 抽出元（レトロスペクティブ） |
 | `docs/zenn-drafts/` | 記事出力ディレクトリ |
+| `docs/zenn-drafts/published.txt` | 記事化済みトピック管理 |
 | `CLAUDE.md` | スキル一覧への登録 |
 
 ## テスト方針
 
-Claude Codeスキルは実行時テストが中心となるため、以下を確認:
-
-**DBモデルのテスト（AC13-15）:**
-
-- `tests/test_db.py` で自動テストを実施
-- 詳細は受け入れ条件を参照
-
-**スキル実行テスト（手動）:**
+Claude Codeスキルは実行時テストが中心となるため、手動テストで確認:
 
 - [ ] `/topic` でレトロから候補が抽出される（AC1-3）
 - [ ] `/topic <番号>` で記事が正しく生成される（AC4-7）
-- [ ] `/topic done <番号> <url>` で公開記録が保存される（AC8-10）
-- [ ] `/topic history` で履歴が表示される（AC11-12）
 
 ## 拡張性
 

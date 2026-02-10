@@ -67,30 +67,3 @@ class Conversation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
-class LearningTopic(Base):
-    """学びトピック（自動抽出 + 記事化トラッキング）
-
-    仕様: docs/specs/topic-skill.md
-    """
-
-    __tablename__ = "learning_topics"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-
-    # トピック情報（自動抽出）
-    topic: Mapped[str] = mapped_column(String(256), unique=True, nullable=False)
-    source: Mapped[str] = mapped_column(
-        String(512), nullable=False
-    )  # "docs/retro/f2.md#RSS日付問題"
-    priority: Mapped[int] = mapped_column(Integer, default=1)  # 抽出時の優先度
-
-    # 記事化ステータス
-    article_status: Mapped[str] = mapped_column(String(32), default="pending")
-    # pending: 未着手, draft: 下書き中, published: 公開済み
-
-    article_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    published_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-
-    # メタ情報
-    scanned_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
