@@ -46,3 +46,6 @@ bot.pid
 .mypy_cache/
 htmlcov/
 .coverage
+
+# Zenn drafts (personal, not for repository)
+docs/zenn-drafts/
