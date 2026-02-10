@@ -10,7 +10,12 @@ Note:
 # 外部依存のないモジュール（常にインポート可能）
 from src.rag.bm25_index import BM25Index, BM25Result, tokenize_japanese
 from src.rag.chunker import chunk_text
-from src.rag.content_detector import ContentBlock, ContentType, detect_content_type, split_by_content_type
+from src.rag.content_detector import (
+    ContentBlock,
+    ContentType,
+    detect_content_type,
+    split_by_content_type,
+)
 from src.rag.heading_chunker import HeadingChunk, chunk_by_headings
 from src.rag.hybrid_search import HybridSearchResult, reciprocal_rank_fusion
 from src.rag.table_chunker import TableChunk, chunk_table_data

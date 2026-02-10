@@ -97,7 +97,7 @@ def _is_table_data(text: str) -> bool:
     pipe_lines = [line for line in lines if "|" in line and line.count("|") >= 2]
     if len(pipe_lines) >= 2:
         # セパレータ行（|---|---|）の存在をチェック
-        separator_pattern = r"^\|?[\s\-:|]+\|[\s\-:|]+\|?"
+        separator_pattern = r"^\|?[\s\-:|]+\|[\s\-:|]+\|?$"
         for line in lines:
             if re.match(separator_pattern, line.strip()):
                 return True

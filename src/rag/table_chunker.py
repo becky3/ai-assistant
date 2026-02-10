@@ -172,9 +172,9 @@ def _parse_delimited_table(
         headers = _split_by_delimiter(lines[0], delimiter)
 
     # データ行をパース
-    # header_row指定時でも、1行目がヘッダーなら1行目はスキップ
+    # header_row指定時はデータのみ（1行目からデータ）、指定なしは1行目がヘッダー
     data_rows: list[list[str]] = []
-    start_idx = 1  # ヘッダー行は常にスキップ
+    start_idx = 0 if header_row else 1
 
     for line in lines[start_idx:]:
         cells = _split_by_delimiter(line, delimiter)

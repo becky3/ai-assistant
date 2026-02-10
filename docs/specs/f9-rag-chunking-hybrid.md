@@ -59,9 +59,9 @@ def detect_content_type(text: str) -> ContentType:
 
 **テーブルデータの検出ヒューリスティック**:
 
-- 数値が行の大半を占める（70%以上）
-- タブ/スペース区切りの列構造
-- 行ごとのパターンが類似
+- Markdownテーブル形式（`|`区切り＋セパレータ行）
+- タブ/複数スペース区切りの列構造（3列以上）
+- 構造化された行が30%以上、または数値行が20%以上
 
 #### 1.2 見出しベースのチャンキング
 
@@ -95,7 +95,7 @@ class HeadingChunk:
 def chunk_table_data(
     text: str,
     header_row: str | None = None,
-    row_context_size: int = 3,
+    row_context_size: int = 1,
 ) -> list[TableChunk]:
     """テーブルデータをチャンキングする.
 
@@ -157,9 +157,13 @@ class BM25Index:
 
     def add_documents(
         self,
-        documents: list[tuple[str, str]],  # (id, text)
-    ) -> None:
-        """ドキュメントをインデックスに追加する."""
+        documents: list[tuple[str, str, str]],  # (id, text, source_url)
+    ) -> int:
+        """ドキュメントをインデックスに追加する.
+
+        Returns:
+            追加されたドキュメント数
+        """
 
     def search(
         self,
@@ -394,9 +398,10 @@ ai-assistant/
 
 - [ ] **AC6**: BM25インデックスの追加・検索・削除ができること
 - [ ] **AC7**: 日本語テキストのトークナイズができること
-- [ ] **AC8**: RRFによるスコア統合ができること
+- [ ] **AC8**: RRFによるスコア統合ができること（kパラメータによるスコア差の調整を含む）
 - [ ] **AC9**: `RAG_HYBRID_SEARCH_ENABLED=false` 時は従来のベクトル検索のみ動作すること
 - [ ] **AC10**: 重み設定（`RAG_VECTOR_WEIGHT`）でベクトル検索とBM25の比率を調整できること
+- [ ] **AC14**: `HybridSearchResult` がベクトル検索スコア、BM25スコア、RRFスコアを保持できること
 
 ### テストケース
 

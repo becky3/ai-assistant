@@ -337,8 +337,8 @@ class TestWebCrawlerCrawlIndexPage:
         assert all(url.endswith(".html") for url in urls)
 
     @pytest.mark.asyncio
-    async def test_crawl_index_page_skips_external_domain_links(self) -> None:
-        """外部ドメインのリンクがスキップされること（セキュリティ対策）."""
+    async def test_ac41_crawl_index_page_skips_external_domain_links(self) -> None:
+        """AC41: 外部ドメインのリンクがスキップされること（クロール範囲の制御）."""
         crawler = WebCrawler()
 
         # 外部ドメインへのリンクを含むHTML
