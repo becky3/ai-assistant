@@ -29,12 +29,12 @@ argument-hint: "[番号]"
    - `## 改善点` `## ハマったこと` セクションを検出
    - 配下の `###` 見出しをトピック候補として抽出
    - 「教訓」「対応」キーワードがあれば優先度UP
-   - `docs/zenn-drafts/published.txt` に記載済みのソースは候補から除外
+   - **自動除外はしない**（過去に記事化したトピックも候補に表示）
 
 3. **候補表示**
 
    ```text
-   📚 学びトピック候補（未記事化）
+   📚 学びトピック候補
 
    1. [★★] RSS 1.0形式での日付取得失敗（docs/retro/f2.md#3）
    2. [★★] skip-summary実装時のコード重複（docs/retro/f2.md#1）
@@ -42,6 +42,10 @@ argument-hint: "[番号]"
    ...
 
    👉 記事化するには: /topic <番号>
+
+   ---
+   📰 過去の記事化履歴（参考）
+   - (2026-02-10) Pythonでプロセス生存確認を実装したら...: docs/retro/process-guard.md#1
    ```
 
 ### B. 記事生成（`/topic <番号>`）
@@ -56,7 +60,8 @@ argument-hint: "[番号]"
 
 3. **ファイル出力**
    - `docs/zenn-drafts/{topic-slug}.md` に保存
-   - `docs/zenn-drafts/published.txt` にソース参照を追記
+   - `docs/zenn-drafts/published.txt` に日付・タイトル・ソース参照を追記
+     - 形式: `- (YYYY-MM-DD) タイトル: ソース参照`
 
 4. **結果表示**
 
@@ -132,3 +137,6 @@ published: false
 
 - 生成された記事は必ずレビューしてから公開する
 - `published: false` で生成されるため、Zenn上で確認後に `true` に変更
+- Zenn AIからレビュー指摘を受けた場合:
+  - 指摘を鵜呑みにせず、技術的妥当性を判断する
+  - 妥当な指摘のみ対応し、不要な修正はしない
