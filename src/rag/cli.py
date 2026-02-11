@@ -13,7 +13,7 @@ import logging
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from src.rag.evaluation import (
     EvaluationReport,
@@ -22,6 +22,15 @@ from src.rag.evaluation import (
 
 if TYPE_CHECKING:
     from src.services.rag_knowledge import RAGKnowledgeService
+
+
+class RegressionInfo(TypedDict):
+    """リグレッション検出結果の型定義."""
+
+    detected: bool
+    baseline_f1: float
+    current_f1: float
+    delta: float
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +178,7 @@ async def run_evaluation(args: argparse.Namespace) -> None:
     )
 
     # ベースライン比較
-    regression_info: dict[str, object] | None = None
+    regression_info: RegressionInfo | None = None
     if args.baseline_file and Path(args.baseline_file).exists():
         baseline = load_baseline(args.baseline_file)
         summary = baseline.get("summary", {})
@@ -235,7 +244,7 @@ def detect_regression(
     baseline_f1: float,
     current_f1: float,
     threshold: float,
-) -> dict[str, object]:
+) -> RegressionInfo:
     """リグレッションを検出する.
 
     Args:
@@ -248,17 +257,17 @@ def detect_regression(
     """
     delta = current_f1 - baseline_f1
     detected = delta < -threshold
-    return {
-        "detected": detected,
-        "baseline_f1": baseline_f1,
-        "current_f1": current_f1,
-        "delta": delta,
-    }
+    return RegressionInfo(
+        detected=detected,
+        baseline_f1=baseline_f1,
+        current_f1=current_f1,
+        delta=delta,
+    )
 
 
 def write_json_report(
     report: EvaluationReport,
-    regression: dict[str, object] | None,
+    regression: RegressionInfo | None,
     output_path: Path,
     dataset_path: str,
 ) -> None:
@@ -301,7 +310,7 @@ def write_json_report(
 
 def write_markdown_report(
     report: EvaluationReport,
-    regression: dict[str, object] | None,
+    regression: RegressionInfo | None,
     output_path: Path,
     dataset_path: str,
 ) -> None:

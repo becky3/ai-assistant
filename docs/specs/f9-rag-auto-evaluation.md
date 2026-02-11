@@ -101,10 +101,6 @@ regression_detected = (baseline_f1 - current_f1) > regression_threshold
 {
   "timestamp": "2026-02-09T12:00:00Z",
   "dataset": "tests/fixtures/rag_evaluation_dataset.json",
-  "config": {
-    "n_results": 5,
-    "similarity_threshold": 0.5
-  },
   "summary": {
     "queries_evaluated": 8,
     "average_precision": 0.625,

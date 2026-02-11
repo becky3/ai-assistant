@@ -7,21 +7,18 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from src.rag.cli import (
+    RegressionInfo,
     detect_regression,
     load_baseline,
     write_json_report,
     write_markdown_report,
 )
 from src.rag.evaluation import EvaluationReport, QueryEvaluationResult
-
-if TYPE_CHECKING:
-    pass
 
 
 class TestDetectRegression:
@@ -195,12 +192,12 @@ class TestRegressionInfo:
             query_results=[],
         )
 
-        regression_info: dict[str, object] = {
-            "detected": True,
-            "baseline_f1": 0.7,
-            "current_f1": 0.5,
-            "delta": -0.2,
-        }
+        regression_info = RegressionInfo(
+            detected=True,
+            baseline_f1=0.7,
+            current_f1=0.5,
+            delta=-0.2,
+        )
 
         json_path = tmp_path / "report.json"
         write_json_report(report, regression_info, json_path, "test_dataset.json")

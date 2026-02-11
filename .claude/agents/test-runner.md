@@ -482,6 +482,7 @@ RAG関連ファイル（`src/rag/**`, `src/embedding/**`, `src/services/rag_know
 RAG精度テストが必要と判断した場合、確認なしで自動実行する:
 
 1. **テスト用ChromaDBを初期化**:
+
    ```bash
    python -m src.rag.cli init-test-db \
      --persist-dir ./test_chroma_db \
@@ -489,6 +490,7 @@ RAG精度テストが必要と判断した場合、確認なしで自動実行�
    ```
 
 2. **精度評価を実行**:
+
    ```bash
    python -m src.rag.cli evaluate \
      --output-dir reports/rag-evaluation
