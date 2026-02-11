@@ -30,57 +30,11 @@ jobs:
           # issue_comment イベント時はPRのマージコミットをチェックアウト
           ref: ${{ github.event_name == 'issue_comment' && format('refs/pull/{0}/merge', github.event.issue.number) || '' }}
 
-      - name: Get base branch
-        id: base
-        run: |
-          set +e  # Disable default bash -e to use explicit error handling
-          set -uo pipefail
-          if [ "${{ github.event_name }}" = "issue_comment" ]; then
-            if ! BASE=$(gh pr view ${{ github.event.issue.number }} --json baseRefName -q .baseRefName 2>&1); then
-              echo "Error: gh pr view command failed for PR #${{ github.event.issue.number }}" >&2
-              echo "Command output: $BASE" >&2
-              echo "Possible causes: invalid PR number, GitHub API error, authentication failure" >&2
-              exit 1
-            fi
-          else
-            BASE="${{ github.base_ref }}"
-          fi
-          if [ -z "$BASE" ]; then
-            echo "Error: Base branch name is empty (PR metadata missing or corrupted)" >&2
-            exit 1
-          fi
-          echo "ref=$BASE" >> $GITHUB_OUTPUT
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Get PR head commit
-        id: pr-head
-        run: |
-          set +e  # Disable default bash -e to use explicit error handling
-          set -uo pipefail
-          if [ "${{ github.event_name }}" = "issue_comment" ]; then
-            if ! COMMIT_ID=$(gh pr view ${{ github.event.issue.number }} --json headRefOid -q .headRefOid 2>&1); then
-              echo "Error: gh pr view command failed for PR #${{ github.event.issue.number }}" >&2
-              echo "Command output: $COMMIT_ID" >&2
-              echo "Possible causes: invalid PR number, GitHub API error, authentication failure" >&2
-              exit 1
-            fi
-          else
-            COMMIT_ID="${{ github.event.pull_request.head.sha }}"
-          fi
-          if [ -z "$COMMIT_ID" ]; then
-            echo "Error: PR head commit SHA is empty (PR metadata missing or corrupted)" >&2
-            exit 1
-          fi
-          echo "sha=$COMMIT_ID" >> $GITHUB_OUTPUT
-        env:
-          GH_TOKEN: ${{ github.token }}
-
+      # PR番号のバリデーションを最初に行い、不正な場合は早期に失敗させる
       - name: Get PR number
         id: pr-number
         run: |
-          set +e  # Disable default bash -e to use explicit error handling
-          set -uo pipefail
+          set -euo pipefail
           if [ "${{ github.event_name }}" = "issue_comment" ]; then
             PR_NUMBER="${{ github.event.issue.number }}"
           else
@@ -97,6 +51,54 @@ jobs:
             exit 1
           fi
           echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
+
+      - name: Get base branch
+        id: base
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "issue_comment" ]; then
+            OUTPUT=$(gh pr view ${{ steps.pr-number.outputs.number }} --json baseRefName -q .baseRefName 2>&1) || {
+              EXIT_CODE=$?
+              echo "Error: gh pr view command failed for PR #${{ steps.pr-number.outputs.number }} (exit code: $EXIT_CODE)" >&2
+              echo "Command output: $OUTPUT" >&2
+              echo "Possible causes: invalid PR number, GitHub API error, authentication failure" >&2
+              exit 1
+            }
+            BASE="$OUTPUT"
+          else
+            BASE="${{ github.base_ref }}"
+          fi
+          if [ -z "$BASE" ]; then
+            echo "Error: Base branch name is empty (PR metadata missing or corrupted)" >&2
+            exit 1
+          fi
+          echo "ref=$BASE" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Get PR head commit
+        id: pr-head
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "issue_comment" ]; then
+            OUTPUT=$(gh pr view ${{ steps.pr-number.outputs.number }} --json headRefOid -q .headRefOid 2>&1) || {
+              EXIT_CODE=$?
+              echo "Error: gh pr view command failed for PR #${{ steps.pr-number.outputs.number }} (exit code: $EXIT_CODE)" >&2
+              echo "Command output: $OUTPUT" >&2
+              echo "Possible causes: invalid PR number, GitHub API error, authentication failure" >&2
+              exit 1
+            }
+            COMMIT_ID="$OUTPUT"
+          else
+            COMMIT_ID="${{ github.event.pull_request.head.sha }}"
+          fi
+          if [ -z "$COMMIT_ID" ]; then
+            echo "Error: PR head commit SHA is empty (PR metadata missing or corrupted)" >&2
+            exit 1
+          fi
+          echo "sha=$COMMIT_ID" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - uses: anthropics/claude-code-action@5994afaaa7f44611addc97a696a135acff5fd218 # v1.0.46
         with:
