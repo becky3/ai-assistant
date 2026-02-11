@@ -312,7 +312,7 @@ class RAGKnowledgeService:
                 (chunk.id, chunk.text, normalized_url)
                 for chunk in document_chunks
             ]
-            self._bm25_index.add_documents(bm25_docs)
+            await asyncio.to_thread(self._bm25_index.add_documents, bm25_docs)
             logger.debug("Added %d documents to BM25 index", len(bm25_docs))
 
         logger.info("Ingested page %s: %d chunks", normalized_url, count)
@@ -439,8 +439,8 @@ class RAGKnowledgeService:
                     "RAG result %d: rrf_score=%.4f vector_dist=%s bm25_score=%s source=%r",
                     i,
                     result.rrf_score,
-                    f"{result.vector_distance:.3f}" if result.vector_distance else "N/A",
-                    f"{result.bm25_score:.3f}" if result.bm25_score else "N/A",
+                    f"{result.vector_distance:.3f}" if result.vector_distance is not None else "N/A",
+                    f"{result.bm25_score:.3f}" if result.bm25_score is not None else "N/A",
                     source_url,
                 )
                 text_preview = (
@@ -496,9 +496,13 @@ class RAGKnowledgeService:
 
         # BM25インデックスからも削除（ハイブリッド検索用）
         if self._bm25_index is not None:
-            bm25_deleted = self._bm25_index.delete_by_source(normalized_url)
+            bm25_deleted = await asyncio.to_thread(
+                self._bm25_index.delete_by_source, normalized_url
+            )
             if fragment:
-                bm25_deleted += self._bm25_index.delete_by_source(source_url)
+                bm25_deleted += await asyncio.to_thread(
+                    self._bm25_index.delete_by_source, source_url
+                )
             logger.debug("Deleted %d documents from BM25 index", bm25_deleted)
 
         return total_deleted

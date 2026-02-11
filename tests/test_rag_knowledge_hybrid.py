@@ -157,15 +157,15 @@ class TestHybridSearchDisabled:
 
 
 class TestHybridSearchEnabled:
-    """ハイブリッド検索有効時のテスト."""
+    """AC6: ハイブリッド検索有効時のテスト（BM25インデックス統合）."""
 
-    async def test_hybrid_enabled_uses_both_vector_and_bm25(
+    async def test_ac6_hybrid_enabled_uses_both_vector_and_bm25(
         self,
         rag_service_hybrid: RAGKnowledgeService,
         mock_vector_store: MagicMock,
         mock_bm25_index: MagicMock,
     ) -> None:
-        """ハイブリッド検索有効時、ベクトル検索とBM25検索の両方が使用されること."""
+        """AC6: ハイブリッド検索有効時、ベクトル検索とBM25検索の両方が使用されること."""
         # Arrange
         mock_vector_store.search.return_value = [
             RetrievalResult(
@@ -198,16 +198,16 @@ class TestHybridSearchEnabled:
 
 
 class TestBM25IndexIntegration:
-    """BM25インデックスとの統合テスト."""
+    """AC6: BM25インデックスとの統合テスト."""
 
-    async def test_ingest_adds_to_bm25(
+    async def test_ac6_ingest_adds_to_bm25(
         self,
         rag_service_hybrid: RAGKnowledgeService,
         mock_web_crawler: MagicMock,
         mock_vector_store: MagicMock,
         mock_bm25_index: MagicMock,
     ) -> None:
-        """取り込み時にBM25インデックスにもドキュメントが追加されること."""
+        """AC6: 取り込み時にBM25インデックスにもドキュメントが追加されること."""
         # Arrange
         mock_web_crawler.crawl_page.return_value = CrawledPage(
             url="https://example.com/page1",
@@ -224,13 +224,13 @@ class TestBM25IndexIntegration:
         assert result >= 1
         mock_bm25_index.add_documents.assert_called()
 
-    async def test_delete_source_removes_from_bm25(
+    async def test_ac6_delete_source_removes_from_bm25(
         self,
         rag_service_hybrid: RAGKnowledgeService,
         mock_vector_store: MagicMock,
         mock_bm25_index: MagicMock,
     ) -> None:
-        """delete_source()がBM25インデックスからもドキュメントを削除すること."""
+        """AC6: delete_source()がBM25インデックスからもドキュメントを削除すること."""
         # Arrange
         mock_vector_store.delete_by_source.return_value = 5
         mock_bm25_index.delete_by_source.return_value = 5
@@ -333,13 +333,13 @@ class TestKeywordExactMatch:
 
 
 class TestSmartChunking:
-    """_smart_chunk()メソッドのテスト."""
+    """AC1/AC3/AC5: _smart_chunk()メソッドのテスト."""
 
-    def test_smart_chunk_detects_table_data(
+    def test_ac1_smart_chunk_detects_table_data(
         self,
         rag_service_hybrid: RAGKnowledgeService,
     ) -> None:
-        """テーブルデータが正しく検出・チャンキングされること."""
+        """AC1: テーブルデータが正しく検出・チャンキングされること."""
         # Arrange: テーブル形式のテキスト
         table_text = """名前	HP	MP	攻撃力
 りゅうおう	200	100	140
@@ -354,11 +354,11 @@ class TestSmartChunking:
         # テーブルチャンクはフォーマット済みで「名前:」を含む
         assert any("名前:" in chunk or "りゅうおう" in chunk for chunk in chunks)
 
-    def test_smart_chunk_detects_headings(
+    def test_ac3_smart_chunk_detects_headings(
         self,
         rag_service_hybrid: RAGKnowledgeService,
     ) -> None:
-        """見出し付きテキストが正しく検出・チャンキングされること."""
+        """AC3: 見出し付きテキストが正しく検出・チャンキングされること."""
         # Arrange: 見出し形式のテキスト
         heading_text = """# メインタイトル
 
@@ -378,11 +378,11 @@ class TestSmartChunking:
         # Assert: 見出しごとにチャンクが分割される
         assert len(chunks) > 0
 
-    def test_smart_chunk_prose_fallback(
+    def test_ac5_smart_chunk_prose_fallback(
         self,
         rag_service_hybrid: RAGKnowledgeService,
     ) -> None:
-        """通常テキストは従来のチャンキングにフォールバックすること."""
+        """AC5: 通常テキストは従来のチャンキングにフォールバックすること."""
         # Arrange: 見出しもテーブルもないプレーンテキスト
         prose_text = """これは通常の段落テキストです。
 特に構造化されていない長いテキストが続きます。
@@ -396,15 +396,15 @@ class TestSmartChunking:
 
 
 class TestHybridSearchEngineInitialization:
-    """HybridSearchEngineの初期化テスト."""
+    """AC9: HybridSearchEngineの初期化テスト."""
 
-    def test_hybrid_engine_initialized_when_enabled(
+    def test_ac9_hybrid_engine_initialized_when_enabled(
         self,
         mock_vector_store: MagicMock,
         mock_web_crawler: MagicMock,
         mock_bm25_index: MagicMock,
     ) -> None:
-        """hybrid_search_enabled=Trueの場合、HybridSearchEngineが初期化されること."""
+        """AC9: hybrid_search_enabled=Trueの場合、HybridSearchEngineが初期化されること."""
         mock_settings = MagicMock()
         mock_settings.rag_vector_weight = 0.5
         mock_settings.rag_rrf_k = 60
@@ -420,13 +420,13 @@ class TestHybridSearchEngineInitialization:
         assert service._hybrid_search_engine is not None
         assert service._hybrid_search_enabled is True
 
-    def test_hybrid_engine_not_initialized_when_disabled(
+    def test_ac9_hybrid_engine_not_initialized_when_disabled(
         self,
         mock_vector_store: MagicMock,
         mock_web_crawler: MagicMock,
         mock_bm25_index: MagicMock,
     ) -> None:
-        """hybrid_search_enabled=Falseの場合、HybridSearchEngineは初期化されないこと."""
+        """AC9: hybrid_search_enabled=Falseの場合、HybridSearchEngineは初期化されないこと."""
         service = RAGKnowledgeService(
             vector_store=mock_vector_store,
             web_crawler=mock_web_crawler,
@@ -437,12 +437,12 @@ class TestHybridSearchEngineInitialization:
         assert service._hybrid_search_engine is None
         assert service._hybrid_search_enabled is False
 
-    def test_hybrid_engine_not_initialized_without_bm25_index(
+    def test_ac9_hybrid_engine_not_initialized_without_bm25_index(
         self,
         mock_vector_store: MagicMock,
         mock_web_crawler: MagicMock,
     ) -> None:
-        """bm25_indexがNoneの場合、hybrid_enabled=Trueでも初期化されないこと."""
+        """AC9: bm25_indexがNoneの場合、hybrid_enabled=Trueでも初期化されないこと."""
         mock_settings = MagicMock()
         mock_settings.rag_vector_weight = 0.5
         mock_settings.rag_rrf_k = 60
