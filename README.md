@@ -52,6 +52,24 @@ cp .env.example .env  # 各種トークン・APIキーを設定
 uv run python -m src.main
 ```
 
+## RAG評価CLI
+
+RAG検索精度の評価パイプラインを提供します。
+
+```bash
+# テスト用ChromaDBを初期化
+uv run python -m src.rag.cli init-test-db \
+  --persist-dir ./test_chroma_db \
+  --fixture tests/fixtures/rag_test_documents.json
+
+# RAG検索精度を評価
+uv run python -m src.rag.cli evaluate \
+  --persist-dir ./test_chroma_db \
+  --output-dir reports/rag-evaluation
+```
+
+詳細は [RAG自動評価パイプライン仕様](docs/specs/f9-rag-auto-evaluation.md) を参照してください。
+
 ## プロジェクト構造
 
 ```
@@ -68,7 +86,7 @@ src/
   llm/lmstudio_provider.py  # OpenAI SDK で base_url を localhost:1234 に向ける
   llm/factory.py     # プロバイダー生成ファクトリ
   embedding/         # Embeddingプロバイダー（LM Studio / OpenAI）
-  rag/               # RAGインフラ（チャンキング、ChromaDBベクトルストア）
+  rag/               # RAGインフラ（チャンキング、ChromaDBベクトルストア、評価CLI）
   mcp/
     __init__.py
     client_manager.py  # MCPサーバー接続管理
@@ -143,6 +161,9 @@ uv run mypy src
 - [F7: ボットステータス](docs/specs/f7-bot-status.md)
 - [F8: スレッドサポート](docs/specs/f8-thread-support.md)
 - [F9: RAGナレッジ](docs/specs/f9-rag-knowledge.md)
+- [F9: RAGチャンキング・ハイブリッド検索](docs/specs/f9-rag-chunking-hybrid.md)
+- [F9: RAG評価・可視化](docs/specs/f9-rag-evaluation.md)
+- [F9: RAG自動評価パイプライン](docs/specs/f9-rag-auto-evaluation.md)
 
 ### Claude Code 関連
 

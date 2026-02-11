@@ -297,13 +297,16 @@ class TestCLIEvaluate:
             baseline_file=None,
             n_results=5,
             threshold=None,
+            persist_dir=None,
             fail_on_regression=False,
             regression_threshold=0.1,
             save_baseline=False,
         )
 
         with patch("src.rag.cli.create_rag_service") as mock_create_service:
-            with patch("src.rag.cli.evaluate_retrieval", return_value=mock_report):
+            with patch(
+                "src.rag.cli.evaluate_retrieval", new=AsyncMock(return_value=mock_report)
+            ):
                 mock_service = AsyncMock()
                 mock_create_service.return_value = mock_service
 
@@ -340,13 +343,15 @@ class TestCLIEvaluate:
             baseline_file=None,
             n_results=5,
             threshold=None,
+            persist_dir=None,
             fail_on_regression=False,
             regression_threshold=0.1,
             save_baseline=False,
         )
 
+        mock_eval = AsyncMock(return_value=mock_report)
         with patch("src.rag.cli.create_rag_service") as mock_create_service:
-            with patch("src.rag.cli.evaluate_retrieval", return_value=mock_report) as mock_eval:
+            with patch("src.rag.cli.evaluate_retrieval", new=mock_eval):
                 mock_service = AsyncMock()
                 mock_create_service.return_value = mock_service
 
@@ -384,13 +389,16 @@ class TestCLIEvaluate:
             baseline_file=None,
             n_results=5,
             threshold=None,
+            persist_dir=None,
             fail_on_regression=False,
             regression_threshold=0.1,
             save_baseline=False,
         )
 
         with patch("src.rag.cli.create_rag_service") as mock_create_service:
-            with patch("src.rag.cli.evaluate_retrieval", return_value=mock_report):
+            with patch(
+                "src.rag.cli.evaluate_retrieval", new=AsyncMock(return_value=mock_report)
+            ):
                 mock_service = AsyncMock()
                 mock_create_service.return_value = mock_service
 
@@ -434,13 +442,16 @@ class TestCLIEvaluate:
             baseline_file=str(baseline_file),
             n_results=5,
             threshold=None,
+            persist_dir=None,
             fail_on_regression=True,
             regression_threshold=0.1,
             save_baseline=False,
         )
 
         with patch("src.rag.cli.create_rag_service") as mock_create_service:
-            with patch("src.rag.cli.evaluate_retrieval", return_value=mock_report):
+            with patch(
+                "src.rag.cli.evaluate_retrieval", new=AsyncMock(return_value=mock_report)
+            ):
                 mock_service = AsyncMock()
                 mock_create_service.return_value = mock_service
 
@@ -448,6 +459,147 @@ class TestCLIEvaluate:
                     await run_evaluation(args)
 
                 assert exc_info.value.code == 1
+
+    @pytest.mark.asyncio
+    async def test_ac4_n_results_option(self, tmp_path: Path) -> None:
+        """AC4: --n-results オプションがevaluate_retrievalに正しく伝播すること."""
+        from src.rag.cli import run_evaluation
+        from argparse import Namespace
+
+        mock_report = EvaluationReport(
+            queries_evaluated=1,
+            average_precision=0.8,
+            average_recall=0.9,
+            average_f1=0.85,
+            negative_source_violations=[],
+            query_results=[],
+        )
+
+        dataset = tmp_path / "dataset.json"
+        dataset.write_text(json.dumps({"queries": []}), encoding="utf-8")
+        output_dir = tmp_path / "output"
+
+        # カスタムn_results値を指定
+        custom_n_results = 10
+
+        args = Namespace(
+            dataset=str(dataset),
+            output_dir=str(output_dir),
+            baseline_file=None,
+            n_results=custom_n_results,
+            threshold=None,
+            persist_dir=None,
+            fail_on_regression=False,
+            regression_threshold=0.1,
+            save_baseline=False,
+        )
+
+        mock_eval = AsyncMock(return_value=mock_report)
+        with patch("src.rag.cli.create_rag_service") as mock_create_service:
+            with patch("src.rag.cli.evaluate_retrieval", new=mock_eval):
+                mock_service = AsyncMock()
+                mock_create_service.return_value = mock_service
+
+                await run_evaluation(args)
+
+                # n_resultsが正しく渡されたか確認
+                mock_eval.assert_called_once()
+                call_kwargs = mock_eval.call_args
+                assert call_kwargs[1]["n_results"] == custom_n_results
+
+    @pytest.mark.asyncio
+    async def test_ac5_threshold_option(self, tmp_path: Path) -> None:
+        """AC5: --threshold オプションがcreate_rag_serviceに正しく伝播すること."""
+        from src.rag.cli import run_evaluation
+        from argparse import Namespace
+
+        mock_report = EvaluationReport(
+            queries_evaluated=1,
+            average_precision=0.8,
+            average_recall=0.9,
+            average_f1=0.85,
+            negative_source_violations=[],
+            query_results=[],
+        )
+
+        dataset = tmp_path / "dataset.json"
+        dataset.write_text(json.dumps({"queries": []}), encoding="utf-8")
+        output_dir = tmp_path / "output"
+
+        # カスタムthreshold値を指定
+        custom_threshold = 0.7
+
+        args = Namespace(
+            dataset=str(dataset),
+            output_dir=str(output_dir),
+            baseline_file=None,
+            n_results=5,
+            threshold=custom_threshold,
+            persist_dir=None,
+            fail_on_regression=False,
+            regression_threshold=0.1,
+            save_baseline=False,
+        )
+
+        mock_eval = AsyncMock(return_value=mock_report)
+        with patch("src.rag.cli.create_rag_service") as mock_create_service:
+            with patch("src.rag.cli.evaluate_retrieval", new=mock_eval):
+                mock_service = AsyncMock()
+                mock_create_service.return_value = mock_service
+
+                await run_evaluation(args)
+
+                # thresholdが正しく渡されたか確認
+                mock_create_service.assert_called_once()
+                call_kwargs = mock_create_service.call_args
+                assert call_kwargs[1]["threshold"] == custom_threshold
+
+    @pytest.mark.asyncio
+    async def test_ac6_persist_dir_option(self, tmp_path: Path) -> None:
+        """AC6: --persist-dir オプションがcreate_rag_serviceに正しく伝播すること."""
+        from src.rag.cli import run_evaluation
+        from argparse import Namespace
+
+        mock_report = EvaluationReport(
+            queries_evaluated=1,
+            average_precision=0.8,
+            average_recall=0.9,
+            average_f1=0.85,
+            negative_source_violations=[],
+            query_results=[],
+        )
+
+        dataset = tmp_path / "dataset.json"
+        dataset.write_text(json.dumps({"queries": []}), encoding="utf-8")
+        output_dir = tmp_path / "output"
+
+        # カスタムpersist_dirを指定
+        custom_persist_dir = str(tmp_path / "custom_chroma_db")
+
+        args = Namespace(
+            dataset=str(dataset),
+            output_dir=str(output_dir),
+            baseline_file=None,
+            n_results=5,
+            threshold=None,
+            persist_dir=custom_persist_dir,
+            fail_on_regression=False,
+            regression_threshold=0.1,
+            save_baseline=False,
+        )
+
+        mock_eval = AsyncMock(return_value=mock_report)
+        with patch("src.rag.cli.create_rag_service") as mock_create_service:
+            with patch("src.rag.cli.evaluate_retrieval", new=mock_eval):
+                mock_service = AsyncMock()
+                mock_create_service.return_value = mock_service
+
+                await run_evaluation(args)
+
+                # persist_dirが正しく渡されたか確認
+                mock_create_service.assert_called_once()
+                call_kwargs = mock_create_service.call_args
+                assert call_kwargs[1]["persist_dir"] == custom_persist_dir
 
 
 class TestCLIInitTestDb:
