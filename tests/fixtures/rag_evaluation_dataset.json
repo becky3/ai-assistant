@@ -1,44 +1,44 @@
 {
-  "description": "RAG評価用テストデータセット - ドラゴンクエスト3攻略情報",
-  "version": "1.0.0",
+  "description": "RAG評価用テストデータセット - 架空RPG「勇者の冒険」攻略情報",
+  "version": "1.1.0",
   "queries": [
     {
       "id": "q1",
-      "query": "まもりのマント 入手場所",
+      "query": "守護のマント 入手場所",
       "description": "特定アイテムの入手場所を問うクエリ。正しいソースからのみ情報を取得すべき。",
       "expected_sources": [
-        "https://example.com/dq3/item/mamorinomanto.html",
-        "https://example.com/dq3/dungeon/fuyuujou.html"
+        "https://example.com/yuusha/item/shugo-mantle.html",
+        "https://example.com/yuusha/dungeon/sky-castle.html"
       ],
-      "expected_keywords": ["ふゆうじょう", "かこのカオスしんでん", "まもりのマント"],
+      "expected_keywords": ["天空城", "古代神殿", "守護のマント"],
       "negative_sources": [
-        "https://example.com/dq3/dungeon/shirennoshiro.html"
+        "https://example.com/yuusha/dungeon/trial-tower.html"
       ],
-      "notes": "Issue #176: LLMが「しれんのしろ」のアイテムとして誤回答した事例"
+      "notes": "LLMが「試練の塔」のアイテムとして誤回答するケースの検証"
     },
     {
       "id": "q2",
-      "query": "しれんのしろ アイテム",
+      "query": "試練の塔 アイテム",
       "description": "ダンジョン固有のアイテム情報。distance > 0.5 の無関係データが混入するケースの検証。",
       "expected_sources": [
-        "https://example.com/dq3/dungeon/shirennoshiro.html"
+        "https://example.com/yuusha/dungeon/trial-tower.html"
       ],
-      "expected_keywords": ["しれんのしろ", "ちからのたね", "すばやさのたね"],
+      "expected_keywords": ["試練の塔", "力の種", "素早さの種"],
       "negative_sources": [
-        "https://example.com/ff1/dungeon/trial.html",
-        "https://example.com/dq6/dungeon/trial.html"
+        "https://example.com/other-rpg/dungeon/trial.html",
+        "https://example.com/fantasy-quest/dungeon/trial.html"
       ],
-      "notes": "Issue #176: 異なるゲームのデータが同程度のdistanceでマッチする問題"
+      "notes": "異なるゲームのデータが同程度のdistanceでマッチする問題"
     },
     {
       "id": "q3",
-      "query": "ゾーマ 攻略",
+      "query": "魔王ダークロード 攻略",
       "description": "ラスボス攻略情報。関連性の高い情報が優先されるべき。",
       "expected_sources": [
-        "https://example.com/dq3/boss/zoma.html",
-        "https://example.com/dq3/strategy/finalstage.html"
+        "https://example.com/yuusha/boss/darklord.html",
+        "https://example.com/yuusha/strategy/final-stage.html"
       ],
-      "expected_keywords": ["ゾーマ", "ひかりのたま", "まおうのかげ"],
+      "expected_keywords": ["ダークロード", "光の宝玉", "影の従者"],
       "negative_sources": [],
       "notes": "基本的な検索精度テスト"
     },
@@ -47,71 +47,73 @@
       "query": "勇者 おすすめ装備",
       "description": "キャラクター装備の推奨情報。複数の関連チャンクが期待される。",
       "expected_sources": [
-        "https://example.com/dq3/job/yuusha.html",
-        "https://example.com/dq3/equipment/weapon.html",
-        "https://example.com/dq3/equipment/armor.html"
+        "https://example.com/yuusha/job/hero.html",
+        "https://example.com/yuusha/equipment/weapon.html",
+        "https://example.com/yuusha/equipment/armor.html"
       ],
-      "expected_keywords": ["おうじゃのけん", "ひかりのよろい", "ゆうしゃのたて"],
+      "expected_keywords": ["聖剣エクスカリア", "光輝の鎧", "勇者の盾"],
       "negative_sources": [],
       "notes": "複数ソースからの情報統合テスト"
     },
     {
       "id": "q5",
-      "query": "ルイーダのさかば 場所",
+      "query": "冒険者ギルド 場所",
       "description": "特定施設の場所情報。単純なファクト検索。",
       "expected_sources": [
-        "https://example.com/dq3/town/aliahan.html",
-        "https://example.com/dq3/facility/luida.html"
+        "https://example.com/yuusha/town/startville.html",
+        "https://example.com/yuusha/facility/guild.html"
       ],
-      "expected_keywords": ["アリアハン", "ルイーダのさかば", "仲間"],
+      "expected_keywords": ["スタートビル", "冒険者ギルド", "仲間"],
       "negative_sources": [],
       "notes": "基本的な地名・施設検索"
     },
     {
       "id": "q6",
-      "query": "さとりのしょ 入手方法",
+      "query": "賢者の書 入手方法",
       "description": "レアアイテムの入手方法。複数の入手ルートがある場合のテスト。",
       "expected_sources": [
-        "https://example.com/dq3/item/satorinosho.html",
-        "https://example.com/dq3/job/kenja.html"
+        "https://example.com/yuusha/item/sage-book.html",
+        "https://example.com/yuusha/job/sage.html"
       ],
-      "expected_keywords": ["さとりのしょ", "けんじゃ", "てんしょくのしんでん", "ドロップ"],
+      "expected_keywords": ["賢者の書", "賢者", "転職の祭壇", "ドロップ"],
       "negative_sources": [],
       "notes": "賢者への転職に必要なアイテム情報"
     },
     {
       "id": "q7",
-      "query": "バラモス 弱点",
+      "query": "魔将グレイブ 弱点",
       "description": "中ボスの弱点情報。特定の戦闘攻略情報の検索精度テスト。",
       "expected_sources": [
-        "https://example.com/dq3/boss/baramos.html"
+        "https://example.com/yuusha/boss/grave.html"
       ],
-      "expected_keywords": ["バラモス", "イオナズン", "バイキルト"],
+      "expected_keywords": ["グレイブ", "雷撃魔法", "攻撃力強化"],
       "negative_sources": [
-        "https://example.com/dq3/boss/zoma.html"
+        "https://example.com/yuusha/boss/darklord.html"
       ],
       "notes": "ボス間の情報混同を防ぐテスト"
     },
     {
       "id": "q8",
-      "query": "すごろく場 景品",
-      "description": "ミニゲームの報酬情報。SFC/GBC版固有コンテンツ。",
+      "query": "ミニゲーム広場 景品",
+      "description": "ミニゲームの報酬情報。追加コンテンツ。",
       "expected_sources": [
-        "https://example.com/dq3/minigame/sugoroku.html"
+        "https://example.com/yuusha/minigame/plaza.html"
       ],
-      "expected_keywords": ["すごろく", "ちいさなメダル", "景品"],
+      "expected_keywords": ["ミニゲーム", "メダル", "景品"],
       "negative_sources": [],
       "notes": "ミニゲーム関連情報の検索"
     }
   ],
   "metadata": {
     "created_at": "2026-02-09",
+    "updated_at": "2026-02-11",
     "purpose": "RAG検索精度の定量評価（Precision/Recall計測）",
-    "related_issues": ["#176"],
+    "related_issues": ["#176", "#177"],
     "notes": [
       "expected_sources: 検索結果に含まれるべきソースURL",
       "negative_sources: 検索結果に含まれてはいけないソースURL（ハルシネーション検出用）",
-      "expected_keywords: 回答に含まれるべきキーワード（将来の回答品質評価用）"
+      "expected_keywords: 回答に含まれるべきキーワード（将来の回答品質評価用）",
+      "v1.1.0: 著作権問題回避のため架空RPG「勇者の冒険」に変更"
     ]
   }
 }
