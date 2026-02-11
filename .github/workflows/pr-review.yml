@@ -1,0 +1,78 @@
+name: PR Review
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+on:
+  pull_request:
+    types: [opened]
+
+jobs:
+  pr-review:
+    if: github.actor == 'becky3'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: anthropics/claude-code-action@5994afaaa7f44611addc97a696a135acff5fd218 # v1.0.46
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          bot_name: "claude[bot]"
+          bot_id: "209825114"
+          claude_args: "--model claude-sonnet-4-5-20250929 --max-turns 50 --dangerously-skip-permissions"
+          show_full_output: true
+          prompt: |
+            このPRに対して包括的なコードレビューを実施してください。
+
+            ## レビュー手順
+
+            1. **変更内容の把握**: `git diff origin/${{ github.base_ref }}...HEAD` で変更差分を確認
+
+            2. **PR Review Toolkit エージェントを使用してレビュー**:
+               以下のエージェントを順次実行し、それぞれの観点でレビューを行ってください。
+               - `prt-code-reviewer`: CLAUDE.md準拠・バグ検出（信頼度80以上の問題のみ報告）
+               - `prt-silent-failure-hunter`: サイレント障害・エラーハンドリングの問題検出
+               - `prt-test-analyzer`: テストカバレッジの品質分析（テストファイルがある場合）
+
+               型定義の追加・変更がある場合は追加で:
+               - `prt-type-design-analyzer`: 型設計・不変条件の評価
+
+            3. **レビュー結果をPRコメントとして投稿**:
+               以下の形式でまとめてください。
+
+               ```markdown
+               ## PR Review Toolkit 自動レビュー結果
+
+               ### 重大な問題（修正必須）
+               - [エージェント名] 問題の説明 (`ファイル:行番号`)
+
+               ### 重要な問題（修正推奨）
+               - [エージェント名] 問題の説明 (`ファイル:行番号`)
+
+               ### 提案（改善検討）
+               - [エージェント名] 提案内容
+
+               ### 良い点
+               - 適切に実装されている点
+
+               ---
+               *このレビューは PR Review Toolkit により自動生成されました*
+               ```
+
+            4. 問題がない場合は「レビューの結果、重大な問題は検出されませんでした」と報告
+
+      - name: Slack notification
+        if: failure()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+          mention: here
+          if_mention: failure
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
