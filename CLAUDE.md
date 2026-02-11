@@ -191,6 +191,40 @@ PRに対するレビュー指摘（自動レビューツール、人間問わず
 **定義ファイル**: `.claude/agents/` 配下
 **仕様書**: `docs/specs/planner-agent.md`, `docs/specs/code-review-agent.md`, `docs/specs/doc-review-agent.md`, `docs/specs/test-runner-agent.md`
 
+### PR Review Toolkit（プラグイン）
+
+Anthropic 公式の PR レビュー専門エージェント群です。既存のサブエージェントを補完し、より専門的な観点でのレビューを提供します。
+
+| エージェント | 用途 | 特徴 |
+|-------------|------|------|
+| **prt-code-reviewer** | CLAUDE.md準拠・バグ検出 | 信頼度スコア(0-100)付き、80以上のみ報告 |
+| **prt-test-analyzer** | テストカバレッジ品質分析 | 振る舞いカバレッジに焦点、1-10スケール評価 |
+| **prt-silent-failure-hunter** | サイレント障害検出 | try-catch/except の品質分析 |
+| **prt-type-design-analyzer** | 型設計・不変条件評価 | 4観点で1-10スケール評価 |
+| **prt-comment-analyzer** | コメント正確性分析 | コメント腐敗・誤解を招く記述の検出 |
+| **prt-code-simplifier** | コード簡素化 | 機能保持しつつ可読性向上 |
+
+**統合コマンド**: `/review-pr`
+
+```bash
+/review-pr              # 全観点でレビュー
+/review-pr tests errors # テストとエラー処理のみ
+/review-pr simplify     # コード簡素化のみ
+```
+
+**既存サブエージェントとの使い分け**:
+
+| 目的 | 既存サブエージェント | PR Review Toolkit |
+|------|---------------------|-------------------|
+| テスト実行・修正 | test-runner | - |
+| テスト品質分析 | - | prt-test-analyzer |
+| 汎用コードレビュー | code-reviewer | prt-code-reviewer（スコア付き） |
+| ドキュメント品質 | doc-reviewer | prt-comment-analyzer（コメント特化） |
+| エラー処理分析 | - | prt-silent-failure-hunter |
+| 型設計評価 | - | prt-type-design-analyzer |
+
+**定義ファイル**: `.claude/agents/prt-*.md`, `.claude/commands/review-pr.md`
+
 ### スキルとサブエージェントの使い分け
 
 - **スキル**: ユーザーが `/コマンド名` で明示的に実行するワークフロー（ドキュメント生成、レビュー対応など）
