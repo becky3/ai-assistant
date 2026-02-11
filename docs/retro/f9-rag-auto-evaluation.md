@@ -29,6 +29,7 @@ RAG検索精度の自動評価パイプラインを構築した。CLIツール�
 python -m src.rag.cli evaluate \
   --dataset tests/fixtures/rag_evaluation_dataset.json \
   --output-dir reports/rag-evaluation \
+  --persist-dir ./test_chroma_db \
   --baseline-file reports/rag-evaluation/baseline.json \
   --fail-on-regression
 
@@ -64,7 +65,7 @@ Phase 2 で作成した `src/rag/evaluation.py` の評価関数群をそのま�
 
 ### 3. 著作権問題の迅速な対応
 
-テストデータに実在のゲーム情報（ドラゴンクエスト等）を含めてしまったが、ユーザー指摘後すぐに修正:
+テストデータに実在のゲーム情報を含めてしまったが、ユーザー指摘後すぐに修正:
 
 - 架空のRPG「勇者の冒険」に完全置き換え
 - 全てのキャラクター名、アイテム名、ダンジョン名を架空に
@@ -83,11 +84,11 @@ test-runner、code-reviewer、doc-reviewer サブエージェントを活用:
 
 ### 1. 著作権問題に最初から気づかなかった
 
-**問題**: テストデータ作成時に、実在のゲーム（ドラゴンクエスト3、ファイナルファンタジー1）の情報をそのまま使用してしまった。
+**問題**: テストデータ作成時に、実在のゲームシリーズの情報をそのまま使用してしまった。
 
 **経緯**:
 
-1. 既存の評価データセット（`rag_evaluation_dataset.json`）がドラクエ3の攻略情報で作成されていた
+1. 既存の評価データセット（`rag_evaluation_dataset.json`）が実在ゲームの攻略情報で作成されていた
 2. テストドキュメント作成時にそのまま踏襲
 3. ユーザー指摘で著作権問題に気づく
 

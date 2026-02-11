@@ -68,6 +68,10 @@ def main() -> None:
         help="類似度閾値",
     )
     eval_parser.add_argument(
+        "--persist-dir",
+        help="ChromaDB永続化ディレクトリ",
+    )
+    eval_parser.add_argument(
         "--fail-on-regression",
         action="store_true",
         help="リグレッション検出時に exit code 1 で終了",
@@ -112,7 +116,7 @@ async def create_rag_service(
     """RAGKnowledgeServiceを生成する.
 
     Args:
-        threshold: 類似度閾値（指定時は環境変数を上書き）
+        threshold: 類似度閾値（指定時は環境変数を一時上書き）
         persist_dir: ChromaDB永続化ディレクトリ（指定時は環境変数を上書き）
 
     Returns:
@@ -126,27 +130,40 @@ async def create_rag_service(
     from src.services.rag_knowledge import RAGKnowledgeService
     from src.services.web_crawler import WebCrawler
 
-    # 閾値を環境変数で上書き（一時的）
-    if threshold is not None:
-        os.environ["RAG_SIMILARITY_THRESHOLD"] = str(threshold)
+    # 環境変数を一時上書き（元の値を保持して復元）
+    original_threshold = os.environ.get("RAG_SIMILARITY_THRESHOLD")
+    try:
+        if threshold is not None:
+            os.environ["RAG_SIMILARITY_THRESHOLD"] = str(threshold)
+            # lru_cacheをクリアして設定を再読み込み
+            get_settings.cache_clear()
 
-    settings = get_settings()
-    embedding_provider = get_embedding_provider(settings, settings.embedding_provider)
+        settings = get_settings()
+        embedding_provider = get_embedding_provider(settings, settings.embedding_provider)
 
-    # persist_dirが指定されている場合はそれを使用
-    chroma_persist_dir = persist_dir or settings.chromadb_persist_dir
-    vector_store = VectorStore(
-        embedding_provider=embedding_provider,
-        persist_directory=chroma_persist_dir,
-    )
+        # persist_dirが指定されている場合はそれを使用
+        chroma_persist_dir = persist_dir or settings.chromadb_persist_dir
+        vector_store = VectorStore(
+            embedding_provider=embedding_provider,
+            persist_directory=chroma_persist_dir,
+        )
 
-    # WebCrawlerはダミー（評価時は使用しない）
-    web_crawler = WebCrawler()
+        # WebCrawlerはダミー（評価時は使用しない）
+        web_crawler = WebCrawler()
 
-    return RAGKnowledgeService(
-        vector_store=vector_store,
-        web_crawler=web_crawler,
-    )
+        return RAGKnowledgeService(
+            vector_store=vector_store,
+            web_crawler=web_crawler,
+        )
+    finally:
+        # 環境変数を復元
+        if threshold is not None:
+            if original_threshold is None:
+                os.environ.pop("RAG_SIMILARITY_THRESHOLD", None)
+            else:
+                os.environ["RAG_SIMILARITY_THRESHOLD"] = original_threshold
+            # キャッシュをクリアして次回のget_settings()で新しい設定を読み込む
+            get_settings.cache_clear()
 
 
 async def run_evaluation(args: argparse.Namespace) -> None:
@@ -162,7 +179,10 @@ async def run_evaluation(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     # RAGサービス初期化
-    rag_service = await create_rag_service(threshold=args.threshold)
+    rag_service = await create_rag_service(
+        threshold=args.threshold,
+        persist_dir=getattr(args, "persist_dir", None),
+    )
 
     # 評価実行
     report = await evaluate_retrieval(

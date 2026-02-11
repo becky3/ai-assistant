@@ -493,6 +493,7 @@ RAG精度テストが必要と判断した場合、確認なしで自動実行�
 
    ```bash
    python -m src.rag.cli evaluate \
+     --persist-dir ./test_chroma_db \
      --output-dir reports/rag-evaluation
    ```
 

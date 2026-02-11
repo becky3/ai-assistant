@@ -53,6 +53,7 @@ python -m src.rag.cli evaluate \
   --dataset tests/fixtures/rag_evaluation_dataset.json \
   --output-dir reports/rag-evaluation \
   --baseline-file reports/rag-evaluation/baseline.json \
+  --persist-dir ./test_chroma_db \
   --n-results 5 \
   --threshold 0.5 \
   --fail-on-regression
@@ -67,6 +68,7 @@ python -m src.rag.cli evaluate \
 | `--baseline-file` | str \| None | `None` | ベースラインJSONファイルのパス |
 | `--n-results` | int | `5` | 各クエリで取得する結果数 |
 | `--threshold` | float \| None | `None` | 類似度閾値（`RAG_SIMILARITY_THRESHOLD` を上書き） |
+| `--persist-dir` | str \| None | `None` | ChromaDB永続化ディレクトリ（設定の `chromadb_persist_dir` を上書き） |
 | `--fail-on-regression` | bool | `False` | リグレッション検出時に exit code 1 で終了 |
 | `--regression-threshold` | float | `0.1` | F1スコアの低下がこの値を超えたらリグレッション判定 |
 
@@ -117,7 +119,7 @@ regression_detected = (baseline_f1 - current_f1) > regression_threshold
   "query_results": [
     {
       "query_id": "q1",
-      "query": "まもりのマント 入手場所",
+      "query": "守護のマント 入手場所",
       "precision": 0.5,
       "recall": 1.0,
       "f1": 0.67,
@@ -153,7 +155,7 @@ regression_detected = (baseline_f1 - current_f1) > regression_threshold
 
 ## クエリ別詳細
 
-### q1: まもりのマント 入手場所
+### q1: 守護のマント 入手場所
 
 - Precision: 0.5
 - Recall: 1.0
@@ -191,6 +193,7 @@ python -m src.rag.cli init-test-db \
 
 # 2. 精度評価を実行
 python -m src.rag.cli evaluate \
+  --persist-dir ./test_chroma_db \
   --output-dir reports/rag-evaluation
 ```
 
@@ -212,9 +215,9 @@ python -m src.rag.cli init-test-db \
 {
   "documents": [
     {
-      "source_url": "https://example.com/dq3/item/mamorinomanto.html",
-      "title": "まもりのマント",
-      "content": "まもりのマントは、ふゆうじょう、かこのカオスしんでんで入手できます..."
+      "source_url": "https://example.com/yuusha/item/shugo-mantle.html",
+      "title": "守護のマント",
+      "content": "守護のマントは、「勇者の冒険」に登場する防具です。装備すると魔法ダメージを軽減する効果があります。入手場所は、天空城の宝箱、または古代神殿で手に入れることができます..."
     }
   ]
 }
