@@ -65,7 +65,7 @@ Anthropic 公式の PR Review Toolkit プラグインを導入し、PR 作成時
 
 ### 技術的な判断
 
-1. **モデル選択: `claude-sonnet-4-5` を使用**
+1. **モデル選択: `claude-sonnet-4-5-20250929` を使用**
    - 自動レビューはコスト効率を重視
    - `@claude` メンションによる実装支援は引き続き `claude-opus-4-5` を使用
 
