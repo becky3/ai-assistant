@@ -196,7 +196,11 @@ Task(
 )
 ```
 
+> **Note**: Task ツールの `mode` パラメータは、エージェント定義ファイル（`.claude/agents/*.md`）の `permissionMode` とは別物です。Task ツールでスポーンする際は `mode` を使用してください。
+
 **理由**: `mode` を設定しないと、メンバーからの SendMessage の content がリーダーに配信されない問題がある（Issue #224）。
+
+**セキュリティ上の注意**: `bypassPermissions` は全ての許可チェックをスキップするモードです。信頼できるリポジトリ・ローカル環境でのみ使用し、Claude Code 側で問題が修正された場合は設定を見直してください。
 
 ## 注意事項
 

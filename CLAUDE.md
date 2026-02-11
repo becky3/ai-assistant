@@ -256,7 +256,7 @@ Task(
     subagent_type="general-purpose",
     name="member-name",
     team_name="team-name",
-    mode="bypassPermissions",  # ← 必須: これがないと SendMessage が届かない
+    mode="bypassPermissions",  # ← 必須: これがないと content が配信されない
     prompt="..."
 )
 ```

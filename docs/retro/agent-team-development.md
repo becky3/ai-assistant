@@ -314,7 +314,7 @@ Task(
 
 1. `docs/specs/agent-teams.md` にメンバースポーン時の必須設定を追加
 2. `CLAUDE.md` にチーム構築時のルールを追加
-3. `MEMORY.md` に学びを記録
+3. Claude Code の auto memory（`~/.claude/projects/*/memory/MEMORY.md`）にも学びを記録（git管理外）
 
 ### 次に活かすこと
 
