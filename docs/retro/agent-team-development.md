@@ -281,7 +281,7 @@ graph LR
 ### 調査プロセス
 
 1. **問題の再現**: チームを組んで調査したところ、問題が再現された
-2. **メールボックス確認**: `~/.claude/teams/{team-name}/inboxes/{recipient}.json` を確認したところ、メッセージは正しく保存されていたが `read: false` のまま
+2. **メールボックス確認**: `~/.claude/teams/{team-name}/inboxes/` 配下を確認したところ、プロンプトで指定した recipient（例: `my-leader`）向けの inbox にメッセージが保存されていた。この時点では `read: false` のままであることが原因だと誤認していたが、後の調査で、リーダーが実際に監視しているのは `team-lead` 向けの inbox であり、`read` フラグ自体は根本原因ではなかったことが判明
 3. **GitHub Issues 調査**: 関連する問題（#24108, #24307）を発見
 4. **当初の回避策**: Issue #24307 のコメントで `mode: "bypassPermissions"` の使用が成功事例として報告されていたため、これを採用
 
