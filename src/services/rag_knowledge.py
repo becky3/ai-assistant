@@ -307,13 +307,20 @@ class RAGKnowledgeService:
         await self._vector_store.delete_stale_chunks(normalized_url, new_ids)
 
         # BM25インデックスにも追加（ハイブリッド検索用）
+        # 注: BM25は補助的機能のため、失敗してもVectorStoreの結果は維持する
         if self._bm25_index is not None:
             bm25_docs = [
                 (chunk.id, chunk.text, normalized_url)
                 for chunk in document_chunks
             ]
-            await asyncio.to_thread(self._bm25_index.add_documents, bm25_docs)
-            logger.debug("Added %d documents to BM25 index", len(bm25_docs))
+            try:
+                self._bm25_index.add_documents(bm25_docs)
+                logger.debug("Added %d documents to BM25 index", len(bm25_docs))
+            except Exception:
+                logger.warning(
+                    "Failed to add documents to BM25 index for %s", normalized_url,
+                    exc_info=True,
+                )
 
         logger.info("Ingested page %s: %d chunks", normalized_url, count)
         return count
@@ -495,15 +502,18 @@ class RAGKnowledgeService:
             logger.info("Deleted %d chunks from source: %s", total_deleted, normalized_url)
 
         # BM25インデックスからも削除（ハイブリッド検索用）
+        # 注: BM25は補助的機能のため、失敗してもVectorStoreの結果は維持する
         if self._bm25_index is not None:
-            bm25_deleted = await asyncio.to_thread(
-                self._bm25_index.delete_by_source, normalized_url
-            )
-            if fragment:
-                bm25_deleted += await asyncio.to_thread(
-                    self._bm25_index.delete_by_source, source_url
+            try:
+                bm25_deleted = self._bm25_index.delete_by_source(normalized_url)
+                if fragment:
+                    bm25_deleted += self._bm25_index.delete_by_source(source_url)
+                logger.debug("Deleted %d documents from BM25 index", bm25_deleted)
+            except Exception:
+                logger.warning(
+                    "Failed to delete from BM25 index for %s", normalized_url,
+                    exc_info=True,
                 )
-            logger.debug("Deleted %d documents from BM25 index", bm25_deleted)
 
         return total_deleted
 

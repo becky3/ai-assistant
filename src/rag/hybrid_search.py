@@ -247,10 +247,10 @@ class HybridSearchEngine:
             else:
                 # 新規エントリを追加（BM25のみヒット）
                 # BM25Indexからsource_urlを取得
-                source_url = self._bm25_index.get_source_url(br.doc_id)
+                bm25_source_url: str | None = self._bm25_index.get_source_url(br.doc_id)
                 bm25_metadata: dict[str, str | int] = {}
-                if source_url:
-                    bm25_metadata["source_url"] = source_url
+                if bm25_source_url:
+                    bm25_metadata["source_url"] = bm25_source_url
 
                 doc_map[br.doc_id] = {
                     "text": br.text,
