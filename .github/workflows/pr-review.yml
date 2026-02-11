@@ -33,14 +33,19 @@ jobs:
       - name: Get base branch
         id: base
         run: |
-          set -euo pipefail
+          set -uo pipefail
           if [ "${{ github.event_name }}" = "issue_comment" ]; then
-            BASE=$(gh pr view ${{ github.event.issue.number }} --json baseRefName -q .baseRefName)
+            if ! BASE=$(gh pr view ${{ github.event.issue.number }} --json baseRefName -q .baseRefName 2>&1); then
+              echo "Error: gh pr view command failed for PR #${{ github.event.issue.number }}" >&2
+              echo "Command output: $BASE" >&2
+              echo "Possible causes: invalid PR number, GitHub API error, authentication failure" >&2
+              exit 1
+            fi
           else
             BASE="${{ github.base_ref }}"
           fi
           if [ -z "$BASE" ]; then
-            echo "Error: Failed to get base branch" >&2
+            echo "Error: Base branch name is empty (PR metadata missing or corrupted)" >&2
             exit 1
           fi
           echo "ref=$BASE" >> $GITHUB_OUTPUT
@@ -50,14 +55,19 @@ jobs:
       - name: Get PR head commit
         id: pr-head
         run: |
-          set -euo pipefail
+          set -uo pipefail
           if [ "${{ github.event_name }}" = "issue_comment" ]; then
-            COMMIT_ID=$(gh pr view ${{ github.event.issue.number }} --json headRefOid -q .headRefOid)
+            if ! COMMIT_ID=$(gh pr view ${{ github.event.issue.number }} --json headRefOid -q .headRefOid 2>&1); then
+              echo "Error: gh pr view command failed for PR #${{ github.event.issue.number }}" >&2
+              echo "Command output: $COMMIT_ID" >&2
+              echo "Possible causes: invalid PR number, GitHub API error, authentication failure" >&2
+              exit 1
+            fi
           else
             COMMIT_ID="${{ github.event.pull_request.head.sha }}"
           fi
           if [ -z "$COMMIT_ID" ]; then
-            echo "Error: Failed to get PR head commit" >&2
+            echo "Error: PR head commit SHA is empty (PR metadata missing or corrupted)" >&2
             exit 1
           fi
           echo "sha=$COMMIT_ID" >> $GITHUB_OUTPUT
@@ -67,14 +77,20 @@ jobs:
       - name: Get PR number
         id: pr-number
         run: |
-          set -euo pipefail
+          set -uo pipefail
           if [ "${{ github.event_name }}" = "issue_comment" ]; then
             PR_NUMBER="${{ github.event.issue.number }}"
           else
             PR_NUMBER="${{ github.event.pull_request.number }}"
           fi
           if [ -z "$PR_NUMBER" ]; then
-            echo "Error: Failed to get PR number" >&2
+            echo "Error: PR number is empty" >&2
+            exit 1
+          fi
+          # 数値バリデーション
+          if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "Error: PR number is not a valid integer: '$PR_NUMBER'" >&2
+            echo "This indicates GitHub event payload is malformed or missing expected fields" >&2
             exit 1
           fi
           echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
