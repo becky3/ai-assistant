@@ -253,18 +253,18 @@ Anthropic 公式の PR レビュー専門エージェント群です。既存の
 1. **履歴ファイルを確認**: `~/.claude/team-theme-history.json` を読み込む
 2. **直近10件と被らないテーマを選択**: 履歴にあるテーマは避ける
 3. **履歴ファイルを更新**: 選択したテーマを履歴に追加（**メンバー生成前に実行**）
-4. **メンバーを生成**: Task ツールでチームメンバーをスポーン（**`mode: "bypassPermissions"` 必須**）
+4. **メンバーを生成**: Task ツールでチームメンバーをスポーン（詳細は `docs/specs/agent-teams.md#メンバーのスポーン` を参照）
 
-**メンバースポーン時の必須設定**:
+**プロンプトでの recipient 指定（重要）**:
+
+リーダーへの送信を指示する際は、**`recipient: "team-lead"`** を使用する。任意の名前を指定すると、別のメールボックスに書き込まれてリーダーに届かない。
 
 ```
-Task(
-    subagent_type="general-purpose",
-    name="member-name",
-    team_name="team-name",
-    mode="bypassPermissions",  # ← 必須: これがないと content が配信されない
-    prompt="..."
-)
+❌ NG: 「リーダーに報告して。recipient: "my-leader" で送信」
+   → my-leader.json に書き込まれ、team-lead.json を読むリーダーには届かない
+
+✅ OK: 「リーダーに報告して。recipient: "team-lead" で送信」
+   → team-lead.json に書き込まれ、正しく配信される
 ```
 
 **履歴ファイルのフォーマット**:

@@ -150,12 +150,21 @@ SendMessage で報告する際は、**報告内容の本文を必ず content パ
 ```
 SendMessage:
   type: "message"
-  recipient: "リーダー名"
-  content: "ここに報告内容の本文を書く"  ← これが必須
+  recipient: "team-lead"  ← キャラクター名ではなく "team-lead" を使う
+  content: "ここに報告内容の本文を書く"
   summary: "短い要約"
 ```
 
 「送った」と自己報告しても、content に内容がなければリーダーには届かない。
+
+**重要: recipient の指定**
+
+リーダーにメッセージを送る際は、**必ず `recipient: "team-lead"` を使用する**。
+
+❌ NG: `recipient: "my-leader"`（任意の名前）→ 別のメールボックスに書き込まれ、リーダーに届かない
+✅ OK: `recipient: "team-lead"` → 正しくリーダーに配信される
+
+プロンプトで任意の名前（例: 「my-leaderに報告して」）を指示すると、メンバーは別の recipient を使用してしまい、リーダーシステムは `team-lead` 宛ての inbox のみを購読しているため配信されない。
 
 ### キャラクター演出
 
@@ -184,23 +193,16 @@ SendMessage:
 
 ## メンバーのスポーン
 
-Task ツールでメンバーをスポーンする際は、**必ず `mode: "bypassPermissions"` を設定する**。
+Task ツールでメンバーをスポーンする。
 
 ```
 Task(
     subagent_type="general-purpose",
     name="member-name",
     team_name="team-name",
-    mode="bypassPermissions",  # ← 必須
     prompt="..."
 )
 ```
-
-> **Note**: Task ツールの `mode` パラメータは、エージェント定義ファイル（`.claude/agents/*.md`）の `permissionMode` とは別物です。Task ツールでスポーンする際は `mode` を使用してください。
-
-**理由**: `mode` を設定しないと、メンバーからの SendMessage の content がリーダーに配信されない問題がある（Issue #224）。
-
-**セキュリティ上の注意**: `bypassPermissions` は全ての許可チェックをスキップするモードです。信頼できるリポジトリ・ローカル環境でのみ使用し、Claude Code 側で問題が修正された場合は設定を見直してください。
 
 ## 注意事項
 
