@@ -14,13 +14,13 @@ on:
 
 jobs:
   pr-review:
-    # PR作成時 OR PRへの /re-review コメント時に実行
+    # PR作成時 OR PRへの /review コメント時に実行
     if: |
       github.actor == 'becky3' && (
         github.event_name == 'pull_request' ||
         (github.event_name == 'issue_comment' &&
          github.event.issue.pull_request &&
-         contains(github.event.comment.body, '/re-review'))
+         startsWith(github.event.comment.body, '/review'))
       )
     runs-on: ubuntu-latest
     steps:
@@ -33,14 +33,51 @@ jobs:
       - name: Get base branch
         id: base
         run: |
+          set -euo pipefail
           if [ "${{ github.event_name }}" = "issue_comment" ]; then
             BASE=$(gh pr view ${{ github.event.issue.number }} --json baseRefName -q .baseRefName)
           else
             BASE="${{ github.base_ref }}"
           fi
+          if [ -z "$BASE" ]; then
+            echo "Error: Failed to get base branch" >&2
+            exit 1
+          fi
           echo "ref=$BASE" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ github.token }}
+
+      - name: Get PR head commit
+        id: pr-head
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "issue_comment" ]; then
+            COMMIT_ID=$(gh pr view ${{ github.event.issue.number }} --json headRefOid -q .headRefOid)
+          else
+            COMMIT_ID="${{ github.event.pull_request.head.sha }}"
+          fi
+          if [ -z "$COMMIT_ID" ]; then
+            echo "Error: Failed to get PR head commit" >&2
+            exit 1
+          fi
+          echo "sha=$COMMIT_ID" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Get PR number
+        id: pr-number
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "issue_comment" ]; then
+            PR_NUMBER="${{ github.event.issue.number }}"
+          else
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+          fi
+          if [ -z "$PR_NUMBER" ]; then
+            echo "Error: Failed to get PR number" >&2
+            exit 1
+          fi
+          echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
 
       - uses: anthropics/claude-code-action@5994afaaa7f44611addc97a696a135acff5fd218 # v1.0.46
         with:
@@ -66,17 +103,42 @@ jobs:
                型定義の追加・変更がある場合は追加で:
                - `prt-type-design-analyzer`: 型設計・不変条件の評価
 
-            3. **レビュー結果をPRコメントとして投稿**:
-               以下の形式でまとめてください。
+               **重要**: レビュー対象は変更差分（diff）の範囲内のコードのみです。
+               diff範囲外のコードに対する指摘は行わないでください。
+               変更されていないコードの問題は、このPRの対応範囲外です。
+
+            3. **問題検出時はコード行コメントを即座に投稿**:
+               各エージェントが問題を検出したら、該当するコード行にコメントを投稿してください。
+               これにより、check-prスキルで問題を検出可能になります。
+
+               コード行コメント投稿コマンド:
+               ```bash
+               gh api "repos/${{ github.repository }}/pulls/${{ steps.pr-number.outputs.number }}/comments" \
+                 -f body="[<エージェント名>] <問題の説明>" \
+                 -f path="<ファイルパス>" \
+                 -F line=<行番号> \
+                 -f side=RIGHT \
+                 -f commit_id="${{ steps.pr-head.outputs.sha }}"
+               ```
+
+               注意: gh apiコマンドが失敗した場合（該当行がdiff範囲外、APIレート制限、ネットワークエラーなど）:
+               - 失敗したコメントの情報（ファイル、行番号、問題内容）をサマリーコメントの「投稿失敗」セクションに記載してください
+               - 可能であれば最大3回までリトライを試みてください
+
+               コード行コメントのルール:
+               - 問題点のみコード行コメントとして投稿（提案や良い点はサマリーに含める）
+               - 同一行に複数の問題がある場合は1つのコメントにまとめる
+               - ファイルパスはリポジトリルートからの相対パス（例: `src/services/chat.py`）
+               - 行番号は変更後のファイルの行番号を使用
+
+            4. **サマリーをPRコメントとして投稿**:
+               全エージェントの実行後、以下の形式でサマリーを投稿してください。
 
                ```markdown
                ## PR Review Toolkit 自動レビュー結果
 
-               ### 重大な問題（修正必須）
-               - [エージェント名] 問題の説明 (`ファイル:行番号`)
-
-               ### 重要な問題（修正推奨）
-               - [エージェント名] 問題の説明 (`ファイル:行番号`)
+               ### 検出された問題
+               コード行コメントとして投稿済み（{N}件）
 
                ### 提案（改善検討）
                - [エージェント名] 提案内容
@@ -86,9 +148,10 @@ jobs:
 
                ---
                *このレビューは PR Review Toolkit により自動生成されました*
+               *問題の詳細は各コード行のコメントを参照してください*
                ```
 
-            4. 問題がない場合は「レビューの結果、重大な問題は検出されませんでした」と報告
+            5. 問題がない場合は「レビューの結果、重大な問題は検出されませんでした」と報告
 
       # Slack通知（成功時は冗長なため失敗時のみ。claude.ymlとは意図的に異なる）
       - name: Slack notification
