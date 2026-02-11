@@ -117,7 +117,7 @@ async def create_rag_service(
 
     Args:
         threshold: 類似度閾値（指定時は環境変数を一時上書き）
-        persist_dir: ChromaDB永続化ディレクトリ（指定時は環境変数を上書き）
+        persist_dir: ChromaDB永続化ディレクトリ（指定時は設定 chromadb_persist_dir を上書き）
 
     Returns:
         RAGKnowledgeServiceインスタンス
@@ -181,7 +181,7 @@ async def run_evaluation(args: argparse.Namespace) -> None:
     # RAGサービス初期化
     rag_service = await create_rag_service(
         threshold=args.threshold,
-        persist_dir=getattr(args, "persist_dir", None),
+        persist_dir=args.persist_dir,
     )
 
     # 評価実行
