@@ -1,6 +1,7 @@
 """RAGナレッジ管理サービス
 
-仕様: docs/specs/f9-rag-knowledge.md, docs/specs/f9-rag-evaluation.md
+仕様: docs/specs/f9-rag-knowledge.md, docs/specs/f9-rag-evaluation.md,
+      docs/specs/f9-rag-chunking-hybrid.md
 """
 
 from __future__ import annotations
@@ -13,9 +14,15 @@ from typing import TYPE_CHECKING
 from urllib.parse import urldefrag
 
 from src.rag.chunker import chunk_text
+from src.rag.content_detector import ContentType, detect_content_type
+from src.rag.heading_chunker import chunk_by_headings
+from src.rag.table_chunker import chunk_table_data
 from src.rag.vector_store import DocumentChunk, VectorStore
 
 if TYPE_CHECKING:
+    from src.config.settings import Settings
+    from src.rag.bm25_index import BM25Index
+    from src.rag.hybrid_search import HybridSearchEngine
     from src.services.safe_browsing import SafeBrowsingClient
     from src.services.web_crawler import CrawledPage, WebCrawler
 
@@ -40,7 +47,7 @@ class RAGRetrievalResult:
 class RAGKnowledgeService:
     """RAGナレッジ管理サービス.
 
-    仕様: docs/specs/f9-rag-knowledge.md
+    仕様: docs/specs/f9-rag-knowledge.md, docs/specs/f9-rag-chunking-hybrid.md
     """
 
     def __init__(
@@ -50,6 +57,8 @@ class RAGKnowledgeService:
         chunk_size: int = 500,
         chunk_overlap: int = 50,
         safe_browsing_client: SafeBrowsingClient | None = None,
+        bm25_index: BM25Index | None = None,
+        hybrid_search_enabled: bool = False,
     ) -> None:
         """RAGKnowledgeServiceを初期化する.
 
@@ -59,12 +68,31 @@ class RAGKnowledgeService:
             chunk_size: チャンクの最大文字数
             chunk_overlap: チャンク間のオーバーラップ文字数
             safe_browsing_client: Safe Browsing クライアント（オプション）
+            bm25_index: BM25インデックス（オプション、ハイブリッド検索用）
+            hybrid_search_enabled: ハイブリッド検索の有効/無効
         """
         self._vector_store = vector_store
         self._web_crawler = web_crawler
         self._chunk_size = chunk_size
         self._chunk_overlap = chunk_overlap
         self._safe_browsing_client = safe_browsing_client
+        self._bm25_index = bm25_index
+        self._hybrid_search_enabled = hybrid_search_enabled
+        self._hybrid_search_engine: HybridSearchEngine | None = None
+
+        # ハイブリッド検索エンジンの初期化
+        if hybrid_search_enabled and bm25_index is not None:
+            from src.config.settings import get_settings
+            from src.rag.hybrid_search import HybridSearchEngine
+
+            settings = get_settings()
+            self._hybrid_search_engine = HybridSearchEngine(
+                vector_store=vector_store,
+                bm25_index=bm25_index,
+                vector_weight=settings.rag_vector_weight,
+                rrf_k=settings.rag_rrf_k,
+            )
+            logger.info("Hybrid search engine initialized")
 
     async def ingest_from_index(
         self,
@@ -187,6 +215,53 @@ class RAGKnowledgeService:
 
         return await self._ingest_crawled_page(page)
 
+    def _smart_chunk(self, text: str) -> list[str]:
+        """コンテンツタイプに応じた適切なチャンキング手法を選択する.
+
+        仕様: docs/specs/f9-rag-chunking-hybrid.md
+
+        - TABLE: テーブルデータとして行単位でチャンキング
+        - HEADING/MIXED: 見出し単位でチャンキング
+        - PROSE: 従来の段落ベースチャンキング
+
+        Args:
+            text: チャンキング対象のテキスト
+
+        Returns:
+            チャンクのリスト
+        """
+        if not text or not text.strip():
+            return []
+
+        content_type = detect_content_type(text)
+        logger.debug("Detected content type: %s", content_type.value)
+
+        if content_type == ContentType.TABLE:
+            # テーブルデータ: 行単位でチャンキング
+            table_chunks = chunk_table_data(text)
+            if table_chunks:
+                return [chunk.formatted_text for chunk in table_chunks]
+            # テーブルチャンキングに失敗した場合はフォールバック
+            logger.debug("Table chunking returned no results, falling back to prose")
+
+        if content_type in (ContentType.HEADING, ContentType.MIXED):
+            # 見出しあり: 見出し単位でチャンキング
+            heading_chunks = chunk_by_headings(
+                text,
+                max_chunk_size=self._chunk_size,
+            )
+            if heading_chunks:
+                return [chunk.formatted_text for chunk in heading_chunks]
+            # 見出しチャンキングに失敗した場合はフォールバック
+            logger.debug("Heading chunking returned no results, falling back to prose")
+
+        # 通常テキスト: 従来のチャンキング
+        return chunk_text(
+            text,
+            chunk_size=self._chunk_size,
+            chunk_overlap=self._chunk_overlap,
+        )
+
     async def _ingest_crawled_page(self, page: CrawledPage) -> int:
         """クロール済みページをチャンキングして保存する.
 
@@ -196,12 +271,8 @@ class RAGKnowledgeService:
         Returns:
             保存されたチャンク数
         """
-        # テキストをチャンキング
-        chunks = chunk_text(
-            page.text,
-            chunk_size=self._chunk_size,
-            chunk_overlap=self._chunk_overlap,
-        )
+        # テキストをスマートチャンキング（コンテンツタイプに応じた手法を選択）
+        chunks = self._smart_chunk(page.text)
 
         if not chunks:
             # チャンク生成失敗時は既存ナレッジを削除しない（データ喪失防止）
@@ -235,6 +306,22 @@ class RAGKnowledgeService:
         # upsert成功後、古いチャンクを削除（チャンク数が減った場合）
         await self._vector_store.delete_stale_chunks(normalized_url, new_ids)
 
+        # BM25インデックスにも追加（ハイブリッド検索用）
+        # 注: BM25は補助的機能のため、失敗してもVectorStoreの結果は維持する
+        if self._bm25_index is not None:
+            bm25_docs = [
+                (chunk.id, chunk.text, normalized_url)
+                for chunk in document_chunks
+            ]
+            try:
+                self._bm25_index.add_documents(bm25_docs)
+                logger.debug("Added %d documents to BM25 index", len(bm25_docs))
+            except Exception:
+                logger.warning(
+                    "Failed to add documents to BM25 index for %s", normalized_url,
+                    exc_info=True,
+                )
+
         logger.info("Ingested page %s: %d chunks", normalized_url, count)
         return count
 
@@ -243,7 +330,7 @@ class RAGKnowledgeService:
 
         ChatService から呼ばれる。結果なしの場合は空のRAGRetrievalResult。
 
-        仕様: docs/specs/f9-rag-evaluation.md
+        仕様: docs/specs/f9-rag-evaluation.md, docs/specs/f9-rag-chunking-hybrid.md
 
         Args:
             query: 検索クエリ
@@ -255,6 +342,30 @@ class RAGKnowledgeService:
         from src.config.settings import get_settings
 
         settings = get_settings()
+
+        # ハイブリッド検索が有効な場合
+        if self._hybrid_search_enabled and self._hybrid_search_engine is not None:
+            return await self._retrieve_hybrid(query, n_results, settings)
+
+        # 従来のベクトル検索のみ
+        return await self._retrieve_vector_only(query, n_results, settings)
+
+    async def _retrieve_vector_only(
+        self,
+        query: str,
+        n_results: int,
+        settings: "Settings",
+    ) -> RAGRetrievalResult:
+        """ベクトル検索のみで検索を実行する（従来の動作）.
+
+        Args:
+            query: 検索クエリ
+            n_results: 返却する結果の最大数
+            settings: 設定オブジェクト
+
+        Returns:
+            RAGRetrievalResult: コンテキストとソース情報
+        """
         results = await self._vector_store.search(
             query,
             n_results=n_results,
@@ -266,17 +377,79 @@ class RAGKnowledgeService:
 
         # デバッグログ出力
         if settings.rag_debug_log_enabled:
-            logger.info("RAG retrieve: query=%r", query)
+            logger.info("RAG retrieve (vector only): query=%r", query)
             for i, result in enumerate(results, start=1):
                 source_url = result.metadata.get("source_url", "不明")
-                # INFOレベルではdistance・sourceのみ出力（PII漏洩リスク軽減）
                 logger.info(
                     "RAG result %d: distance=%.3f source=%r",
                     i,
                     result.distance,
                     source_url,
                 )
-                # テキストプレビューはDEBUGレベルに限定
+                text_preview = (
+                    result.text[:100] + "..." if len(result.text) > 100 else result.text
+                )
+                logger.debug("RAG result %d text: %r", i, text_preview)
+                logger.debug("RAG result %d full text: %r", i, result.text)
+
+        # フォーマット済みテキストを構築
+        formatted_parts: list[str] = []
+        sources: list[str] = []
+        for i, result in enumerate(results, start=1):
+            source_url = str(result.metadata.get("source_url", "不明"))
+            formatted_parts.append(
+                f"--- 参考情報 {i} ---\n出典: {source_url}\n{result.text}"
+            )
+            if source_url != "不明" and source_url not in sources:
+                sources.append(source_url)
+
+        return RAGRetrievalResult(
+            context="\n\n".join(formatted_parts),
+            sources=sources,
+        )
+
+    async def _retrieve_hybrid(
+        self,
+        query: str,
+        n_results: int,
+        settings: "Settings",
+    ) -> RAGRetrievalResult:
+        """ハイブリッド検索（ベクトル＋BM25）で検索を実行する.
+
+        仕様: docs/specs/f9-rag-chunking-hybrid.md
+
+        Args:
+            query: 検索クエリ
+            n_results: 返却する結果の最大数
+            settings: 設定オブジェクト
+
+        Returns:
+            RAGRetrievalResult: コンテキストとソース情報
+        """
+        assert self._hybrid_search_engine is not None
+
+        results = await self._hybrid_search_engine.search(
+            query,
+            n_results=n_results,
+            similarity_threshold=settings.rag_similarity_threshold,
+        )
+
+        if not results:
+            return RAGRetrievalResult(context="", sources=[])
+
+        # デバッグログ出力
+        if settings.rag_debug_log_enabled:
+            logger.info("RAG retrieve (hybrid): query=%r", query)
+            for i, result in enumerate(results, start=1):
+                source_url = result.metadata.get("source_url", "不明")
+                logger.info(
+                    "RAG result %d: rrf_score=%.4f vector_dist=%s bm25_score=%s source=%r",
+                    i,
+                    result.rrf_score,
+                    f"{result.vector_distance:.3f}" if result.vector_distance is not None else "N/A",
+                    f"{result.bm25_score:.3f}" if result.bm25_score is not None else "N/A",
+                    source_url,
+                )
                 text_preview = (
                     result.text[:100] + "..." if len(result.text) > 100 else result.text
                 )
@@ -311,7 +484,7 @@ class RAGKnowledgeService:
         # フラグメントを除去して正規化
         normalized_url, fragment = urldefrag(source_url)
 
-        # 正規化後のURLに紐づくチャンクを削除
+        # 正規化後のURLに紐づくチャンクを削除（ベクトルストア）
         total_deleted = await self._vector_store.delete_by_source(normalized_url)
 
         # 後方互換: 以前はフラグメント付きURLで保存していた可能性があるため、
@@ -327,6 +500,20 @@ class RAGKnowledgeService:
             )
         else:
             logger.info("Deleted %d chunks from source: %s", total_deleted, normalized_url)
+
+        # BM25インデックスからも削除（ハイブリッド検索用）
+        # 注: BM25は補助的機能のため、失敗してもVectorStoreの結果は維持する
+        if self._bm25_index is not None:
+            try:
+                bm25_deleted = self._bm25_index.delete_by_source(normalized_url)
+                if fragment:
+                    bm25_deleted += self._bm25_index.delete_by_source(source_url)
+                logger.debug("Deleted %d documents from BM25 index", bm25_deleted)
+            except Exception:
+                logger.warning(
+                    "Failed to delete from BM25 index for %s", normalized_url,
+                    exc_info=True,
+                )
 
         return total_deleted
 

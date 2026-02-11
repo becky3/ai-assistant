@@ -27,6 +27,7 @@ from src.db.session import init_db, get_session_factory
 from src.embedding.factory import get_embedding_provider
 from src.llm.factory import get_provider_for_service
 from src.mcp_bridge.client_manager import MCPClientManager, MCPServerConfig
+from src.rag.bm25_index import BM25Index
 from src.rag.vector_store import VectorStore
 from src.services.chat import ChatService
 from src.services.feed_collector import FeedCollector
@@ -121,14 +122,29 @@ async def main() -> None:
             safe_browsing_client = create_safe_browsing_client(settings)
             if safe_browsing_client:
                 logger.info("URL安全性チェック有効: Google Safe Browsing API")
+
+            # BM25インデックス（ハイブリッド検索用）
+            bm25_index: BM25Index | None = None
+            if settings.rag_hybrid_search_enabled:
+                bm25_index = BM25Index(
+                    k1=settings.rag_bm25_k1,
+                    b=settings.rag_bm25_b,
+                )
+                logger.info("BM25インデックス初期化完了")
+
             rag_service = RAGKnowledgeService(
                 vector_store,
                 web_crawler,
                 chunk_size=settings.rag_chunk_size,
                 chunk_overlap=settings.rag_chunk_overlap,
                 safe_browsing_client=safe_browsing_client,
+                bm25_index=bm25_index,
+                hybrid_search_enabled=settings.rag_hybrid_search_enabled,
             )
-            logger.info("RAG有効: ナレッジベース機能が利用可能")
+            if settings.rag_hybrid_search_enabled:
+                logger.info("RAG有効: ハイブリッド検索（ベクトル＋BM25）が利用可能")
+            else:
+                logger.info("RAG有効: ナレッジベース機能が利用可能")
         else:
             logger.info("RAG無効: ナレッジベース機能はオフです")
 

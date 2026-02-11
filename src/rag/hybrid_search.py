@@ -177,11 +177,17 @@ class HybridSearchEngine:
             # RRFスコアを計算（BM25のランクのみ）
             rrf_score = bm25_weight / (self._rrf_k + i + 1)
 
+            # BM25Indexからsource_urlを取得
+            source_url = self._bm25_index.get_source_url(br.doc_id)
+            metadata: dict[str, str | int] = {}
+            if source_url:
+                metadata["source_url"] = source_url
+
             results.append(
                 HybridSearchResult(
                     doc_id=br.doc_id,
                     text=br.text,
-                    metadata={},  # BM25結果にはメタデータがない
+                    metadata=metadata,
                     vector_distance=None,
                     bm25_score=br.score,
                     rrf_score=rrf_score,
@@ -239,10 +245,16 @@ class HybridSearchEngine:
                 doc_map[br.doc_id]["bm25_score"] = br.score
                 doc_map[br.doc_id]["bm25_rrf"] = bm25_rank_bonus
             else:
-                # 新規エントリを追加
+                # 新規エントリを追加（BM25のみヒット）
+                # BM25Indexからsource_urlを取得
+                bm25_source_url: str | None = self._bm25_index.get_source_url(br.doc_id)
+                bm25_metadata: dict[str, str | int] = {}
+                if bm25_source_url:
+                    bm25_metadata["source_url"] = bm25_source_url
+
                 doc_map[br.doc_id] = {
                     "text": br.text,
-                    "metadata": {},
+                    "metadata": bm25_metadata,
                     "vector_distance": None,
                     "bm25_score": br.score,
                     "vector_rrf": 0.0,

@@ -9,10 +9,10 @@ RAG検索精度向上のため、コンテンツタイプ別チャンキング�
 | Issue/PR | タイトル | 状態 |
 |----------|---------|------|
 | #195 | チャンキング改善・ハイブリッド検索 | 基盤実装完了 |
-| #211 | feat(f9): RAGチャンキング改善とハイブリッド検索の実装 | マージ待ち |
-| #216 | ハイブリッド検索のRAGKnowledgeService統合 | 未着手 |
+| #211 | feat(f9): RAGチャンキング改善とハイブリッド検索の実装 | マージ済み |
+| #216 | ハイブリッド検索のRAGKnowledgeService統合 | **完了（PR #217）** |
 
-**重要**: PR #211 は**基盤コンポーネントのみ**の実装であり、`RAGKnowledgeService` への統合は Issue #216 で対応予定。
+PR #211 で基盤コンポーネントを実装し、PR #217 で `RAGKnowledgeService` への統合を完了。
 
 ## 主なコンポーネント
 
@@ -174,17 +174,56 @@ follow_imports = "skip"
 - **コミット前にlint/mypy/markdownlintを毎回実行する**
 - **チームに最終チェック担当を置く**（実装者とは別の目でチェック）
 
-## 今後の課題（Issue化済み）
+## Issue #216 統合作業の記録（PR #217）
 
-| Issue | 内容 | 状態 |
-|-------|------|------|
-| #216 | ハイブリッド検索のRAGKnowledgeService統合 | 未着手 |
+### 実装内容
 
-統合で必要な作業:
+| コンポーネント | 変更内容 |
+|---------------|---------|
+| `RAGKnowledgeService.__init__` | `bm25_index`, `hybrid_search_enabled` パラメータ追加、`HybridSearchEngine` インスタンス化 |
+| `_smart_chunk()` | コンテンツタイプに応じたチャンキング（TABLE/HEADING/MIXED/PROSE） |
+| `_ingest_crawled_page()` | BM25インデックスへの連携追加 |
+| `retrieve()` | ハイブリッド検索分岐（`_retrieve_hybrid` / `_retrieve_vector_only`） |
+| `delete_source()` | BM25インデックスからの削除連携 |
+| `main.py` | `rag_hybrid_search_enabled` 設定に応じたBM25Index作成・注入 |
 
-- `RAGKnowledgeService.ingest()` でBM25インデックス更新
-- `RAGKnowledgeService.search()` でハイブリッド検索呼び出し
-- コンテンツタイプ別チャンキングの適用
+### テスト追加
+
+`tests/test_rag_knowledge_hybrid.py` に13件のテストを追加:
+
+- `TestHybridSearchDisabled` — AC9: `hybrid_enabled=false` 時の従来動作
+- `TestHybridSearchEnabled` — ハイブリッド検索有効時の動作
+- `TestBM25IndexIntegration` — BM25連携（ingest/delete）
+- `TestTableDataSearch` — AC12: テーブル内データ検索
+- `TestKeywordExactMatch` — AC13: キーワード完全一致
+- `TestSmartChunking` — `_smart_chunk()` メソッド
+- `TestHybridSearchEngineInitialization` — 初期化確認
+
+### 統合作業でうまくいったこと
+
+1. **エージェントチームによる並行作業**
+   - 実装担当（メルリン）と品質担当（セージ）で役割分担
+   - 実装完了後すぐにテスト作成・品質検証に移行できた
+
+2. **設計案の事前準備**
+   - Issue #216 のコメントに詳細な設計案があり、実装がスムーズに進んだ
+   - アーキテクチャ図、コード例、実装ステップが明確だった
+
+3. **既存テストパターンの活用**
+   - `tests/test_rag_knowledge.py` のパターンを踏襲
+   - テスト設計が効率的に進んだ
+
+### 統合作業での改善点
+
+1. **既存テストのログメッセージ変更対応**
+   - `retrieve()` のログメッセージ形式変更により既存テストが1件失敗
+   - ログメッセージをテストでアサートする場合、変更時の影響を考慮する必要がある
+
+2. **品質担当がcode-reviewerを使用しなかった**
+   - エージェントチームの品質担当にcode-reviewer使用を指示していたが、実際には使用されなかった
+   - 原因: コンテキスト圧縮後の再開時に、初期指示の一部を失念
+   - 結果: テスト名のAC番号形式がCopilotレビューで指摘されるまで検出されなかった
+   - 教訓: 長時間セッションでは、品質検証の手順を毎回明示的に確認する必要がある
 
 ## 次に活かすこと
 
@@ -212,4 +251,5 @@ follow_imports = "skip"
 
 - 仕様書: [docs/specs/f9-rag-chunking-hybrid.md](../specs/f9-rag-chunking-hybrid.md)
 - 関連レトロ: [f9-rag-knowledge.md](./f9-rag-knowledge.md)（RAG機能全体）
-- 統合Issue: [#216](https://github.com/becky3/ai-assistant/issues/216)
+- 基盤実装PR: [#211](https://github.com/becky3/ai-assistant/pull/211)
+- 統合Issue/PR: [#216](https://github.com/becky3/ai-assistant/issues/216) → [#217](https://github.com/becky3/ai-assistant/pull/217)

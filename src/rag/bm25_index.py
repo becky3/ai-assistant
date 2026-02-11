@@ -204,6 +204,17 @@ class BM25Index:
         """インデックス内のドキュメント数を返す."""
         return len(self._documents)
 
+    def get_source_url(self, doc_id: str) -> str | None:
+        """ドキュメントIDからソースURLを取得する.
+
+        Args:
+            doc_id: ドキュメントID
+
+        Returns:
+            ソースURL、見つからない場合はNone
+        """
+        return self._doc_source_map.get(doc_id)
+
     def _rebuild_index(self) -> None:
         """BM25インデックスを再構築する."""
         try:

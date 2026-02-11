@@ -653,7 +653,8 @@ class TestRAGDebugLog:
             await rag_service.retrieve("しれんのしろ アイテム", n_results=5)
 
         # Assert
-        assert "RAG retrieve: query='しれんのしろ アイテム'" in caplog.text
+        # ハイブリッド検索統合後、ログメッセージに "(vector only)" が追加された
+        assert "RAG retrieve (vector only): query='しれんのしろ アイテム'" in caplog.text
 
     async def test_ac2_retrieve_logs_results(
         self,
