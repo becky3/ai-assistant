@@ -35,7 +35,7 @@ jobs:
           bot_id: "209825114"
           claude_args: "--model claude-sonnet-4-5-20250929 --max-turns 50 --dangerously-skip-permissions"
           show_full_output: true
-          direct_prompt: |
+          prompt: |
             このPRに対して包括的なコードレビューを実施してください。
 
             ## レビュー手順
