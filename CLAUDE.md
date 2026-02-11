@@ -247,7 +247,19 @@ Anthropic 公式の PR レビュー専門エージェント群です。既存の
 1. **履歴ファイルを確認**: `~/.claude/team-theme-history.json` を読み込む
 2. **直近10件と被らないテーマを選択**: 履歴にあるテーマは避ける
 3. **履歴ファイルを更新**: 選択したテーマを履歴に追加（**メンバー生成前に実行**）
-4. **メンバーを生成**: Task ツールでチームメンバーをスポーン
+4. **メンバーを生成**: Task ツールでチームメンバーをスポーン（**`mode: "bypassPermissions"` 必須**）
+
+**メンバースポーン時の必須設定**:
+
+```
+Task(
+    subagent_type="general-purpose",
+    name="member-name",
+    team_name="team-name",
+    mode="bypassPermissions",  # ← 必須: これがないと content が配信されない
+    prompt="..."
+)
+```
 
 **履歴ファイルのフォーマット**:
 

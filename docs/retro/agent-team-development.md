@@ -272,8 +272,60 @@ graph LR
 
 4. **議論はチームで、転換点はユーザーから**: チーム内で煮詰まっても、ユーザーの一言で視点が変わることがある
 
+## SendMessage の content が届かない問題: Issue #224
+
+### 背景
+
+エージェントチームでメンバーからリーダーへ SendMessage を送っても、`idle_notification` の summary のみが届き、DM本文（content）が届かない問題が発生していた。
+
+### 調査プロセス
+
+1. **問題の再現**: チームを組んで調査したところ、問題が再現された
+2. **メールボックス確認**: `~/.claude/teams/{team-name}/inboxes/{recipient}.json` を確認したところ、メッセージは正しく保存されていたが `read: false` のまま
+3. **GitHub Issues 調査**: 関連する問題（#24108, #24307）を発見
+4. **回避策の発見**: Issue #24307 のコメントで `mode: "bypassPermissions"` の使用が成功事例として報告されていた
+
+### 根本原因
+
+Task ツールでメンバーをスポーンする際に `mode` パラメータを設定しないと、SendMessage の content がリーダーに配信されない。
+
+### 回避策
+
+`mode: "bypassPermissions"` を設定してメンバーをスポーンする。
+
+```
+Task(
+    subagent_type="general-purpose",
+    name="member-name",
+    team_name="team-name",
+    mode="bypassPermissions",  # ← 必須
+    prompt="..."
+)
+```
+
+### 検証結果
+
+| mode パラメータ | SendMessage content |
+|----------------|---------------------|
+| 未設定 | ❌ 届かない（summary のみ） |
+| `bypassPermissions` | ✅ 正常に届く |
+
+### 対応
+
+1. `docs/specs/agent-teams.md` にメンバースポーン時の必須設定を追加
+2. `CLAUDE.md` にチーム構築時のルールを追加
+3. Claude Code の auto memory（`~/.claude/projects/*/memory/MEMORY.md`）にも学びを記録（git管理外）
+
+### 次に活かすこと
+
+1. **メンバースポーン時は必ず `mode: "bypassPermissions"` を設定する**
+
+2. **問題発生時はメールボックスファイルを直接確認する**: `~/.claude/teams/{team-name}/inboxes/` 配下のJSONファイルで、メッセージが保存されているか、`read` フラグを確認
+
+3. **anthropics/claude-code の Issues を調査する**: 同様の問題が報告されている可能性がある
+
 ## 参考
 
 - エージェントチーム仕様: [docs/specs/agent-teams.md](../specs/agent-teams.md)
 - 関連PR: #172（エンコーディング自動検出修正）、#193（キャラクター演出ガイドライン）、#200（テーマ履歴管理＋物語構造ルール）、#221（ストーリーテラー役追加）
-- 関連Issue: #169（RAG検索結果がチャット回答に反映されない）、#190（キャラクター演出）、#198（チームビルディングの偏りを防ぐ）、#220（メタレビュアー役の検討）
+- 関連Issue: #169（RAG検索結果がチャット回答に反映されない）、#190（キャラクター演出）、#198（チームビルディングの偏りを防ぐ）、#220（メタレビュアー役の検討）、#224（SendMessage の content が届かない問題）

@@ -182,6 +182,26 @@ SendMessage:
 - バグ調査: `バグ #123 を調査。3人で異なる仮説を検証`
 - レビュー: `PR #456 をレビュー。セキュリティ/パフォーマンス/テストの3観点で`
 
+## メンバーのスポーン
+
+Task ツールでメンバーをスポーンする際は、**必ず `mode: "bypassPermissions"` を設定する**。
+
+```
+Task(
+    subagent_type="general-purpose",
+    name="member-name",
+    team_name="team-name",
+    mode="bypassPermissions",  # ← 必須
+    prompt="..."
+)
+```
+
+> **Note**: Task ツールの `mode` パラメータは、エージェント定義ファイル（`.claude/agents/*.md`）の `permissionMode` とは別物です。Task ツールでスポーンする際は `mode` を使用してください。
+
+**理由**: `mode` を設定しないと、メンバーからの SendMessage の content がリーダーに配信されない問題がある（Issue #224）。
+
+**セキュリティ上の注意**: `bypassPermissions` は全ての許可チェックをスキップするモードです。信頼できるリポジトリ・ローカル環境でのみ使用し、Claude Code 側で問題が修正された場合は設定を見直してください。
+
 ## 注意事項
 
 - トークンコスト増大（各メンバーが独立コンテキスト）
