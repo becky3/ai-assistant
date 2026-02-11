@@ -440,6 +440,8 @@ uv run mypy {変更された src/**/*.py ファイル}
 | ソースファイルパターン | 対応テストファイル |
 |----------------------|-------------------|
 | `src/services/{name}.py` | `tests/test_{name}.py` または `tests/test_{name}_service.py` |
+| `src/rag/*.py` | `tests/test_rag_*.py` + **RAG精度テスト判定** |
+| `src/embedding/*.py` | `tests/test_embedding.py` + **RAG精度テスト判定** |
 | `src/llm/*.py` | `tests/test_llm.py` |
 | `src/config/*.py` | `tests/test_config.py` |
 | `src/db/*.py` | `tests/test_db.py` |
@@ -457,6 +459,48 @@ uv run mypy {変更された src/**/*.py ファイル}
 - `conftest.py` が変更された場合
 - マッピングで対応テストが見つからなかった場合
 - `src/__init__.py` など共通モジュールが変更された場合
+
+## RAG精度テスト
+
+RAG関連ファイル（`src/rag/**`, `src/embedding/**`, `src/services/rag_knowledge.py`）が変更された場合、通常のテストに加えてRAG精度テストの実行を検討する。
+
+### 必要性の判定
+
+以下の変更がある場合、RAG精度テストを**推奨**:
+
+| 変更内容 | 精度テストの必要性 |
+|----------|-------------------|
+| チャンキングロジック（`chunker.py`, `heading_chunker.py`, `table_chunker.py`） | **必須** |
+| ベクトル検索ロジック（`vector_store.py`, `hybrid_search.py`, `bm25_index.py`） | **必須** |
+| Embeddingプロバイダー（`src/embedding/**`） | **必須** |
+| 類似度閾値・検索パラメータ | **必須** |
+| RAGサービスの統合ロジック（`rag_knowledge.py`） | 推奨 |
+| CLI・評価ロジック（`cli.py`, `evaluation.py`） | 不要（ユニットテストで十分） |
+
+### 実行フロー
+
+RAG精度テストが必要と判断した場合、確認なしで自動実行する:
+
+1. **テスト用ChromaDBを初期化**:
+   ```bash
+   python -m src.rag.cli init-test-db \
+     --persist-dir ./test_chroma_db \
+     --fixture tests/fixtures/rag_test_documents.json
+   ```
+
+2. **精度評価を実行**:
+   ```bash
+   python -m src.rag.cli evaluate \
+     --output-dir reports/rag-evaluation
+   ```
+
+3. **結果を報告**: レポート（`reports/rag-evaluation/report.md`）の内容を表示
+
+### 注意
+
+- RAG精度テストは**自動実行**（必要と判断したら確認なしで実行）
+- Embeddingにはローカル環境（LM Studio）または設定されたプロバイダーを使用
+- ベースラインが存在しない場合は「初回実行」として記録のみ
 
 ## 注意事項
 

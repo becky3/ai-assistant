@@ -2,7 +2,7 @@
 
 ## 概要
 
-RAG検索精度の自動評価パイプラインを構築し、CI/CDでの定期的な精度テスト、リグレッション検出、評価レポートの自動生成を実現する。
+RAG検索精度の評価CLIツールを構築し、リグレッション検出、評価レポートの自動生成を実現する。test-runnerサブエージェントがRAG関連コード変更時に必要に応じて実行する。
 
 ## 背景
 
@@ -31,7 +31,7 @@ Phase 2でPrecision/Recall評価関数とテストデータセットを整備し
 
 ## ユーザーストーリー
 
-- 開発者として、RAG検索精度をCI/CDで自動テストし、リグレッションを早期発見したい
+- 開発者として、RAG関連コード変更時に精度テストを実行し、リグレッションを早期発見したい
 - 開発者として、コードベースの変更が検索精度に影響したかを把握したい
 - 開発者として、評価結果をMarkdown/JSONレポートとして確認したい
 - 開発者として、ベースラインと比較してリグレッションを検出したい
@@ -169,107 +169,33 @@ regression_detected = (baseline_f1 - current_f1) > regression_threshold
 ...
 ```
 
-### 4. GitHub Actions ワークフロー
+### 4. test-runnerサブエージェントでの実行
 
-#### ワークフロー設計
+RAG関連コード変更時に、test-runnerサブエージェントが自動的に精度テストを実行する。
 
-```mermaid
-flowchart TB
-    subgraph Trigger["トリガー"]
-        SCHEDULE["スケジュール<br/>(週1回)"]
-        MANUAL["手動実行<br/>(workflow_dispatch)"]
-        PR["PR作成/更新<br/>(特定パス変更時)"]
-    end
+#### 実行トリガー（自動判定）
 
-    subgraph Setup["セットアップ"]
-        CHECKOUT["checkout"]
-        DEPS["依存関係<br/>インストール"]
-        CHROMA["ChromaDB<br/>セットアップ"]
-    end
+以下のファイルが変更された場合、test-runnerが精度テストを自動実行:
 
-    subgraph Evaluate["評価実行"]
-        CLI["python -m src.rag.cli evaluate"]
-        REPORT["レポート生成"]
-        REGRESSION["リグレッション検出"]
-    end
+| 変更ファイル | 精度テストの必要性 |
+|-------------|-------------------|
+| `src/rag/chunker.py`, `heading_chunker.py`, `table_chunker.py` | **必須** |
+| `src/rag/vector_store.py`, `hybrid_search.py`, `bm25_index.py` | **必須** |
+| `src/embedding/**` | **必須** |
+| `src/services/rag_knowledge.py` | 推奨 |
+| `src/rag/cli.py`, `evaluation.py` | 不要（ユニットテストで十分） |
 
-    subgraph Output["出力"]
-        ARTIFACT["Artifacts<br/>アップロード"]
-        COMMENT["PR/Issueコメント<br/>(オプション)"]
-        FAIL["失敗時: exit 1"]
-    end
+#### 実行フロー
 
-    Trigger --> Setup --> Evaluate --> Output
-```
+```bash
+# 1. テスト用ChromaDBを初期化
+python -m src.rag.cli init-test-db \
+  --persist-dir ./test_chroma_db \
+  --fixture tests/fixtures/rag_test_documents.json
 
-#### ワークフローファイル (`.github/workflows/rag-evaluation.yml`)
-
-```yaml
-name: RAG Evaluation
-
-on:
-  schedule:
-    - cron: '0 9 * * 1'  # 毎週月曜 9:00 UTC
-  workflow_dispatch:
-    inputs:
-      save_baseline:
-        description: 'Save current results as new baseline'
-        type: boolean
-        default: false
-  pull_request:
-    paths:
-      - 'src/rag/**'
-      - 'src/embedding/**'
-      - 'src/services/rag_knowledge.py'
-      - 'tests/fixtures/rag_evaluation_dataset.json'
-
-jobs:
-  evaluate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: pip install -e ".[dev]"
-
-      - name: Setup test ChromaDB
-        run: |
-          # テスト用のChromaDBを初期化
-          python -m src.rag.cli init-test-db
-
-      - name: Run RAG evaluation
-        id: evaluate
-        run: |
-          python -m src.rag.cli evaluate \
-            --output-dir reports/rag-evaluation \
-            --baseline-file reports/rag-evaluation/baseline.json \
-            ${{ github.event.inputs.save_baseline == 'true' && '--save-baseline' || '' }} \
-            ${{ github.event_name == 'pull_request' && '--fail-on-regression' || '' }}
-
-      - name: Upload evaluation report
-        uses: actions/upload-artifact@v4
-        with:
-          name: rag-evaluation-report
-          path: reports/rag-evaluation/
-
-      - name: Comment on PR
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const report = fs.readFileSync('reports/rag-evaluation/report.md', 'utf8');
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: report
-            });
+# 2. 精度評価を実行
+python -m src.rag.cli evaluate \
+  --output-dir reports/rag-evaluation
 ```
 
 ### 5. テスト用ChromaDB初期化
@@ -561,14 +487,11 @@ ai-assistant/
 │   └── fixtures/
 │       ├── rag_evaluation_dataset.json  # 既存: 評価クエリ
 │       └── rag_test_documents.json      # 新規: テスト用ドキュメント
-├── reports/
-│   └── rag-evaluation/
-│       ├── baseline.json      # ベースライン（リポジトリ管理）
-│       ├── report.json        # 最新評価結果
-│       └── report.md          # Markdownレポート
-└── .github/
-    └── workflows/
-        └── rag-evaluation.yml # 新規: 評価ワークフロー
+└── reports/
+    └── rag-evaluation/
+        ├── baseline.json      # ベースライン（リポジトリ管理）
+        ├── report.json        # 最新評価結果
+        └── report.md          # Markdownレポート
 ```
 
 ## 受け入れ条件
@@ -594,14 +517,6 @@ ai-assistant/
 - [ ] **AC11**: `--fail-on-regression` 指定時、リグレッション検出で exit code 1 になること
 - [ ] **AC12**: `--save-baseline` 指定時に現在の結果をベースラインとして保存すること
 
-### GitHub Actions
-
-- [ ] **AC13**: 週次スケジュールで評価が自動実行されること
-- [ ] **AC14**: `workflow_dispatch` で手動実行できること
-- [ ] **AC15**: RAG関連ファイル変更時にPRでトリガーされること
-- [ ] **AC16**: 評価レポートがArtifactsとしてアップロードされること
-- [ ] **AC17**: PR時にレポートがコメントとして投稿されること（オプション）
-
 ### テスト用DB
 
 - [ ] **AC18**: `init-test-db` コマンドでテスト用ChromaDBを初期化できること
@@ -624,8 +539,8 @@ ai-assistant/
 
 ### 統合テスト
 
-- GitHub Actions ワークフローのテストは手動確認
-- CI環境でのChromaDB初期化をテスト
+- test-runnerサブエージェントによるRAG精度テストの自動実行を手動確認
+- ローカル環境でのChromaDB初期化をテスト
 
 ## 関連ファイル
 
@@ -636,7 +551,6 @@ ai-assistant/
 | `src/rag/cli.py` | CLIエントリポイント |
 | `tests/fixtures/rag_test_documents.json` | テスト用ドキュメントフィクスチャ |
 | `tests/test_rag_cli.py` | CLIテスト |
-| `.github/workflows/rag-evaluation.yml` | 評価ワークフロー |
 | `reports/rag-evaluation/baseline.json` | ベースライン（リポジトリ管理） |
 
 ### 変更ファイル
@@ -659,7 +573,7 @@ ai-assistant/
 
 1. **ChromaDBの状態依存**: 評価を実行するには、適切なテストデータが投入されたChromaDBが必要。`init-test-db` コマンドで初期化する。
 
-2. **CI環境でのEmbedding**: GitHub ActionsではLM Studioが利用できないため、オンラインEmbedding（OpenAI）を使用するか、事前計算済みのベクトルを使用する設計が必要。
+2. **ローカル環境でのEmbedding**: Embeddingにはローカル環境（LM Studio）または設定されたプロバイダーを使用する。test-runnerサブエージェントによる自動実行を想定。
 
 3. **現状の精度問題**: Phase 2で判明した通り、現状のチャンキング戦略では期待通りの精度が出ない可能性がある。これは Issue #195 で対応予定。自動評価パイプラインは現状の精度を記録・監視するために構築する。
 
