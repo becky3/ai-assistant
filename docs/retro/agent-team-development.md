@@ -283,46 +283,52 @@ graph LR
 1. **問題の再現**: チームを組んで調査したところ、問題が再現された
 2. **メールボックス確認**: `~/.claude/teams/{team-name}/inboxes/{recipient}.json` を確認したところ、メッセージは正しく保存されていたが `read: false` のまま
 3. **GitHub Issues 調査**: 関連する問題（#24108, #24307）を発見
-4. **回避策の発見**: Issue #24307 のコメントで `mode: "bypassPermissions"` の使用が成功事例として報告されていた
+4. **当初の回避策**: Issue #24307 のコメントで `mode: "bypassPermissions"` の使用が成功事例として報告されていたため、これを採用
 
-### 根本原因
+### 当初の結論（誤り）
 
-Task ツールでメンバーをスポーンする際に `mode` パラメータを設定しないと、SendMessage の content がリーダーに配信されない。
+~~Task ツールでメンバーをスポーンする際に `mode: "bypassPermissions"` を設定しないと、SendMessage の content がリーダーに配信されない。~~
 
-### 回避策
+### 真の根本原因（2026-02-11 判明）
 
-`mode: "bypassPermissions"` を設定してメンバーをスポーンする。
+**recipient の指定ミス**が原因だった。`mode: "bypassPermissions"` は無関係。
 
-```
-Task(
-    subagent_type="general-purpose",
-    name="member-name",
-    team_name="team-name",
-    mode="bypassPermissions",  # ← 必須
-    prompt="..."
-)
-```
+- プロンプトで「リーダー（my-leader）に報告して」と指示 → メンバーは `recipient: "my-leader"` で送信
+- メッセージは `my-leader.json` に保存される
+- しかし、リーダーシステムは `team-lead.json` を読む
+- 結果、DM本文が届かない（`idle_notification` は別経路で `team-lead.json` に直接書き込まれるため届く）
+
+当初の調査では `mode: "bypassPermissions"` と `recipient: "team-lead"` を同時に変更したため、どちらが原因か切り分けられていなかった。
 
 ### 検証結果
 
-| mode パラメータ | SendMessage content |
-|----------------|---------------------|
-| 未設定 | ❌ 届かない（summary のみ） |
-| `bypassPermissions` | ✅ 正常に届く |
+| mode | recipient | 結果 |
+|------|-----------|------|
+| なし | `"my-leader"`（任意の名前） | ❌ 届かない |
+| `bypassPermissions` | `"my-leader"` | ❌ 届かない |
+| なし | `"team-lead"` | ✅ **届く** |
+| `bypassPermissions` | `"team-lead"` | ✅ 届く |
 
-### 対応
+**結論**: `mode: "bypassPermissions"` は不要。**recipient の指定だけが原因**。
 
-1. `docs/specs/agent-teams.md` にメンバースポーン時の必須設定を追加
-2. `CLAUDE.md` にチーム構築時のルールを追加
-3. Claude Code の auto memory（`~/.claude/projects/*/memory/MEMORY.md`）にも学びを記録（git管理外）
+### 正しい対応
+
+プロンプトでリーダーへの送信を指示する際は、**`recipient: "team-lead"`** を明示する。
+
+```
+❌ NG: 「リーダー（my-leader）に報告してください。recipient: "my-leader" で送信」
+✅ OK: 「リーダーに報告してください。recipient: "team-lead" で送信」
+```
 
 ### 次に活かすこと
 
-1. **メンバースポーン時は必ず `mode: "bypassPermissions"` を設定する**
+1. **プロンプトでリーダーへの送信を指示する際は `recipient: "team-lead"` を明示する**
 
-2. **問題発生時はメールボックスファイルを直接確認する**: `~/.claude/teams/{team-name}/inboxes/` 配下のJSONファイルで、メッセージが保存されているか、`read` フラグを確認
+2. **問題発生時はメールボックスファイルを直接確認する**: `~/.claude/teams/{team-name}/inboxes/` 配下のJSONファイルで、メッセージが保存されているか、**どのファイルに保存されているか**を確認
 
-3. **anthropics/claude-code の Issues を調査する**: 同様の問題が報告されている可能性がある
+3. **複数の変数を同時に変更しない**: 原因切り分けのため、一度に1つの変数だけ変更して検証する
+
+4. **anthropics/claude-code の Issues を調査する**: 同様の問題が報告されている可能性がある
 
 ## 参考
 
