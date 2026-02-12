@@ -279,7 +279,7 @@ Anthropic 公式の PR レビュー専門エージェント群です。既存の
 **GitHub Actions の意図的設定**（レビューツールへの注記）:
 
 - `--dangerously-skip-permissions`: 自動化のため意図的に使用。GitHub Actions環境は隔離されており、セキュリティリスクは許容範囲
-- `pr-review.yml` の Slack 通知は `if: failure()`: 成功時の通知は冗長なため意図的に失敗時のみ。`claude.yml` は `if: always()` で統一（長時間タスクのため完了通知が有用）
+- `pr-review.yml` の Slack 通知は `if: failure()`: 成功時の通知は冗長なため意図的に失敗時のみ
 - シークレット未設定時のエラー: 初回セットアップ時のみの問題であり、バリデーションステップは不要
 
 ### スキルとサブエージェントの使い分け
