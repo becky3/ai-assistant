@@ -167,8 +167,28 @@ PRの内容を確認し、未解決のレビュー指摘があれば対応した
     - GraphQL query が失敗した場合はエラーメッセージをログに出力し、resolve 処理をスキップする（致命的ではないため処理を継続）:
 
       ```bash
-      if ! THREADS=$(gh api graphql -f query='...' --jq '...' 2>&1); then
-        echo "Warning: Failed to query review threads: $THREADS"
+      if ! THREADS=$(gh api graphql -f query='
+      {
+        repository(owner: "{owner}", name: "{repo}") {
+          pullRequest(number: $PR_NUMBER) {
+            reviewThreads(first: 100) {
+              nodes {
+                id
+                isResolved
+                comments(first: 10) {
+                  nodes {
+                    author { login }
+                    body
+                    path
+                    line
+                  }
+                }
+              }
+            }
+          }
+        }
+      }' --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false) | .id' 2>&1); then
+        echo "::warning::Failed to query review threads: $THREADS"
         echo "Skipping thread resolution due to API error"
         # resolve をスキップして次のステップに進む
       fi

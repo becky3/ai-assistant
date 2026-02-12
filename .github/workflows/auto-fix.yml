@@ -89,8 +89,17 @@ jobs:
 
           # auto-fix ループのマーカーコメント数をカウント
           # auto-fix.yml が /check-pr 実行前に投稿する「auto-fix: レビュー指摘への自動対応」コメントを対象
-          LOOP_COUNT=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
-            --paginate --jq '[.[] | select(.user.login == "github-actions[bot]" and (.body | contains("auto-fix: レビュー指摘への自動対応")))] | length')
+          if ! LOOP_COUNT=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            --paginate --jq '[.[] | select(.user.login == "github-actions[bot]" and (.body | contains("auto-fix: レビュー指摘への自動対応")))] | length' 2>&1); then
+            echo "::error::Failed to get loop count: $LOOP_COUNT"
+            exit 1
+          fi
+
+          # 数値バリデーション
+          if ! [[ "$LOOP_COUNT" =~ ^[0-9]+$ ]]; then
+            echo "::error::Invalid loop count value: '$LOOP_COUNT'"
+            exit 1
+          fi
 
           echo "loop_count=$LOOP_COUNT" >> $GITHUB_OUTPUT
           echo "Loop count: $LOOP_COUNT"
@@ -113,22 +122,32 @@ jobs:
           TRIGGER_RUN_ID="${{ github.event.workflow_run.id }}"
 
           # トリガー元の workflow_run の created_at を取得して、それ以降のコメントのみ対象
-          RUN_CREATED_AT=$(gh api "repos/${{ github.repository }}/actions/runs/${TRIGGER_RUN_ID}" --jq '.created_at')
+          if ! RUN_CREATED_AT=$(gh api "repos/${{ github.repository }}/actions/runs/${TRIGGER_RUN_ID}" --jq '.created_at' 2>&1); then
+            echo "::error::Failed to get workflow run created_at: $RUN_CREATED_AT"
+            exit 1
+          fi
+          if [ -z "$RUN_CREATED_AT" ]; then
+            echo "::error::Workflow run created_at is empty"
+            exit 1
+          fi
           echo "Trigger run created at: $RUN_CREATED_AT"
 
           # pr-review.yml が投稿した最新のレビューコメントから auto-fix フラグを検索
           # created_at がトリガー元 run 以降のコメントのみ対象にして過去のコメントによる誤判定を防止
-          LATEST_REVIEW=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+          if ! LATEST_REVIEW=$(gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
             --paginate --jq "[.[] | select(
               .user.login == \"claude[bot]\" and
               .created_at >= \"${RUN_CREATED_AT}\" and
               ((.body | contains(\"<!-- auto-fix:no-issues -->\")) or (.body | contains(\"<!-- auto-fix:has-issues -->\")))
-            )] | last")
+            )] | last" 2>&1); then
+            echo "::error::Failed to fetch PR comments: $LATEST_REVIEW"
+            exit 1
+          fi
 
           if [ -z "$LATEST_REVIEW" ] || [ "$LATEST_REVIEW" = "null" ]; then
-            # レビューコメントが見つからない場合は指摘ありとして安全側に倒す
-            echo "has_issues=true" >> $GITHUB_OUTPUT
-            echo "Review result: No review comment found for this run. Treating as has_issues."
+            # レビューコメントが見つからない場合はエラー（pr-review.yml が正常完了しているのにコメントが見つからないのは異常）
+            echo "::error::No review comment found for this run (created after $RUN_CREATED_AT). PR Review workflow may have failed to post results."
+            exit 1
           elif echo "$LATEST_REVIEW" | jq -r '.body' | grep -q '<!-- auto-fix:no-issues -->'; then
             echo "has_issues=false" >> $GITHUB_OUTPUT
             echo "Review result: No issues found"
@@ -147,7 +166,10 @@ jobs:
           PR_NUMBER="${{ steps.pr-info.outputs.number }}"
 
           # PRの変更ファイル一覧を取得
-          CHANGED_FILES=$(gh pr view "$PR_NUMBER" --json files --jq '.files[].path')
+          if ! CHANGED_FILES=$(gh pr view "$PR_NUMBER" --json files --jq '.files[].path' 2>&1); then
+            echo "::error::Failed to get changed files: $CHANGED_FILES"
+            exit 1
+          fi
 
           FORBIDDEN_FOUND=""
 
@@ -175,7 +197,7 @@ jobs:
             # pyproject.toml の dependencies 変更検出
             if [ "$file" = "pyproject.toml" ]; then
               if ! DIFF=$(gh pr diff "$PR_NUMBER" -- "$file" 2>&1); then
-                echo "::warning::Failed to get diff for pyproject.toml: $DIFF"
+                echo "::error::Failed to get diff for pyproject.toml: $DIFF"
                 # 安全側に倒す: diff取得失敗時は依存関係変更ありと見なす
                 FORBIDDEN_FOUND="${FORBIDDEN_FOUND}${file} (diff取得失敗のため要手動確認)\n"
                 continue
@@ -372,7 +394,8 @@ jobs:
             end
           ' 2>&1); then
             MERGE_READY=false
-            REASONS="${REASONS}\n- ❌ Failed to check CI status: $CI_RESULT"
+            REASONS="${REASONS}\n- ❌ Failed to check CI status"
+            echo "::warning::Failed to check CI status: $CI_RESULT"
             echo "❌ Condition 2: Failed to check CI status"
           elif [ "$CI_RESULT" = "no_checks" ]; then
             echo "✅ Condition 2: No CI checks configured"
@@ -491,18 +514,18 @@ jobs:
           PR_NUMBER="${{ steps.pr-info.outputs.number }}"
 
           # ラベル付与を試行
-          if ! gh issue edit "$PR_NUMBER" --add-label "auto:failed" 2>&1; then
-            echo "::error::Failed to add auto:failed label. PR may be deleted or insufficient permissions."
+          if ! LABEL_ERR=$(gh issue edit "$PR_NUMBER" --add-label "auto:failed" 2>&1); then
+            echo "::error::Failed to add auto:failed label: $LABEL_ERR"
           fi
 
           # コメント投稿を試行
-          if ! gh pr comment "$PR_NUMBER" --body "## auto-fix: エラー発生
+          if ! COMMENT_ERR=$(gh pr comment "$PR_NUMBER" --body "## auto-fix: エラー発生
 
           自動修正処理中にエラーが発生しました。\`auto:failed\` ラベルを付与して自動処理を停止します。
 
           **次のアクション**: [Actions ログ](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) を確認し、問題を解消してください。
-          対応完了後、\`auto:failed\` を除去して \`/review\` コメントを投稿すると再開できます。" 2>&1; then
-            echo "::error::Failed to post error comment. PR may be deleted or insufficient permissions."
+          対応完了後、\`auto:failed\` を除去して \`/review\` コメントを投稿すると再開できます。" 2>&1); then
+            echo "::error::Failed to post error comment: $COMMENT_ERR"
           fi
         env:
           GH_TOKEN: ${{ github.token }}
