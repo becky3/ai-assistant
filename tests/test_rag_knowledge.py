@@ -1,6 +1,6 @@
 """RAGナレッジサービスのテスト
 
-仕様: docs/specs/f9-rag-knowledge.md, docs/specs/f9-rag-evaluation.md
+仕様: docs/specs/f9-rag.md
 """
 
 from __future__ import annotations
@@ -616,7 +616,7 @@ class TestConfiguration:
 
 
 class TestRAGDebugLog:
-    """RAG検索結果のログ出力テスト (AC1-4, f9-rag-evaluation.md)."""
+    """RAG検索結果のログ出力テスト (AC1-4, f9-rag.md)."""
 
     @pytest.fixture
     def mock_settings_log_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -754,7 +754,7 @@ class TestRAGDebugLog:
 
 
 class TestRAGRetrievalResultSources:
-    """RAG検索結果のソース情報テスト (AC5-6, f9-rag-evaluation.md)."""
+    """RAG検索結果のソース情報テスト (AC5-6, f9-rag.md)."""
 
     async def test_ac5_retrieve_returns_sources(
         self,
@@ -848,7 +848,7 @@ class TestRAGRetrievalResultSources:
 
 
 class TestRAGShowSources:
-    """Slack回答時のソース情報表示テスト (AC5, AC7-9, f9-rag-evaluation.md)."""
+    """Slack回答時のソース情報表示テスト (AC5, AC7-9, f9-rag.md)."""
 
     async def test_ac5_chat_shows_sources(self) -> None:
         """AC5: RAG_SHOW_SOURCES=true の場合、Slack回答末尾にソースURLリストが表示されること."""

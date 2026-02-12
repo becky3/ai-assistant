@@ -1,6 +1,6 @@
 """RAGインフラモジュール
 
-仕様: docs/specs/f9-rag-knowledge.md, docs/specs/f9-rag-chunking-hybrid.md
+仕様: docs/specs/f9-rag.md
 
 Note:
     chromadbに依存するモジュール（vector_store, hybrid_search, evaluation）は

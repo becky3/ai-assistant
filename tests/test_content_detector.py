@@ -1,6 +1,6 @@
 """コンテンツタイプ検出のテスト
 
-仕様: docs/specs/f9-rag-chunking-hybrid.md
+仕様: docs/specs/f9-rag.md
 """
 
 from src.rag.content_detector import (

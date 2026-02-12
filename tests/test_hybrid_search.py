@@ -1,6 +1,6 @@
 """ハイブリッド検索のテスト
 
-仕様: docs/specs/f9-rag-chunking-hybrid.md
+仕様: docs/specs/f9-rag.md
 """
 
 from unittest.mock import AsyncMock, MagicMock

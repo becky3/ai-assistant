@@ -1,6 +1,6 @@
 """Google Safe Browsing API クライアント
 
-仕様: docs/specs/f9-rag-knowledge.md
+仕様: docs/specs/f9-rag.md
 Issue: #159
 """
 
@@ -94,7 +94,7 @@ class CacheEntry:
 class SafeBrowsingClient:
     """Google Safe Browsing API v4 クライアント.
 
-    仕様: docs/specs/f9-rag-knowledge.md
+    仕様: docs/specs/f9-rag.md
     Issue: #159
 
     脅威タイプ:

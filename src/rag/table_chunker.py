@@ -1,6 +1,6 @@
 """テーブルデータチャンキングモジュール
 
-仕様: docs/specs/f9-rag-chunking-hybrid.md
+仕様: docs/specs/f9-rag.md
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ def chunk_table_data(
 ) -> list[TableChunk]:
     """テーブルデータをチャンキングする.
 
-    仕様: docs/specs/f9-rag-chunking-hybrid.md
+    仕様: docs/specs/f9-rag.md
 
     - ヘッダー行を各チャンクに付加
     - 行単位で分割（意味的な単位を保持）

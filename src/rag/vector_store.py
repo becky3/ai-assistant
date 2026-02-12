@@ -1,6 +1,6 @@
 """ChromaDBベクトルストアモジュール
 
-仕様: docs/specs/f9-rag-knowledge.md
+仕様: docs/specs/f9-rag.md
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ class RetrievalResult:
 class VectorStore:
     """ChromaDBベースのベクトルストア.
 
-    仕様: docs/specs/f9-rag-knowledge.md
+    仕様: docs/specs/f9-rag.md
     """
 
     def __init__(

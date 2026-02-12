@@ -1,6 +1,6 @@
 """Webページクローラー
 
-仕様: docs/specs/f9-rag-knowledge.md
+仕様: docs/specs/f9-rag.md
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ class CrawledPage:
 class WebCrawler:
     """Webページクローラー.
 
-    仕様: docs/specs/f9-rag-knowledge.md
+    仕様: docs/specs/f9-rag.md
     """
 
     def __init__(

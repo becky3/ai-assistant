@@ -1,6 +1,6 @@
 """見出しベースチャンキングモジュール
 
-仕様: docs/specs/f9-rag-chunking-hybrid.md
+仕様: docs/specs/f9-rag.md
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ def chunk_by_headings(
 ) -> list[HeadingChunk]:
     """見出し単位でテキストを分割する.
 
-    仕様: docs/specs/f9-rag-chunking-hybrid.md
+    仕様: docs/specs/f9-rag.md
 
     - Markdown見出し（#, ##, ###）を検出
     - HTML見出し（<h1>〜<h6>）を検出

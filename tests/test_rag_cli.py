@@ -1,6 +1,6 @@
 """RAG評価CLIテスト
 
-仕様: docs/specs/f9-rag-auto-evaluation.md
+仕様: docs/specs/f9-rag.md
 """
 
 from __future__ import annotations
