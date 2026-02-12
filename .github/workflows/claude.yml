@@ -38,16 +38,3 @@ jobs:
           bot_id: "209825114"
           claude_args: "--model claude-opus-4-6 --max-turns 100 --dangerously-skip-permissions"
           show_full_output: true
-
-      # Slack通知（長時間タスクのため完了通知が有用）
-      - name: Slack notification
-        if: always()
-        continue-on-error: true
-        uses: 8398a7/action-slack@v3
-        with:
-          status: ${{ job.status }}
-          fields: repo,message,commit,author,action,eventName,ref,workflow
-          mention: here
-          if_mention: failure
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
