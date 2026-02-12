@@ -113,7 +113,50 @@ Phase 0 は「トリガーの追加」と「ルールの記載」のみに絞り
 
 3. **GitHub Actions の if 条件は複雑化しやすい**: 条件が増えるたびに可読性が下がる。Phase 1 以降でさらに条件が増える場合は、composite action や reusable workflow への分離を検討する
 
+---
+
+## 品質チェックスキル作成（Issue #266）
+
+### 何を実装したか
+
+GitHub Actions 環境（claude-code-action）でサブエージェント（Task tool）が安定しない問題に対応し、品質チェック用スキル3種を作成した。
+
+- `/test-run` スキル: pytest / ruff / mypy / markdownlint の実行（`.claude/skills/test-run/SKILL.md`）
+- `/code-review` スキル: 変更差分のセルフコードレビュー（`.claude/skills/code-review/SKILL.md`）
+- `/doc-review` スキル: ドキュメント品質レビュー（`.claude/skills/doc-review/SKILL.md`）
+- 既存エージェント定義（test-runner.md, code-reviewer.md, doc-reviewer.md）をスキル参照に簡素化
+- CLAUDE.md にスキル一覧追加、auto-progress セクションに品質チェック手順を追記
+
+### うまくいったこと
+
+#### 1. エージェント→スキルのリファクタリングが明確
+
+エージェント定義の詳細ロジックをスキル（SKILL.md）に移行し、エージェント側は「スキルを Read して実行する」だけの薄いラッパーにする設計が明確だった。これにより:
+- スキルとして直接呼び出し可能（GitHub Actions 環境向け）
+- サブエージェント経由でも同じロジックを使用（ローカル環境向け）
+- ロジックの重複が排除された
+
+#### 2. 既存の仕様書・テスト資産がそのまま活用できた
+
+スキルに移行しても、レビュー基準や実行手順の本質は変わらないため、既存の仕様書（`docs/specs/code-review-agent.md` 等）をそのまま参照先として維持できた。
+
+### ハマったこと・改善点
+
+#### 1. .gitignore による新規スキルファイルの除外
+
+`.gitignore` で `.claude/` ディレクトリが除外されているため、新規スキルファイル3つが `git status` に表示されなかった。既存スキル（check-pr, doc-gen 等）は `git add -f` で強制追加されていたが、この手順が花京院（実装担当）に伝わっていなかった。品質チェック担当が発見してコミット時に `git add -f` で対応した。
+
+**教訓**: `.claude/skills/` 配下に新規ファイルを作成する際は `git add -f` が必要なことを、タスク説明に明記しておくべき。
+
+### 次に活かすこと
+
+1. **GitHub Actions 環境の制約はスキル化で解決できる**: サブエージェント（Task tool）が不安定な環境でも、スキル（SKILL.md）として定義すれば直接実行可能。環境差異への対応パターンとして有効
+
+2. **エージェント定義は薄いラッパーにする**: 詳細ロジックはスキルに集約し、エージェントは「スキルを参照する」だけにすると、両方の呼び出しパターンに対応できる
+
+3. **`.gitignore` 除外ディレクトリへの新規ファイル追加は要注意**: タスク定義時に `git add -f` の手順を明記する
+
 ## 参考
 
 - 仕様書: [docs/specs/auto-progress.md](../specs/auto-progress.md)
-- 関連Issue: #253（仕様策定）, #256（Phase 0 実装）
+- 関連Issue: #253（仕様策定）, #256（Phase 0 実装）, #266（品質チェックスキル）

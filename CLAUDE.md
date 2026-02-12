@@ -93,9 +93,9 @@
 **Claudeによる実装完了時の必須手順**:
 
 1. **ファイル作成の確認**: 作成したと報告したファイルが実際に存在するか `ls -la` で確認
-2. **テスト実行**: **test-runner サブエージェント** で全テスト（pytest / mypy / ruff / markdownlint）が通過することを確認
-3. **コードレビュー**: **code-reviewer サブエージェント** で変更コードのセルフレビューを実施し、Critical/Warning の指摘があれば修正する
-4. **ドキュメントレビュー**: ドキュメント（`docs/specs/`、`README.md`、`CLAUDE.md` 等）に変更がある場合、**doc-reviewer サブエージェント** で品質レビューを実施し、指摘があれば修正する。実装のみのPRでも、対応する仕様書との整合性チェックのため実施すること。
+2. **テスト実行**: **test-runner サブエージェント** または `/test-run` スキルで全テスト（pytest / mypy / ruff / markdownlint）が通過することを確認
+3. **コードレビュー**: **code-reviewer サブエージェント** または `/code-review` スキルで変更コードのセルフレビューを実施し、Critical/Warning の指摘があれば修正する
+4. **ドキュメントレビュー**: ドキュメント（`docs/specs/`、`README.md`、`CLAUDE.md` 等）に変更がある場合、**doc-reviewer サブエージェント** または `/doc-review` スキルで品質レビューを実施し、指摘があれば修正する。実装のみのPRでも、対応する仕様書との整合性チェックのため実施すること。
    - **スキップ基準**: 誤字脱字のみの修正はスキップ可
    - **差分レビュー推奨**: PRレビュー指摘対応、軽微な補足追加は「差分レビュー」を使用
    - **フルレビュー必須**: 新規仕様書作成、大幅改訂時
@@ -185,6 +185,14 @@ PRに対するレビュー指摘（自動レビューツール、人間問わず
 自動処理の失敗時に自動付与されるほか、管理者が手動で付与して緊急停止にも使う。
 再開するには `auto:failed` を除去し、`auto-implement` を再付与する。
 
+### 品質チェック（GitHub Actions 環境）
+
+GitHub Actions 環境（claude-code-action）ではサブエージェント（Task tool）が安定しないため、品質チェックにはスキルを直接使用する:
+
+1. `/test-run` — pytest / ruff / mypy / markdownlint を実行
+2. `/code-review` — 変更差分のセルフコードレビュー
+3. `/doc-review` — ドキュメント変更がある場合の品質レビュー
+
 ## Bot プロセスガード
 
 - Bot起動時に `bot.pid` ファイルで重複起動を検知する（仕様: `docs/specs/bot-process-guard.md`）
@@ -221,6 +229,9 @@ PRに対するレビュー指摘（自動レビューツール、人間問わず
 | `/doc-edit` | 既存ドキュメントの更新・修正 | `/doc-edit docs/specs/f2-feed-collection.md` |
 | `/check-pr` | PRの内容確認・レビュー指摘対応・実装継続 | `/check-pr 123` |
 | `/topic` | 学びトピックの自動抽出・Zenn記事生成 | `/topic`, `/topic 3` |
+| `/test-run` | テスト実行（pytest/ruff/mypy/markdownlint） | `/test-run`, `/test-run diff` |
+| `/code-review` | コードレビュー（code-reviewer相当） | `/code-review` |
+| `/doc-review` | ドキュメントレビュー（doc-reviewer相当） | `/doc-review docs/specs/f1-chat.md` |
 
 **定義ファイル**: `.claude/skills/` 配下
 **仕様書**: `docs/specs/doc-gen-skill.md`（`/doc-gen`, `/doc-edit` 用）、`docs/specs/topic-skill.md`（`/topic` 用）
@@ -233,9 +244,9 @@ PRに対するレビュー指摘（自動レビューツール、人間問わず
 | サブエージェント | 用途 | 使用例 |
 |-----------------|------|--------|
 | **planner** | Issue・提案内容から実装計画を立案 | `plannerサブエージェントでIssue #42 の実装計画を立ててください` |
-| **code-reviewer** | コミット前のセルフコードレビュー | `code-reviewerサブエージェントで変更差分をレビューしてください` |
-| **doc-reviewer** | 仕様書・README.md の品質レビュー | `doc-reviewerサブエージェントで docs/specs/f1-chat.md をレビューしてください` |
-| **test-runner** | pytest によるテスト実行・分析・修正提案 | `test-runnerサブエージェントで全テストを実行してください` |
+| **code-reviewer** | コミット前のセルフコードレビュー（内部で `/code-review` スキルを参照） | `code-reviewerサブエージェントで変更差分をレビューしてください` |
+| **doc-reviewer** | 仕様書・README.md の品質レビュー（内部で `/doc-review` スキルを参照） | `doc-reviewerサブエージェントで docs/specs/f1-chat.md をレビューしてください` |
+| **test-runner** | pytest によるテスト実行・分析・修正提案（内部で `/test-run` スキルを参照） | `test-runnerサブエージェントで全テストを実行してください` |
 
 **定義ファイル**: `.claude/agents/` 配下
 **仕様書**: `docs/specs/planner-agent.md`, `docs/specs/code-review-agent.md`, `docs/specs/doc-review-agent.md`, `docs/specs/test-runner-agent.md`
