@@ -193,6 +193,8 @@ GitHub Actions 環境（claude-code-action）ではサブエージェント（Ta
 2. `/code-review` — 変更差分のセルフコードレビュー
 3. `/doc-review` — ドキュメント変更がある場合の品質レビュー
 
+**重要**: 品質チェックは中間ステップであり、ここで停止しないこと。通過後は「Claudeによる実装完了時の必須手順」のステップ6以降（ステージング → コミット → プッシュ → PR作成）まで必ず実行する。
+
 ## Bot プロセスガード
 
 - Bot起動時に `bot.pid` ファイルで重複起動を検知する（仕様: `docs/specs/bot-process-guard.md`）
