@@ -188,6 +188,12 @@ flowchart TD
 - 外部サービスとの連携で仕様が未確定
 - 「どうするか考えて」系の検討Issue
 
+**曖昧判定時のIssueコメント内容:**
+
+- 判定理由（上記のどの条件に該当したか）
+- 不足している情報の具体例（「入出力例を追記してください」「複数の要求を別Issueに分割してください」等）
+- `auto:failed` ラベルを付与した旨と、情報追記後に再トリガーする方法
+
 ### ざっくり Issue からの仕様書自動生成
 
 「〇〇機能を追加して」レベルの Issue であっても、Claude は以下の手順で仕様書を組み立てる:
@@ -339,6 +345,9 @@ stateDiagram-v2
 **エラー時の共通挙動:**
 
 - 全ステップで失敗時は `auto:failed` ラベル付与 + PRコメントで理由を通知
+- 通知内容: 失敗したステップ名、エラー概要、GitHub Actions 実行ログへのリンク
+- GitHub API エラー（レート制限、権限不足、ネットワーク障害等）は即座に `auto:failed` で停止（リトライしない）
+- 実装の詳細（`set -euo pipefail`、ロギングレベル等）はYAML実装時に定義
 
 **使用シークレット:**
 
@@ -392,6 +401,12 @@ mutation($threadId: ID!) {
   }
 }' -f threadId="$THREAD_ID"
 ```
+
+### エラー時の挙動
+
+- 個別スレッドの resolve 失敗は `::warning::` でログし、次のスレッドに継続（1件の失敗で全体を止めない）
+- 全スレッドの resolve が失敗した場合は `::error::` でログ（`auto:failed` は付与しない。再レビューで再検出されるため）
+- GraphQL レスポンスの `errors` フィールドをチェックし、エラー内容をログに記録
 
 ### 組み込み箇所
 
@@ -608,13 +623,20 @@ flowchart TD
 
 ## 失敗時の振る舞い
 
-| パターン | 対応 | ラベル |
-|---------|------|--------|
-| テスト失敗 | 最大3回修正を試行。解消しなければ失敗報告 | `auto:failed` |
-| 仕様不明確 | Issueにコメントで不明点を報告。人間の判断を待つ | `auto:failed` |
-| 実装が長時間 | `--max-turns` で間接制御。タイムアウトは GitHub 通知（`auto:failed` ラベル） | `auto:failed` |
-| コンフリクト | 既存の `@claude` フローで対応可能 | なし（手動対応） |
-| 同時実行 | `concurrency` グループで防止 | なし |
+| パターン | 対応 | 通知先 | ラベル |
+|---------|------|--------|--------|
+| テスト失敗 | 最大3回修正を試行。解消しなければ失敗報告 | PRコメント + `auto:failed` → GitHub通知 | `auto:failed` |
+| 仕様不明確 | Issueにコメントで不明点を報告。人間の判断を待つ | Issueコメント + `auto:failed` → GitHub通知 | `auto:failed` |
+| 実装が長時間 | `--max-turns` で間接制御。タイムアウト時に停止 | `auto:failed` ラベル → GitHub通知 | `auto:failed` |
+| API/権限エラー | 即座に停止。エラー内容とActionsログURLを通知 | PRコメント + `auto:failed` → GitHub通知 | `auto:failed` |
+| コンフリクト | 既存の `@claude` フローで対応可能 | なし | なし（手動対応） |
+| 同時実行 | `concurrency` グループで防止 | なし | なし |
+
+**管理者の次のアクション:**
+
+- `auto:failed` 通知を受けたら、PRコメントまたはIssueコメントでエラー内容を確認
+- 修正可能: Issue/PRの内容を修正し、`auto:failed` 除去 → `auto-implement` 再付与
+- 修正不要: `auto:failed` のまま放置（手動対応に切り替え）
 
 ## 自動実装の対象外
 
@@ -683,7 +705,7 @@ GitHub Actions は `GITHUB_TOKEN` で作成したイベントでは同一リポ�
 | シークレット名 | 用途 | スコープ |
 |---------------|------|---------|
 | `CLAUDE_CODE_OAUTH_TOKEN` | 既存。claude-code-action の認証 | — |
-| `BECKY3_PAT` | 新規。ワークフロー連鎖トリガー + 自動マージ | `repo`, `workflow` |
+| `BECKY3_PAT` | 新規。ワークフロー連鎖トリガー + 自動マージ | Fine-grained PAT 推奨（詳細は下記） |
 
 **BECKY3_PAT の作成手順（推奨: Fine-grained PAT）:**
 
