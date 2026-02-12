@@ -717,7 +717,7 @@ GitHub Actions は `GITHUB_TOKEN` で作成したイベントでは同一リポ�
 
 1. GitHub Settings > Developer settings > Personal access tokens > **Fine-grained tokens**
 2. Repository access: 対象リポジトリのみ（例: `<owner>/<repo>`）。最小権限の原則に従い、必要なリポジトリのみに限定する
-3. Permissions: Contents (Read and write), Pull requests (Read and write), Workflows (Read and write)
+3. Permissions: Contents (Read and write), Issues (Read and write), Pull requests (Read and write), Workflows (Read and write)
 4. Expiration: 最大90日（定期的なローテーションが必要）
 5. Token を作成し、リポジトリの Settings > Secrets and variables > Actions に `REPO_OWNER_PAT` として登録
 
