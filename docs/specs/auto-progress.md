@@ -704,7 +704,7 @@ GitHub Actions は `GITHUB_TOKEN` で作成したイベントでは同一リポ�
 
 ### 解決策
 
-`REPO_OWNER_PAT`（Personal Access Token）を使用して `/review` コメントを投稿する。PATで作成されたイベントは `github.actor == 'becky3'` として扱われるため、`pr-review.yml` の if 条件を通過してワークフロー連鎖が成立する。
+`REPO_OWNER_PAT`（Personal Access Token）を使用して `/review` コメントを投稿する。PATで作成されたイベントは `github.actor` がPAT所有者のログイン名になるため、`pr-review.yml` の if 条件（`github.actor` によるフィルタ）を通過してワークフロー連鎖が成立する。
 
 ### 必要なシークレット
 
@@ -716,7 +716,7 @@ GitHub Actions は `GITHUB_TOKEN` で作成したイベントでは同一リポ�
 **REPO_OWNER_PAT の作成手順（推奨: Fine-grained PAT）:**
 
 1. GitHub Settings > Developer settings > Personal access tokens > **Fine-grained tokens**
-2. Repository access: `becky3/ai-assistant` のみ（最小権限の原則）
+2. Repository access: 対象リポジトリのみ（例: `<owner>/<repo>`）。最小権限の原則に従い、必要なリポジトリのみに限定する
 3. Permissions: Contents (Read and write), Pull requests (Read and write), Workflows (Read and write)
 4. Expiration: 最大90日（定期的なローテーションが必要）
 5. Token を作成し、リポジトリの Settings > Secrets and variables > Actions に `REPO_OWNER_PAT` として登録
