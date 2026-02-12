@@ -63,6 +63,7 @@
 - 作業が必要な場合は、既存メンバーに割り振るか、新メンバーをspawn
 - **ツール制約**: Edit / Write ツールの使用は原則禁止
   - 許可する例外: dashboard.md の更新、CLAUDE.md 等の運用ルール更新、チーム管理に直接必要なファイル操作のみ
+- **技術的実装**: PreToolUse フック（`.claude/scripts/leader-guard.sh`）が stdin の `permission_mode` でリーダー/メンバーを判別し、リーダーかつチーム稼働中（`~/.claude/teams/` 配下にディレクトリが存在する場合）に Edit/Write をブロックする
 - **例外**: 全メンバーがブロックされている場合のみ、リーダーが一時的に作業を代行可
 
 ### メンバー自律行動
@@ -105,7 +106,8 @@
 
 | ファイル | 役割 |
 |----------|------|
-| `.claude/settings.json` | 有効化設定 |
+| `.claude/settings.json` | 有効化設定・PreToolUse フック設定 |
+| `.claude/scripts/leader-guard.sh` | リーダー管理専任ルールのフックスクリプト |
 | `.claude/team-themes/GUIDELINES.md` | キャラクター演出詳細 |
 | `~/.claude/team-theme-history.json` | テーマ履歴（git管理外） |
 | [agent-teams-operations.md](agent-teams-operations.md) | 運用詳細・プロンプトテンプレート |

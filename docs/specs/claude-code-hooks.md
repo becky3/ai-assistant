@@ -25,6 +25,16 @@ Claude Code の hooks 機能を使用して、ツール実行時やタスク完�
 ```json
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [{ "type": "command", "command": "./.claude/scripts/leader-guard.sh" }]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [{ "type": "command", "command": "./.claude/scripts/leader-guard.sh" }]
+      }
+    ],
     "PreCompact": [
       {
         "matcher": "*",
@@ -78,8 +88,9 @@ Claude Code の hooks 機能を使用して、ツール実行時やタスク完�
 - `Notification`: ユーザー入力待ち時（選択肢提示、許可ダイアログ、アイドル状態など）
 - `PermissionRequest`: ツール実行の許可ダイアログ表示時のみ
 - `Stop`: Claude がタスク完了時
+- `PreToolUse`: ツール実行前（`matcher` でツール名を指定して個別にフック可能）
 - `PreCompact`: コンテキスト圧縮前（重要なルールを再注入するために使用）
-- その他のイベント: `SessionStart`, `SessionEnd`, `PreToolUse`, `PostToolUse` など
+- その他のイベント: `SessionStart`, `SessionEnd`, `PostToolUse` など
 
 **注意**: 選択肢提示（AskUserQuestion）は `Notification` イベントで捕捉する。`PermissionRequest` はツール実行許可のみ。
 
@@ -113,6 +124,22 @@ Claude Code の hooks 機能を使用して、ツール実行時やタスク完�
 
 - シェルインジェクション対策（変数の適切なエスケープ）
 - エラー発生時の明示的なメッセージ表示
+
+### リーダーガードスクリプト
+
+**ファイル: `.claude/scripts/leader-guard.sh`**
+
+エージェントチーム運用時のリーダー管理専任ルールを技術的に制約するスクリプト:
+
+- **トリガー**: `PreToolUse` フックで Edit / Write ツール使用時に実行
+- **入力**: stdin から JSON を読み取り、`permission_mode` でリーダー/メンバーを判別
+- **判定ロジック**:
+  1. `permission_mode` が `"bypassPermissions"` → メンバー → 何もせず通過
+  2. `~/.claude/teams/` 配下にサブディレクトリなし → チーム非稼働 → 何もせず通過
+  3. リーダー + チーム稼働中 → stdout に deny 応答 JSON を出力してブロック
+- **終了コード**: 常に exit 0（非0はエラー扱い）
+
+関連仕様: [agent-teams.md](agent-teams.md)（リーダー管理専任ルール）
 
 ### 使用方法
 
@@ -187,6 +214,14 @@ Claude Code の hooks 機能を使用して、ツール実行時やタスク完�
 - コンテキスト圧縮時に重要なルールを再注入（`.claude/scripts/precompact_rule.sh`）
 - 「矛盾がある場合は必ずユーザーに確認する」ルールを保持
 
+**Phase 2.3 (リーダーガード)** — 完了:
+
+- `PreToolUse` フック追加（Edit / Write ツール用）
+- `.claude/scripts/leader-guard.sh` で `permission_mode` によりリーダー/メンバーを判別
+- リーダーかつチーム稼働中の場合、deny 応答でツール実行をブロック
+- `permissions.allow` からの除外は、メンバーにも影響するため見送り
+- 関連仕様: [agent-teams.md](agent-teams.md)（リーダー管理専任ルール）
+
 **Phase 3 (最適化)** — 未実装:
 
 - 通知のカスタマイズ設定
@@ -200,6 +235,7 @@ Claude Code の hooks 機能を使用して、ツール実行時やタスク完�
 | `.claude/settings.json` | hooks 設定（イベント駆動の通知設定を含む） |
 | `.claude/scripts/notify.sh` | クロスプラットフォーム対応の通知スクリプト |
 | `.claude/scripts/precompact_rule.sh` | PreCompact フック用ルール出力スクリプト |
+| `.claude/scripts/leader-guard.sh` | リーダー管理専任ルールのPreToolUseフックスクリプト |
 
 ## 参考資料
 

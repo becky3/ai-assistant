@@ -106,6 +106,20 @@ Task(
   - 許可する例外: dashboard.md の更新、CLAUDE.md 等の運用ルール更新、チーム管理に直接必要なファイル操作のみ
 - **例外**: 全メンバーがブロックされている場合のみ、リーダーが一時的に作業を代行可
 
+#### Hooks による技術的制約
+
+PreToolUse フック（`.claude/scripts/leader-guard.sh`）が Edit/Write 使用時に実行され、リーダーかつチーム稼働中の場合にツール実行をブロックする。
+
+> **設計判断**: `permissions.allow` からの Edit/Write 除外も検討したが、permissions はプロジェクト全体に適用されるため、bypassPermissions でスポーンしたメンバーにも影響が及ぶ。リーダーだけを制約できないため見送り、PreToolUse フックのブロック機能で対応する。
+
+**leader-guard.sh の動作仕様**:
+
+- stdin から JSON を読み取り、`permission_mode` でリーダー/メンバーを判別
+- `permission_mode` が `"bypassPermissions"` → メンバー → 何もせず exit 0
+- `~/.claude/teams/` 配下にサブディレクトリが存在しない → チーム非稼働 → 何もせず exit 0
+- リーダー + チーム稼働中 → stdout に deny 応答の JSON を出力してブロック
+- **常に exit 0**: 非0だとエラー扱いになるため
+
 ### 報告
 
 - メンバーの発言はそのまま引用してユーザーに共有（まとめない）
