@@ -125,14 +125,16 @@ CLAUDE.mdには以下の重要な情報が含まれています：
 - LLM使い分けルール
 - サブエージェントの使用方法
 
-### 開発フロー概要
+### 開発フロー概要（git-flow）
+
+本プロジェクトは git-flow ベースのブランチ戦略を採用。詳細は [git-flow仕様](docs/specs/git-flow.md) を参照。
 
 1. Issue・Milestoneの確認 (`gh milestone list`, `gh issue list`)
 2. 対象Issueの仕様書を読む (`docs/specs/`)
-3. ブランチ作成 (`feature/f{N}-{機能名}-#{Issue番号}`)
+3. `develop` からブランチ作成 (`feature/f{N}-{機能名}-#{Issue番号}`)
 4. 実装・テスト
 5. コミット (`feat(f{N}): 説明 (#{Issue番号})`)
-6. PR作成 (`gh pr create`)
+6. `develop` に向けてPR作成 (`gh pr create --base develop`)
 
 ### テストと lint
 

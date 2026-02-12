@@ -118,9 +118,15 @@ ONLINE_LLM_PROVIDER=openai
 ## テスト方針
 ```
 
-### Git運用
+### Git運用（git-flow）
 
-- ブランチ: `feature/f{N}-{機能名}-#{Issue番号}`
+git-flow ベースのブランチ戦略を採用。詳細は [git-flow.md](git-flow.md) を参照。
+
+- **常設ブランチ**: `main`（安定版）/ `develop`（開発統合）
+- **作業ブランチ**:
+  - `feature/f{N}-{機能名}-#{Issue番号}` — 新機能（`develop` → `develop`）
+  - `bugfix/{修正内容}-#{Issue番号}` — バグ修正（`develop` → `develop`）
+  - `hotfix/{修正内容}-#{Issue番号}` — 緊急修正（`main` → `main` + `develop`）
 - コミット: `feat(f{N}): 説明 (#{Issue番号})`
-- PR作成時に `Closes #{Issue番号}` で紐付け
+- PR作成時に `Closes #{Issue番号}` でIssueを紐付け（feature/bugfix: base `develop`, hotfix: base `main`）
 - マイルストーンでStep単位の進捗管理

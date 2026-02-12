@@ -74,11 +74,19 @@
 3. **既存実装コードの確認**: 仕様書の「関連ファイル」セクションに記載されたソースファイルを読み、既存の処理フロー・メソッド構成・抽象化パターンを把握する。**新規メソッド作成前に、既存メソッドのパラメータ追加で対応できないか必ず検討する**
 4. **ブランチ作成→実装→PR** の流れで進める
 
-### Git運用
+### Git運用（git-flow）
 
-- ブランチ: `feature/f{N}-{機能名}-#{Issue番号}`
+本プロジェクトは git-flow ベースのブランチ戦略を採用している。詳細は `docs/specs/git-flow.md` を参照。
+
+- **常設ブランチ**: `main`（安定版）/ `develop`（開発統合）
+- **作業ブランチ**:
+  - `feature/f{N}-{機能名}-#{Issue番号}` — 新機能開発（`develop` から分岐 → `develop` にマージ）
+  - `bugfix/{修正内容}-#{Issue番号}` — バグ修正（`develop` から分岐 → `develop` にマージ）
+  - `hotfix/{修正内容}-#{Issue番号}` — 本番緊急修正（`main` から分岐 → `main` + `develop` にマージ）
+  - `claude/issue-{N}-{date}-{id}` — Claude Code Action 自動生成（命名はシステム依存）
 - コミット: `feat(f{N}): 説明 (#{Issue番号})`
 - PR作成時に `Closes #{Issue番号}` で紐付け
+- **PRのbaseブランチ**: 通常は `develop`、hotfix は `main`
 - GitHub Milestones で Step 単位の進捗管理
 - `gh` コマンドで Issue/PR を操作
 
@@ -98,6 +106,10 @@
 9. **PR作成**: `gh pr create` コマンドで実際にPRを作成（手動リンクではなく実際に作成）
 
    ```bash
+   # 通常開発（feature/bugfix → develop）
+   gh pr create --title "タイトル" --body "説明\n\nCloses #Issue番号" --base develop
+
+   # hotfix（hotfix → main）
    gh pr create --title "タイトル" --body "説明\n\nCloses #Issue番号" --base main
    ```
 
