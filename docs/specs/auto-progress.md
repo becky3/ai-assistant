@@ -81,7 +81,7 @@ main 向き PR が作成 → pr-review.yml で自動レビュー → 管理者�
 
 - スケジュール: 毎週月曜 0:00 UTC（JST 09:00）
 - 処理: develop と main の差分コミット数をチェックし、差分があれば develop → main のリリースPRを自動作成
-- リリースPRの自動作成には `BECKY3_PAT` を使用（pr-review.yml の自動レビューをトリガーするため）
+- リリースPRの自動作成には `REPO_OWNER_PAT` を使用（pr-review.yml の自動レビューをトリガーするため）
 - 差分がなければ何もしない
 
 **main への自動マージは Phase 2 でも手動維持**。将来的に自動化する場合も、GitHub 通知で猶予期間（「30分以内に auto:failed がなければ自動マージ」）を設ける。
@@ -343,10 +343,10 @@ stateDiagram-v2
 5. **分岐処理**:
    - ループ上限到達 + 指摘あり → `auto:failed` 付与 + PRコメントで通知
    - 禁止パターン検出 → `auto:failed` 付与 + PRコメントで通知
-   - 指摘あり + 上限未到達 → `claude-code-action` で `/check-pr` を実行し自動修正 → 対応済みスレッドを `resolveReviewThread` で resolve → `BECKY3_PAT` で `/review` コメント投稿（再レビュートリガー）
+   - 指摘あり + 上限未到達 → `claude-code-action` で `/check-pr` を実行し自動修正 → 対応済みスレッドを `resolveReviewThread` で resolve → `REPO_OWNER_PAT` で `/review` コメント投稿（再レビュートリガー）
    - 指摘なし + 禁止パターンなし → マージ判定へ
 6. **マージ判定**: 4条件（レビュー指摘ゼロ、CI全通過、コンフリクトなし、`auto:failed` なし）を全て確認
-7. **自動マージ**: 条件クリアで `gh pr merge --merge` を `BECKY3_PAT` で実行
+7. **自動マージ**: 条件クリアで `gh pr merge --merge` を `REPO_OWNER_PAT` で実行
 
 **エラー時の共通挙動:**
 
@@ -360,7 +360,7 @@ stateDiagram-v2
 | シークレット | 用途 |
 |-------------|------|
 | `CLAUDE_CODE_OAUTH_TOKEN` | claude-code-action の認証 |
-| `BECKY3_PAT` | `/review` コメント投稿（ワークフロー連鎖）+ 自動マージ実行 |
+| `REPO_OWNER_PAT` | `/review` コメント投稿（ワークフロー連鎖）+ 自動マージ実行 |
 | `GITHUB_TOKEN` | その他のGitHub API操作（ラベル付与、PRチェック等） |
 
 ## Resolve conversation 自動化
@@ -704,22 +704,22 @@ GitHub Actions は `GITHUB_TOKEN` で作成したイベントでは同一リポ�
 
 ### 解決策
 
-`BECKY3_PAT`（Personal Access Token）を使用して `/review` コメントを投稿する。PATで作成されたイベントは `github.actor == 'becky3'` として扱われるため、`pr-review.yml` の if 条件を通過してワークフロー連鎖が成立する。
+`REPO_OWNER_PAT`（Personal Access Token）を使用して `/review` コメントを投稿する。PATで作成されたイベントは `github.actor` がPAT所有者のログイン名になるため、`pr-review.yml` の if 条件（`github.actor` によるフィルタ）を通過してワークフロー連鎖が成立する。
 
 ### 必要なシークレット
 
 | シークレット名 | 用途 | スコープ |
 |---------------|------|---------|
 | `CLAUDE_CODE_OAUTH_TOKEN` | 既存。claude-code-action の認証 | — |
-| `BECKY3_PAT` | 新規。ワークフロー連鎖トリガー + 自動マージ | Fine-grained PAT 推奨（詳細は下記） |
+| `REPO_OWNER_PAT` | 新規。ワークフロー連鎖トリガー + 自動マージ | Fine-grained PAT 推奨（詳細は下記） |
 
-**BECKY3_PAT の作成手順（推奨: Fine-grained PAT）:**
+**REPO_OWNER_PAT の作成手順（推奨: Fine-grained PAT）:**
 
 1. GitHub Settings > Developer settings > Personal access tokens > **Fine-grained tokens**
-2. Repository access: `becky3/ai-assistant` のみ（最小権限の原則）
+2. Repository access: 対象リポジトリのみ（例: `<owner>/<repo>`）。最小権限の原則に従い、必要なリポジトリのみに限定する
 3. Permissions: Contents (Read and write), Pull requests (Read and write), Workflows (Read and write)
 4. Expiration: 最大90日（定期的なローテーションが必要）
-5. Token を作成し、リポジトリの Settings > Secrets and variables > Actions に `BECKY3_PAT` として登録
+5. Token を作成し、リポジトリの Settings > Secrets and variables > Actions に `REPO_OWNER_PAT` として登録
 
 **セキュリティ注記:**
 
@@ -742,7 +742,7 @@ GitHub Actions は `GITHUB_TOKEN` で作成したイベントでは同一リポ�
 ### Phase 1: レビュー自動ループ + マージ
 
 - auto-fix.yml の新規作成
-- `BECKY3_PAT` シークレット登録
+- `REPO_OWNER_PAT` シークレット登録
 - check-pr スキルに resolve conversation ステップ追加
 - ブランチ保護ルール設定（develop: 自動マージ許可、main: 手動のみ）
 - ラベルの動作確認（`auto:failed` による停止・再開フロー）
@@ -804,7 +804,7 @@ GitHub Actions の実行時間（ubuntu-latest）は無料枠（2,000分/月）�
 - [ ] AC10: レビュー指摘ゼロ・CI全通過・コンフリクトなし・auto:failedなしの4条件を全て満たす場合のみ自動マージが実行される
 - [ ] AC11: 禁止パターンに該当するファイルが変更に含まれるPRは自動マージされず `auto:failed` ラベルが付与される
 - [ ] AC12: 同じPRに対する auto-fix.yml の同時実行が concurrency で防止される
-- [ ] AC13: `BECKY3_PAT` シークレットが登録されている
+- [ ] AC13: `REPO_OWNER_PAT` シークレットが登録されている
 - [ ] AC14: feature ブランチが develop をベースに作成される
 - [ ] AC15: 自動マージが develop ブランチに対して実行される（main には直接マージしない）
 - [ ] AC16: develop ブランチに保護ルールが設定されている（CI必須、PR必須）

@@ -170,7 +170,7 @@ PR作成後のレビュー → 指摘対応 → 再レビュー → マージ判
 - `workflow_run[completed]`（PR Review 完了時）トリガー
 - PR番号特定: `workflow_run.pull_requests` 配列を優先、なければブランチ名から `gh pr list` でフォールバック
 - `auto:failed` ラベルチェック → ループ回数チェック（最大3回） → レビュー結果判定（`<!-- auto-fix:no-issues -->` フラグ） → 禁止パターンチェック
-- 指摘あり + 上限未到達: `claude-code-action` で `/check-pr` 実行 → `resolveReviewThread` → `BECKY3_PAT` で `/review` 再リクエスト
+- 指摘あり + 上限未到達: `claude-code-action` で `/check-pr` 実行 → `resolveReviewThread` → `REPO_OWNER_PAT` で `/review` 再リクエスト
 - 指摘なし: 4条件マージ判定（レビュー指摘ゼロ / CI全通過 / コンフリクトなし / auto:failedなし）
 - 段階的マージ解禁 Step 1（ドライラン）: 判定結果をPRコメントに通知、実際のマージはコメントアウト
 - エラー時の `auto:failed` 付与 + PRコメント + Actions ログリンク
@@ -181,7 +181,7 @@ PR作成後のレビュー → 指摘対応 → 再レビュー → マージ判
 
 - レビュー結果サマリーに機械可読フラグ（`<!-- auto-fix:no-issues -->` / `<!-- auto-fix:has-issues -->`）を埋め込むプロンプトを追加
 - auto-fix.yml がレビュー結果を機械的に判定するために必要
-- actor 条件の修正: BECKY3_PAT によるワークフロー連鎖を可能にするため、`github.actor` 条件を調整
+- actor 条件の修正: REPO_OWNER_PAT によるワークフロー連鎖を可能にするため、`github.actor` 条件を調整
 
 **3. `.claude/skills/check-pr/SKILL.md`（改修）**
 
