@@ -17,7 +17,7 @@ AI Assistantは、Slack上で動作するAIアシスタントである。
 | F6 | 特定チャンネル自動返信 | 指定チャンネルでメンションなしでも自動応答 | [f6-auto-reply.md](f6-auto-reply.md) |
 | F7 | ボットステータスコマンド | 稼働環境・ホスト名・稼働時間の表示 | [f7-bot-status.md](f7-bot-status.md) |
 | F8 | ボットのスレッド対応 | Slackスレッド履歴取得によるコンテキスト補完 | [f8-thread-support.md](f8-thread-support.md) |
-| F9 | RAGナレッジ | 外部Webページの知識をベクトルDBに蓄積しチャット応答に活用 | [f9-rag-knowledge.md](f9-rag-knowledge.md) |
+| F9 | RAGナレッジ | 外部Webページの知識をベクトルDBに蓄積しチャット応答に活用 | [f9-rag.md](f9-rag.md) |
 
 ## 3. 技術スタック
 

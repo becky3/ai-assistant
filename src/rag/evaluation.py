@@ -1,6 +1,6 @@
 """RAG評価メトリクス計算モジュール
 
-仕様: docs/specs/f9-rag-knowledge.md (Phase 2評価機能)
+仕様: docs/specs/f9-rag.md (Phase 2評価機能)
 """
 
 from __future__ import annotations

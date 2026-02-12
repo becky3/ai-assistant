@@ -1,6 +1,6 @@
 """Embeddingプロバイダーのテスト (Issue #115).
 
-仕様: docs/specs/f9-rag-knowledge.md — AC1〜AC4
+仕様: docs/specs/f9-rag.md — AC1〜AC4
 """
 
 from __future__ import annotations

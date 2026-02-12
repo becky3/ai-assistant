@@ -1,6 +1,6 @@
 """SafeBrowsingClient テスト
 
-仕様: docs/specs/f9-rag-knowledge.md
+仕様: docs/specs/f9-rag.md
 Issue: #159
 """
 

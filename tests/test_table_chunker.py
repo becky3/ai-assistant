@@ -1,6 +1,6 @@
 """テーブルチャンキングのテスト
 
-仕様: docs/specs/f9-rag-chunking-hybrid.md
+仕様: docs/specs/f9-rag.md
 """
 
 from src.rag.table_chunker import chunk_table_data

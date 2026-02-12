@@ -1,7 +1,6 @@
 """RAGナレッジ管理サービス
 
-仕様: docs/specs/f9-rag-knowledge.md, docs/specs/f9-rag-evaluation.md,
-      docs/specs/f9-rag-chunking-hybrid.md
+仕様: docs/specs/f9-rag.md
 """
 
 from __future__ import annotations
@@ -34,7 +33,7 @@ logger = logging.getLogger(__name__)
 class RAGRetrievalResult:
     """RAG検索結果.
 
-    仕様: docs/specs/f9-rag-evaluation.md
+    仕様: docs/specs/f9-rag.md
 
     Attributes:
         context: フォーマット済みテキスト（システムプロンプト注入用）
@@ -48,7 +47,7 @@ class RAGRetrievalResult:
 class RAGKnowledgeService:
     """RAGナレッジ管理サービス.
 
-    仕様: docs/specs/f9-rag-knowledge.md, docs/specs/f9-rag-chunking-hybrid.md
+    仕様: docs/specs/f9-rag.md
     """
 
     def __init__(
@@ -244,7 +243,7 @@ class RAGKnowledgeService:
     def _smart_chunk(self, text: str) -> list[str]:
         """コンテンツタイプに応じた適切なチャンキング手法を選択する.
 
-        仕様: docs/specs/f9-rag-chunking-hybrid.md
+        仕様: docs/specs/f9-rag.md
 
         - TABLE: テーブルデータとして行単位でチャンキング
         - HEADING/MIXED: 見出し単位でチャンキング
@@ -356,7 +355,7 @@ class RAGKnowledgeService:
 
         ChatService から呼ばれる。結果なしの場合は空のRAGRetrievalResult。
 
-        仕様: docs/specs/f9-rag-evaluation.md, docs/specs/f9-rag-chunking-hybrid.md
+        仕様: docs/specs/f9-rag.md
 
         Args:
             query: 検索クエリ
@@ -442,7 +441,7 @@ class RAGKnowledgeService:
     ) -> RAGRetrievalResult:
         """ハイブリッド検索（ベクトル＋BM25）で検索を実行する.
 
-        仕様: docs/specs/f9-rag-chunking-hybrid.md
+        仕様: docs/specs/f9-rag.md
 
         Args:
             query: 検索クエリ

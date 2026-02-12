@@ -298,7 +298,7 @@ RAG_RETRIEVAL_COUNT=5
 
 ## 関連ファイル
 
-- 仕様書: `docs/specs/f9-rag-knowledge.md`
+- 仕様書: `docs/specs/f9-rag.md`
 - RAGサービス: `src/services/rag_knowledge.py`
 - ベクトルストア: `src/rag/vector_store.py`
 - チャンカー: `src/rag/chunker.py`

@@ -1,6 +1,6 @@
 """コンテンツタイプ検出モジュール
 
-仕様: docs/specs/f9-rag-chunking-hybrid.md
+仕様: docs/specs/f9-rag.md
 """
 
 from __future__ import annotations

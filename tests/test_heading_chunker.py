@@ -1,6 +1,6 @@
 """見出しチャンキングのテスト
 
-仕様: docs/specs/f9-rag-chunking-hybrid.md
+仕様: docs/specs/f9-rag.md
 """
 
 from src.rag.heading_chunker import chunk_by_headings

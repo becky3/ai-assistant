@@ -1,6 +1,6 @@
 """BM25インデックスのテスト
 
-仕様: docs/specs/f9-rag-chunking-hybrid.md
+仕様: docs/specs/f9-rag.md
 """
 
 from src.rag.bm25_index import BM25Index, tokenize_japanese

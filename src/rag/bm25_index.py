@@ -1,6 +1,6 @@
 """BM25キーワード検索インデックスモジュール
 
-仕様: docs/specs/f9-rag-chunking-hybrid.md
+仕様: docs/specs/f9-rag.md
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ class BM25Result:
 class BM25Index:
     """BM25ベースのキーワード検索インデックス.
 
-    仕様: docs/specs/f9-rag-chunking-hybrid.md
+    仕様: docs/specs/f9-rag.md
     """
 
     def __init__(
@@ -335,7 +335,7 @@ INCLUDE_POS = frozenset(["名詞", "動詞", "形容詞", "固有名詞"])
 def tokenize_japanese(text: str) -> list[str]:
     """日本語テキストをトークン化する.
 
-    仕様: docs/specs/f9-rag-chunking-hybrid.md
+    仕様: docs/specs/f9-rag.md
 
     - 形態素解析（fugashi/MeCab）を使用（利用可能な場合）
     - 名詞・動詞・形容詞のみ抽出

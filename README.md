@@ -68,7 +68,7 @@ uv run python -m src.rag.cli evaluate \
   --output-dir reports/rag-evaluation
 ```
 
-詳細は [RAG自動評価パイプライン仕様](docs/specs/f9-rag-auto-evaluation.md) を参照してください。
+詳細は [RAGナレッジ機能仕様](docs/specs/f9-rag.md) を参照してください。
 
 ## プロジェクト構造
 
@@ -160,10 +160,7 @@ uv run mypy src
 - [F6: 特定チャンネル自動返信](docs/specs/f6-auto-reply.md)
 - [F7: ボットステータス](docs/specs/f7-bot-status.md)
 - [F8: スレッドサポート](docs/specs/f8-thread-support.md)
-- [F9: RAGナレッジ](docs/specs/f9-rag-knowledge.md)
-- [F9: RAGチャンキング・ハイブリッド検索](docs/specs/f9-rag-chunking-hybrid.md)
-- [F9: RAG評価・可視化](docs/specs/f9-rag-evaluation.md)
-- [F9: RAG自動評価パイプライン](docs/specs/f9-rag-auto-evaluation.md)
+- [F9: RAGナレッジ](docs/specs/f9-rag.md)
 
 ### Claude Code 関連
 

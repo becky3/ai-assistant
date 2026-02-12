@@ -1,6 +1,6 @@
 """テキストチャンキングのテスト (Issue #116).
 
-仕様: docs/specs/f9-rag-knowledge.md — AC5〜AC7
+仕様: docs/specs/f9-rag.md — AC5〜AC7
 """
 
 from __future__ import annotations

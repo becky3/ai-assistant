@@ -1,6 +1,6 @@
 """ベクトルストアのテスト (Issue #116).
 
-仕様: docs/specs/f9-rag-knowledge.md — AC8〜AC11
+仕様: docs/specs/f9-rag.md — AC8〜AC11
 """
 
 from __future__ import annotations
