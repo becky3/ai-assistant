@@ -67,8 +67,24 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
 
-      - name: Check auto:failed label
+      - name: Check auto-implement scope
         if: steps.pr-info.outputs.skip != 'true'
+        id: scope-check
+        run: |
+          set -euo pipefail
+
+          # auto-implement 経由のPR（claude/issue-* ブランチ）のみ対象
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          if [[ "$BRANCH" == claude/issue-* ]]; then
+            echo "in_scope=true" >> $GITHUB_OUTPUT
+            echo "Branch '$BRANCH' matches auto-implement pattern"
+          else
+            echo "in_scope=false" >> $GITHUB_OUTPUT
+            echo "::notice::Branch '$BRANCH' is not an auto-implement branch. Skipping."
+          fi
+
+      - name: Check auto:failed label
+        if: steps.pr-info.outputs.skip != 'true' && steps.scope-check.outputs.in_scope == 'true'
         id: check-failed
         run: |
           set -euo pipefail
@@ -93,7 +109,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
 
       - name: Check loop count
-        if: steps.pr-info.outputs.skip != 'true' && steps.check-failed.outputs.skip != 'true'
+        if: steps.pr-info.outputs.skip != 'true' && steps.scope-check.outputs.in_scope == 'true' && steps.check-failed.outputs.skip != 'true'
         id: loop-check
         run: |
           set -euo pipefail
@@ -126,7 +142,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Check review result
-        if: steps.pr-info.outputs.skip != 'true' && steps.check-failed.outputs.skip != 'true'
+        if: steps.pr-info.outputs.skip != 'true' && steps.scope-check.outputs.in_scope == 'true' && steps.check-failed.outputs.skip != 'true'
         id: review-result
         run: |
           set -euo pipefail
@@ -194,9 +210,10 @@ jobs:
           fi
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
 
       - name: Check forbidden patterns
-        if: steps.pr-info.outputs.skip != 'true' && steps.check-failed.outputs.skip != 'true'
+        if: steps.pr-info.outputs.skip != 'true' && steps.scope-check.outputs.in_scope == 'true' && steps.check-failed.outputs.skip != 'true'
         id: forbidden-check
         run: |
           set -euo pipefail
@@ -272,6 +289,7 @@ jobs:
       - name: Handle loop limit reached
         if: |
           steps.pr-info.outputs.skip != 'true' &&
+          steps.scope-check.outputs.in_scope == 'true' &&
           steps.check-failed.outputs.skip != 'true' &&
           steps.loop-check.outputs.limit_reached == 'true' &&
           steps.review-result.outputs.has_issues == 'true'
@@ -298,6 +316,7 @@ jobs:
       - name: Handle forbidden patterns
         if: |
           steps.pr-info.outputs.skip != 'true' &&
+          steps.scope-check.outputs.in_scope == 'true' &&
           steps.check-failed.outputs.skip != 'true' &&
           steps.forbidden-check.outputs.forbidden == 'true'
         run: |
@@ -326,6 +345,7 @@ jobs:
       - name: Post loop marker comment
         if: |
           steps.pr-info.outputs.skip != 'true' &&
+          steps.scope-check.outputs.in_scope == 'true' &&
           steps.check-failed.outputs.skip != 'true' &&
           steps.loop-check.outputs.limit_reached != 'true' &&
           steps.forbidden-check.outputs.forbidden != 'true' &&
@@ -348,6 +368,7 @@ jobs:
       - name: Checkout for auto-fix
         if: |
           steps.pr-info.outputs.skip != 'true' &&
+          steps.scope-check.outputs.in_scope == 'true' &&
           steps.check-failed.outputs.skip != 'true' &&
           steps.loop-check.outputs.limit_reached != 'true' &&
           steps.forbidden-check.outputs.forbidden != 'true' &&
@@ -360,6 +381,7 @@ jobs:
       - name: Auto-fix with Claude
         if: |
           steps.pr-info.outputs.skip != 'true' &&
+          steps.scope-check.outputs.in_scope == 'true' &&
           steps.check-failed.outputs.skip != 'true' &&
           steps.loop-check.outputs.limit_reached != 'true' &&
           steps.forbidden-check.outputs.forbidden != 'true' &&
@@ -382,10 +404,11 @@ jobs:
       # auto-fix.yml 側で無条件に全スレッドを resolve すると、未対応の指摘までクローズされるため、
       # ここでは resolve を行わない。
 
-      # /review 再リクエスト（BECKY3_PAT でワークフロー連鎖）
+      # /review 再リクエスト（REPO_OWNER_PAT でワークフロー連鎖）
       - name: Request re-review
         if: |
           steps.pr-info.outputs.skip != 'true' &&
+          steps.scope-check.outputs.in_scope == 'true' &&
           steps.check-failed.outputs.skip != 'true' &&
           steps.loop-check.outputs.limit_reached != 'true' &&
           steps.forbidden-check.outputs.forbidden != 'true' &&
@@ -394,16 +417,17 @@ jobs:
           set -euo pipefail
           PR_NUMBER="${{ steps.pr-info.outputs.number }}"
 
-          # BECKY3_PAT で /review コメントを投稿（pr-review.yml の再トリガー）
+          # REPO_OWNER_PAT で /review コメントを投稿（pr-review.yml の再トリガー）
           gh pr comment "$PR_NUMBER" --body "/review"
         env:
-          GH_TOKEN: ${{ secrets.BECKY3_PAT }}
+          GH_TOKEN: ${{ secrets.REPO_OWNER_PAT }}
           GH_REPO: ${{ github.repository }}
 
       # 指摘なし + 禁止パターンなし → マージ判定
       - name: Merge check
         if: |
           steps.pr-info.outputs.skip != 'true' &&
+          steps.scope-check.outputs.in_scope == 'true' &&
           steps.check-failed.outputs.skip != 'true' &&
           steps.review-result.outputs.has_issues == 'false' &&
           steps.forbidden-check.outputs.forbidden != 'true'
@@ -491,6 +515,7 @@ jobs:
       - name: Merge (dry-run)
         if: |
           steps.pr-info.outputs.skip != 'true' &&
+          steps.scope-check.outputs.in_scope == 'true' &&
           steps.check-failed.outputs.skip != 'true' &&
           steps.review-result.outputs.has_issues == 'false' &&
           steps.forbidden-check.outputs.forbidden != 'true' &&
@@ -518,13 +543,14 @@ jobs:
           # --- 段階的マージ解禁 Step 2 以降でコメントアウトを解除 ---
           # gh pr merge "$PR_NUMBER" --merge
         env:
-          GH_TOKEN: ${{ secrets.BECKY3_PAT }}
+          GH_TOKEN: ${{ secrets.REPO_OWNER_PAT }}
           GH_REPO: ${{ github.repository }}
 
       # マージ条件未達の通知
       - name: Merge conditions not met
         if: |
           steps.pr-info.outputs.skip != 'true' &&
+          steps.scope-check.outputs.in_scope == 'true' &&
           steps.check-failed.outputs.skip != 'true' &&
           steps.review-result.outputs.has_issues == 'false' &&
           steps.forbidden-check.outputs.forbidden != 'true' &&
@@ -548,7 +574,7 @@ jobs:
 
       # エラー時の auto:failed 付与
       - name: Handle errors
-        if: failure() && steps.pr-info.outputs.skip != 'true' && steps.pr-info.outputs.number != ''
+        if: failure() && steps.pr-info.outputs.skip != 'true' && steps.scope-check.outputs.in_scope == 'true' && steps.pr-info.outputs.number != ''
         run: |
           set -euo pipefail
           PR_NUMBER="${{ steps.pr-info.outputs.number }}"
