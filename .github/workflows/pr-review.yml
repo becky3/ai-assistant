@@ -174,12 +174,21 @@ jobs:
                *問題の詳細は各コード行のコメントを参照してください*
                ```
 
-            5. 問題がない場合は以下の形式で報告してください:
+            5. レビュー結果のサマリーには、必ず以下の機械可読フラグを含めてください。
+               auto-fix.yml がレビュー結果を機械的に判定するために使用します。
+
+               問題がない場合:
                ```
-               <!-- auto-fix:no-issues -->
+               <!-- auto-fix:no-issues commit=${{ steps.pr-head.outputs.sha }} -->
                レビューの結果、重大な問題は検出されませんでした。
                ```
-               `<!-- auto-fix:no-issues -->` は auto-fix.yml が指摘有無を機械的に判定するためのフラグです。問題がない場合は必ず含めてください。
+
+               問題がある場合（ステップ4のサマリー内に含める）:
+               ```
+               <!-- auto-fix:has-issues commit=${{ steps.pr-head.outputs.sha }} -->
+               ```
+
+               **重要**: `commit=` にはレビュー対象のコミットSHAを含めてください。auto-fix.yml は最新コミットに対応するフラグのみを判定対象とします。
 
       # Slack通知（成功時は冗長なため失敗時のみ）
       - name: Slack notification

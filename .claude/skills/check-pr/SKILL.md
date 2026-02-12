@@ -138,7 +138,7 @@ PRの内容を確認し、未解決のレビュー指摘があれば対応した
 
 12. 対応済みレビュースレッドの resolve:
     - owner/repo は `gh repo view --json owner,name` で取得
-    - 以下の GraphQL で対応済みの未解決スレッドを取得:
+    - 以下の GraphQL で対応済みの未解決スレッドを取得（`{owner}`, `{repo}`, `$PR_NUMBER` を実際の値に置換して実行）:
 
       ```bash
       gh api graphql -f query='
@@ -164,7 +164,18 @@ PRの内容を確認し、未解決のレビュー指摘があれば対応した
       }'
       ```
 
-    - ステップ7で「対応済み」と判断したスレッドを `resolveReviewThread` mutation で resolve:
+    - GraphQL query が失敗した場合はエラーメッセージをログに出力し、resolve 処理をスキップする（致命的ではないため処理を継続）:
+
+      ```bash
+      if ! THREADS=$(gh api graphql -f query='...' --jq '...' 2>&1); then
+        echo "Warning: Failed to query review threads: $THREADS"
+        echo "Skipping thread resolution due to API error"
+        # resolve をスキップして次のステップに進む
+      fi
+      ```
+
+    - レビュースレッドが0件の場合は「対応済みスレッドなし」とログ出力してスキップ
+    - ステップ7で「対応済み」と判断したスレッドのみを `resolveReviewThread` mutation で resolve する。未対応の指摘は resolve しない（`$THREAD_ID` を実際のスレッドIDに置換）:
 
       ```bash
       gh api graphql -f query='
@@ -175,7 +186,7 @@ PRの内容を確認し、未解決のレビュー指摘があれば対応した
       }' -f threadId="$THREAD_ID"
       ```
 
-    - 個別スレッドの resolve 失敗はログして次のスレッドに継続（1件の失敗で全体を止めない）
+    - 個別スレッドの resolve 失敗はエラー詳細をログして次のスレッドに継続（1件の失敗で全体を止めない）
     - 全スレッドの resolve 失敗時もエラーとはしない（再レビューで再検出されるため）
 
 13. 修正をコミット & push:
