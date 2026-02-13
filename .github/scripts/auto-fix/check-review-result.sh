@@ -18,6 +18,8 @@ UNRESOLVED_COUNT=""
 FIRST_ERROR=""
 LAST_ERROR=""
 for i in $(seq 1 5); do
+  # GraphQL変数構文であり、シェル変数展開ではない
+  # shellcheck disable=SC2016
   if UNRESOLVED_COUNT=$(gh api graphql -f query='
     query($owner: String!, $name: String!, $number: Int!) {
       repository(owner: $owner, name: $name) {

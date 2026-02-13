@@ -70,9 +70,11 @@ done <<< "$CHANGED_FILES"
 if [ -n "$FORBIDDEN_FOUND" ]; then
   echo "forbidden=true" >> "$GITHUB_OUTPUT"
   FORBIDDEN_LIST=$(echo -e "$FORBIDDEN_FOUND" | head -c 1000)
-  echo "forbidden_files<<EOF" >> "$GITHUB_OUTPUT"
-  echo "$FORBIDDEN_LIST" >> "$GITHUB_OUTPUT"
-  echo "EOF" >> "$GITHUB_OUTPUT"
+  {
+    echo "forbidden_files<<EOF"
+    echo "$FORBIDDEN_LIST"
+    echo "EOF"
+  } >> "$GITHUB_OUTPUT"
   echo "::warning::Forbidden patterns found"
 else
   echo "forbidden=false" >> "$GITHUB_OUTPUT"
