@@ -193,8 +193,7 @@ GitHub Actions 環境では Skill ツールを使用しない。以下の4ステ
 #### ステップ 1/4: テスト実行
 
 ```bash
-uv run pytest && uv run ruff check src/ tests/ && uv run mypy src/
-npx markdownlint-cli2@0.20.0 "CLAUDE.md" "docs/**/*.md" "*.md" ".claude/**/*.md"
+uv run pytest && uv run ruff check src/ tests/ && uv run mypy src/ && npx markdownlint-cli2@0.20.0 "CLAUDE.md" "docs/**/*.md" "*.md" ".claude/**/*.md"
 ```
 
 - Markdown のみの変更の場合、pytest / ruff / mypy はスキップ可（markdownlint のみ実行）
@@ -225,9 +224,9 @@ Critical/Warning レベルの問題があれば修正する。
 3. `git diff --cached --stat` で差分サマリ表示
 4. 変更内容からコミットメッセージ自動生成（優先順位: fix > feat > docs > ci）
 5. `git commit -m "生成したメッセージ"`
-6. `git push origin $(git branch --show-current)`
-7. `gh pr create --base develop`（bodyに `Closes #Issue番号` を含める）
-8. `gh issue comment <Issue番号>` で完了報告
+6. `BRANCH=$(git branch --show-current)` && `git push origin "$BRANCH"`
+7. `gh pr create --base develop --title "タイトル" --body "説明\n\nCloses #Issue番号"`
+8. `gh issue comment <Issue番号> --body "対応が完了しました。PR #<PR番号> をご確認ください。"`
 
 エラー時: ステップ1-7は失敗で停止。ステップ8は警告して続行（PRは作成済み）。
 commitが成功していない状態でpushしないこと。

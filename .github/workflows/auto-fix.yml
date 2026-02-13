@@ -200,6 +200,8 @@ jobs:
           # 方針: 一時的API障害 → リトライで対応
           # GraphQL で unresolved レビュースレッドを検索（最大5回、10秒間隔）
           UNRESOLVED_COUNT=""
+          FIRST_ERROR=""
+          LAST_ERROR=""
           for i in $(seq 1 5); do
             if UNRESOLVED_COUNT=$(gh api graphql -f query='
               query($owner: String!, $name: String!, $number: Int!) {
@@ -214,16 +216,40 @@ jobs:
                 }
               }
             ' -f owner="${REPO_OWNER}" -f name="${REPO_NAME}" -F number="$PR_NUMBER" \
-              --jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length' 2>&1); then
+              --jq '
+                if .data.repository.pullRequest == null then
+                  error("PR #\($number) not found")
+                else
+                  [.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length
+                end
+              ' --arg number "$PR_NUMBER" 2>&1); then
+              # 数値バリデーション（リトライループ内で実行）
+              if ! [[ "$UNRESOLVED_COUNT" =~ ^[0-9]+$ ]]; then
+                echo "::warning::Invalid response format (attempt $i/5): '$UNRESOLVED_COUNT'. Retrying..."
+                if [ -z "$FIRST_ERROR" ]; then
+                  FIRST_ERROR="$UNRESOLVED_COUNT"
+                fi
+                LAST_ERROR="$UNRESOLVED_COUNT"
+                UNRESOLVED_COUNT=""
+                if [ "$i" -lt 5 ]; then sleep 10; fi
+                continue
+              fi
+              # 成功
               break
             fi
             echo "::warning::Failed to query review threads (attempt $i/5): $UNRESOLVED_COUNT"
+            if [ -z "$FIRST_ERROR" ]; then
+              FIRST_ERROR="$UNRESOLVED_COUNT"
+            fi
+            LAST_ERROR="$UNRESOLVED_COUNT"
             if [ "$i" -lt 5 ]; then sleep 10; fi
           done
 
-          # 数値バリデーション
+          # 最終的な数値バリデーション（全リトライ失敗時）
           if ! [[ "$UNRESOLVED_COUNT" =~ ^[0-9]+$ ]]; then
-            echo "::error::Failed to get unresolved thread count after 5 attempts: $UNRESOLVED_COUNT"
+            echo "::error::Failed to get unresolved thread count after 5 attempts."
+            echo "::error::First error: $FIRST_ERROR"
+            echo "::error::Last error: $LAST_ERROR"
             exit 1
           fi
 
