@@ -20,6 +20,8 @@ set -euo pipefail
 # _common.sh の source（ベストエフォート）
 COMMON_SCRIPT="${COMMON_SCRIPT_PATH:-}"
 SOURCED=false
+# COMMON_SCRIPT is dynamically resolved at runtime
+# shellcheck disable=SC1090
 if [ -n "$COMMON_SCRIPT" ] && [ -f "$COMMON_SCRIPT" ]; then
   if ! SYNTAX_ERR=$(bash -n "$COMMON_SCRIPT" 2>&1); then
     echo "::error::Syntax error in $COMMON_SCRIPT: $SYNTAX_ERR — falling back"

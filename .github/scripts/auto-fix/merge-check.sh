@@ -85,7 +85,9 @@ if [ "$MERGE_READY" = "true" ]; then
   echo "All merge conditions met"
 else
   echo "Merge conditions not met"
-  echo "reasons<<EOF" >> "$GITHUB_OUTPUT"
-  echo -e "$REASONS" >> "$GITHUB_OUTPUT"
-  echo "EOF" >> "$GITHUB_OUTPUT"
+  {
+    echo "reasons<<EOF"
+    echo -e "$REASONS"
+    echo "EOF"
+  } >> "$GITHUB_OUTPUT"
 fi
