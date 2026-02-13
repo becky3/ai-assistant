@@ -7,7 +7,7 @@
 # エラーハンドリング方針（auto-fix.yml 冒頭と対応）:
 #   gh_safe          → 失敗時 ::error:: + exit 1（認証/権限/必須データ取得）
 #   gh_safe_warning  → 失敗時 ::warning::（一時的API障害、非クリティカル）
-#   gh_safe_noncrit  → 失敗時 ::error:: のみ（エラーハンドラ内、ベストエフォート）
+#   gh_best_effort   → 失敗時 ::error:: のみ（エラーハンドラ内、ベストエフォート）
 
 set -euo pipefail
 
@@ -16,8 +16,10 @@ set -euo pipefail
 # 使用例: RESULT=$(gh_safe gh pr view "$PR_NUMBER" --json body --jq '.body // ""')
 gh_safe() {
   local output
-  if ! output=$("$@" 2>&1); then
-    echo "::error::Command failed: $* — $output"
+  local exit_code=0
+  output=$("$@" 2>&1) || exit_code=$?
+  if [ "$exit_code" -ne 0 ]; then
+    echo "::error::Command failed (exit $exit_code): $* — $output"
     exit 1
   fi
   echo "$output"
@@ -35,10 +37,10 @@ gh_safe_warning() {
   echo "$output"
 }
 
-# gh_safe_noncrit: コマンド実行し、失敗時は ::error:: のみ（exit しない）
+# gh_best_effort: コマンド実行し、失敗時は ::error:: のみ（exit しない）
 # 用途: エラーハンドラ内のベストエフォート処理（ラベル付与、コメント投稿等）
-# 使用例: gh_safe_noncrit gh issue edit "$NUM" --add-label "auto:failed"
-gh_safe_noncrit() {
+# 使用例: gh_best_effort gh issue edit "$NUM" --add-label "auto:failed"
+gh_best_effort() {
   local output
   if ! output=$("$@" 2>&1); then
     echo "::error::Command failed (best-effort): $* — $output — manual intervention may be required" >&2
@@ -54,10 +56,15 @@ gh_safe_noncrit() {
 gh_comment() {
   local pr_number="$1"
   local body="$2"
+
+  if [ -z "$pr_number" ] || [ -z "$body" ]; then
+    echo "::error::gh_comment: Missing required arguments (pr_number='$pr_number')" >&2
+    return 1
+  fi
+
   local output
   if ! output=$(gh pr comment "$pr_number" --body "$body" 2>&1); then
-    echo "::warning::Failed to post PR comment: $output" >&2
-    echo "::notice::Comment posting failed but workflow continues. See Actions log for details." >&2
+    echo "::warning::Failed to post PR comment to #$pr_number: $output" >&2
     return 1
   fi
 }

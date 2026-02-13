@@ -801,7 +801,7 @@ jobs:
             if ! MERGE_ERR=$(gh pr merge "$PR_NUMBER" --merge 2>&1); then
               echo "::error::Merge failed: $MERGE_ERR"
               # マージ失敗時: auto:failed ラベル付与 + PRコメント（事後処理はベストエフォート）
-              gh_safe_noncrit gh issue edit "$PR_NUMBER" --add-label "auto:failed"
+              gh_best_effort gh issue edit "$PR_NUMBER" --add-label "auto:failed"
               gh_comment "$PR_NUMBER" "## auto-fix: 自動マージ失敗
 
           マージ条件は全て満たしていましたが、マージコマンドの実行に失敗しました:
@@ -874,10 +874,21 @@ jobs:
         if: failure() && steps.pr-info.outputs.number != '' && steps.scope-check.outputs.in_scope == 'true'
         run: |
           # エラーハンドラ: checkout 失敗の可能性があるため source は best-effort
-          if [ -f "$GITHUB_WORKSPACE/.github/scripts/auto-fix/_common.sh" ]; then
-            source "$GITHUB_WORKSPACE/.github/scripts/auto-fix/_common.sh"
+          COMMON_SCRIPT="$GITHUB_WORKSPACE/.github/scripts/auto-fix/_common.sh"
+          SOURCED=false
+          if [ -f "$COMMON_SCRIPT" ]; then
+            if ! SYNTAX_ERR=$(bash -n "$COMMON_SCRIPT" 2>&1); then
+              echo "::error::Syntax error in $COMMON_SCRIPT: $SYNTAX_ERR — falling back"
+            elif ! source "$COMMON_SCRIPT"; then
+              echo "::error::Failed to source $COMMON_SCRIPT — falling back"
+            else
+              SOURCED=true
+            fi
+          fi
+
+          if [ "$SOURCED" = true ]; then
             PR_NUMBER="${{ steps.pr-info.outputs.number }}"
-            gh_safe_noncrit gh issue edit "$PR_NUMBER" --add-label "auto:failed"
+            gh_best_effort gh issue edit "$PR_NUMBER" --add-label "auto:failed"
             gh_comment "$PR_NUMBER" "## auto-fix: エラー発生
 
           自動修正処理中にエラーが発生しました。\`auto:failed\` ラベルを付与して自動処理を停止します。
