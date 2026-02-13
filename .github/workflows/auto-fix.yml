@@ -347,23 +347,56 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
 
+      # --- ガード集約: ワークフロー分岐パスの判定 ---
+      - name: Evaluate guards
+        if: steps.pr-info.outputs.skip != 'true' && steps.scope-check.outputs.in_scope == 'true' && steps.check-failed.outputs.skip != 'true'
+        id: guards
+        run: |
+          set -euo pipefail
+
+          # 基本ガードは通過済み（このステップが実行される = proceed=true）
+          echo "proceed=true" >> $GITHUB_OUTPUT
+
+          # 分岐パスの判定
+          LOOP_LIMIT_REACHED="${{ steps.loop-check.outputs.limit_reached }}"
+          HAS_ISSUES="${{ steps.review-result.outputs.has_issues }}"
+          FORBIDDEN="${{ steps.forbidden-check.outputs.forbidden }}"
+
+          if [ "$LOOP_LIMIT_REACHED" = "true" ] && [ "$HAS_ISSUES" = "true" ]; then
+            echo "path=loop_limit_reached" >> $GITHUB_OUTPUT
+            echo "Workflow path: loop_limit_reached"
+          elif [ "$FORBIDDEN" = "true" ]; then
+            echo "path=forbidden_detected" >> $GITHUB_OUTPUT
+            echo "Workflow path: forbidden_detected"
+          elif [ "$HAS_ISSUES" = "true" ]; then
+            echo "path=auto_fix" >> $GITHUB_OUTPUT
+            echo "Workflow path: auto_fix"
+          else
+            echo "path=merge_check" >> $GITHUB_OUTPUT
+            echo "Workflow path: merge_check"
+          fi
+
+      # --- 共通スクリプトの取得 ---
+      - name: Checkout scripts
+        if: steps.guards.outputs.proceed == 'true'
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
+
       # --- 分岐処理 ---
 
       # ループ上限到達 + 指摘あり → auto:failed 付与
       - name: Handle loop limit reached
-        if: |
-          steps.pr-info.outputs.skip != 'true' &&
-          steps.scope-check.outputs.in_scope == 'true' &&
-          steps.check-failed.outputs.skip != 'true' &&
-          steps.loop-check.outputs.limit_reached == 'true' &&
-          steps.review-result.outputs.has_issues == 'true'
+        if: steps.guards.outputs.proceed == 'true' && steps.guards.outputs.path == 'loop_limit_reached'
         run: |
-          set -euo pipefail
+          source "$GITHUB_WORKSPACE/.github/scripts/auto-fix/_common.sh"
           PR_NUMBER="${{ steps.pr-info.outputs.number }}"
           LOOP_COUNT="${{ steps.loop-check.outputs.loop_count }}"
 
-          gh issue edit "$PR_NUMBER" --add-label "auto:failed"
-          gh pr comment "$PR_NUMBER" --body "## auto-fix: ループ上限到達
+          gh_safe gh issue edit "$PR_NUMBER" --add-label "auto:failed"
+          gh_comment "$PR_NUMBER" "## auto-fix: ループ上限到達
 
           レビュー→修正ループが上限（${LOOP_COUNT}回/3回）に達しました。
           未解決の指摘が残っているため、\`auto:failed\` ラベルを付与して自動処理を停止します。
@@ -378,17 +411,13 @@ jobs:
 
       # 禁止パターン検出 → auto:failed 付与
       - name: Handle forbidden patterns
-        if: |
-          steps.pr-info.outputs.skip != 'true' &&
-          steps.scope-check.outputs.in_scope == 'true' &&
-          steps.check-failed.outputs.skip != 'true' &&
-          steps.forbidden-check.outputs.forbidden == 'true'
+        if: steps.guards.outputs.proceed == 'true' && steps.guards.outputs.path == 'forbidden_detected'
         run: |
-          set -euo pipefail
+          source "$GITHUB_WORKSPACE/.github/scripts/auto-fix/_common.sh"
           PR_NUMBER="${{ steps.pr-info.outputs.number }}"
 
-          gh issue edit "$PR_NUMBER" --add-label "auto:failed"
-          gh pr comment "$PR_NUMBER" --body "## auto-fix: 禁止パターン検出
+          gh_safe gh issue edit "$PR_NUMBER" --add-label "auto:failed"
+          gh_comment "$PR_NUMBER" "## auto-fix: 禁止パターン検出
 
           以下のファイルが変更に含まれているため、自動マージを停止します:
 
@@ -407,20 +436,14 @@ jobs:
 
       # 指摘あり + 上限未到達 → ループマーカーコメント投稿 + claude-code-action で自動修正
       - name: Post loop marker comment
-        if: |
-          steps.pr-info.outputs.skip != 'true' &&
-          steps.scope-check.outputs.in_scope == 'true' &&
-          steps.check-failed.outputs.skip != 'true' &&
-          steps.loop-check.outputs.limit_reached != 'true' &&
-          steps.forbidden-check.outputs.forbidden != 'true' &&
-          steps.review-result.outputs.has_issues == 'true'
+        if: steps.guards.outputs.proceed == 'true' && steps.guards.outputs.path == 'auto_fix'
         run: |
-          set -euo pipefail
+          source "$GITHUB_WORKSPACE/.github/scripts/auto-fix/_common.sh"
           PR_NUMBER="${{ steps.pr-info.outputs.number }}"
           LOOP_COUNT="${{ steps.loop-check.outputs.loop_count }}"
           NEXT_COUNT=$((LOOP_COUNT + 1))
 
-          gh pr comment "$PR_NUMBER" --body "## auto-fix: レビュー指摘への自動対応 (${NEXT_COUNT}/3)
+          gh_comment "$PR_NUMBER" "## auto-fix: レビュー指摘への自動対応 (${NEXT_COUNT}/3)
 
           レビュー指摘を検出しました。\`/check-pr\` で自動修正を開始します。
 
@@ -430,26 +453,14 @@ jobs:
           GH_REPO: ${{ github.repository }}
 
       - name: Checkout for auto-fix
-        if: |
-          steps.pr-info.outputs.skip != 'true' &&
-          steps.scope-check.outputs.in_scope == 'true' &&
-          steps.check-failed.outputs.skip != 'true' &&
-          steps.loop-check.outputs.limit_reached != 'true' &&
-          steps.forbidden-check.outputs.forbidden != 'true' &&
-          steps.review-result.outputs.has_issues == 'true'
+        if: steps.guards.outputs.proceed == 'true' && steps.guards.outputs.path == 'auto_fix'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_branch }}
 
       - name: Auto-fix with Claude
-        if: |
-          steps.pr-info.outputs.skip != 'true' &&
-          steps.scope-check.outputs.in_scope == 'true' &&
-          steps.check-failed.outputs.skip != 'true' &&
-          steps.loop-check.outputs.limit_reached != 'true' &&
-          steps.forbidden-check.outputs.forbidden != 'true' &&
-          steps.review-result.outputs.has_issues == 'true'
+        if: steps.guards.outputs.proceed == 'true' && steps.guards.outputs.path == 'auto_fix'
         id: auto-fix
         uses: anthropics/claude-code-action@5994afaaa7f44611addc97a696a135acff5fd218 # v1.0.46
         with:
@@ -662,15 +673,9 @@ jobs:
 
       # /review 再リクエスト（REPO_OWNER_PAT でワークフロー連鎖）
       - name: Request re-review
-        if: |
-          steps.pr-info.outputs.skip != 'true' &&
-          steps.scope-check.outputs.in_scope == 'true' &&
-          steps.check-failed.outputs.skip != 'true' &&
-          steps.loop-check.outputs.limit_reached != 'true' &&
-          steps.forbidden-check.outputs.forbidden != 'true' &&
-          steps.review-result.outputs.has_issues == 'true'
+        if: steps.guards.outputs.proceed == 'true' && steps.guards.outputs.path == 'auto_fix'
         run: |
-          set -euo pipefail
+          source "$GITHUB_WORKSPACE/.github/scripts/auto-fix/_common.sh"
           PR_NUMBER="${{ steps.pr-info.outputs.number }}"
 
           if [ -z "$GH_TOKEN" ]; then
@@ -681,19 +686,14 @@ jobs:
           # REPO_OWNER_PAT で /review コメントを投稿（pr-review.yml の再トリガー）
           # NOTE: pr-review.yml の if 条件は github.actor == 'becky3' を要求する。
           # REPO_OWNER_PAT の所有者がリポジトリオーナー (becky3) である前提で動作する。
-          gh pr comment "$PR_NUMBER" --body "/review"
+          gh_safe gh pr comment "$PR_NUMBER" --body "/review"
         env:
           GH_TOKEN: ${{ secrets.REPO_OWNER_PAT }}
           GH_REPO: ${{ github.repository }}
 
       # 指摘なし + 禁止パターンなし → マージ判定
       - name: Merge check
-        if: |
-          steps.pr-info.outputs.skip != 'true' &&
-          steps.scope-check.outputs.in_scope == 'true' &&
-          steps.check-failed.outputs.skip != 'true' &&
-          steps.review-result.outputs.has_issues == 'false' &&
-          steps.forbidden-check.outputs.forbidden != 'true'
+        if: steps.guards.outputs.proceed == 'true' && steps.guards.outputs.path == 'merge_check'
         id: merge-check
         run: |
           set -euo pipefail
@@ -777,15 +777,9 @@ jobs:
       # 段階的マージ解禁: AUTO_MERGE_ENABLED で分岐
       # vars.AUTO_MERGE_ENABLED == 'true' → 実マージ、それ以外（未設定/'false'等） → ドライラン
       - name: Merge or dry-run
-        if: |
-          steps.pr-info.outputs.skip != 'true' &&
-          steps.scope-check.outputs.in_scope == 'true' &&
-          steps.check-failed.outputs.skip != 'true' &&
-          steps.review-result.outputs.has_issues == 'false' &&
-          steps.forbidden-check.outputs.forbidden != 'true' &&
-          steps.merge-check.outputs.merge_ready == 'true'
+        if: steps.guards.outputs.proceed == 'true' && steps.guards.outputs.path == 'merge_check' && steps.merge-check.outputs.merge_ready == 'true'
         run: |
-          set -euo pipefail
+          source "$GITHUB_WORKSPACE/.github/scripts/auto-fix/_common.sh"
           PR_NUMBER="${{ steps.pr-info.outputs.number }}"
 
           if [ -z "$GH_TOKEN" ]; then
@@ -806,11 +800,9 @@ jobs:
             echo "AUTO_MERGE_ENABLED=true: Executing merge"
             if ! MERGE_ERR=$(gh pr merge "$PR_NUMBER" --merge 2>&1); then
               echo "::error::Merge failed: $MERGE_ERR"
-              # マージ失敗時: auto:failed ラベル付与 + PRコメント（事後処理も error レベルで報告）
-              if ! LABEL_ADD_ERR=$(gh issue edit "$PR_NUMBER" --add-label "auto:failed" 2>&1); then
-                echo "::error::Failed to add auto:failed label: $LABEL_ADD_ERR — manual intervention required"
-              fi
-              if ! COMMENT_ERR=$(gh pr comment "$PR_NUMBER" --body "## auto-fix: 自動マージ失敗
+              # マージ失敗時: auto:failed ラベル付与 + PRコメント（事後処理はベストエフォート）
+              gh_best_effort gh issue edit "$PR_NUMBER" --add-label "auto:failed"
+              gh_comment "$PR_NUMBER" "## auto-fix: 自動マージ失敗
 
           マージ条件は全て満たしていましたが、マージコマンドの実行に失敗しました:
 
@@ -820,14 +812,12 @@ jobs:
 
           **次のアクション**: エラー内容を確認し、手動でマージしてください。
 
-          [Actions ログ](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" 2>&1); then
-                echo "::error::Failed to post merge failure comment: $COMMENT_ERR — manual intervention required"
-              fi
+          [Actions ログ](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
               exit 1
             fi
 
-            # マージ成功後のコメント投稿（非クリティカル: 失敗してもマージ自体は完了済み）
-            if ! COMMENT_ERR=$(gh pr comment "$PR_NUMBER" --body "## auto-fix: 自動マージ完了
+            # マージ成功後のコメント投稿（非クリティカル）
+            gh_comment "$PR_NUMBER" "## auto-fix: 自動マージ完了
 
           全てのマージ条件を満たしたため、自動マージを実行しました:
           - ✅ レビュー指摘ゼロ
@@ -835,14 +825,11 @@ jobs:
           - ✅ コンフリクトなし
           - ✅ auto:failed ラベルなし
 
-          [Actions ログ](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" 2>&1); then
-              echo "::warning::Merge succeeded but failed to post success comment: $COMMENT_ERR"
-              echo "::notice::Merge was completed successfully. The comment failure is non-critical."
-            fi
+          [Actions ログ](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           else
             echo "AUTO_MERGE_ENABLED=${AUTO_MERGE_RAW:-<unset>}: Dry-run mode"
-            # ドライラン時のコメント投稿（非クリティカル: 失敗しても判定結果はログに残る）
-            if ! COMMENT_ERR=$(gh pr comment "$PR_NUMBER" --body "## auto-fix: マージ判定結果（ドライラン）
+            # ドライラン時のコメント投稿（非クリティカル）
+            gh_comment "$PR_NUMBER" "## auto-fix: マージ判定結果（ドライラン）
 
           全てのマージ条件を満たしています:
           - ✅ レビュー指摘ゼロ
@@ -856,10 +843,7 @@ jobs:
           gh pr merge $PR_NUMBER --merge
           \`\`\`
 
-          [Actions ログ](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" 2>&1); then
-              echo "::warning::Failed to post dry-run comment: $COMMENT_ERR"
-              echo "::notice::Dry-run judgment is complete. All merge conditions are met. See Actions log for details."
-            fi
+          [Actions ログ](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           fi
         env:
           GH_TOKEN: ${{ secrets.REPO_OWNER_PAT }}
@@ -867,18 +851,12 @@ jobs:
 
       # マージ条件未達の通知
       - name: Merge conditions not met
-        if: |
-          steps.pr-info.outputs.skip != 'true' &&
-          steps.scope-check.outputs.in_scope == 'true' &&
-          steps.check-failed.outputs.skip != 'true' &&
-          steps.review-result.outputs.has_issues == 'false' &&
-          steps.forbidden-check.outputs.forbidden != 'true' &&
-          steps.merge-check.outputs.merge_ready == 'false'
+        if: steps.guards.outputs.proceed == 'true' && steps.guards.outputs.path == 'merge_check' && steps.merge-check.outputs.merge_ready == 'false'
         run: |
-          set -euo pipefail
+          source "$GITHUB_WORKSPACE/.github/scripts/auto-fix/_common.sh"
           PR_NUMBER="${{ steps.pr-info.outputs.number }}"
 
-          gh pr comment "$PR_NUMBER" --body "## auto-fix: マージ条件未達
+          gh_comment "$PR_NUMBER" "## auto-fix: マージ条件未達
 
           レビュー指摘はありませんが、以下の条件を満たしていません:
 
@@ -893,24 +871,46 @@ jobs:
 
       # エラー時の auto:failed 付与
       - name: Handle errors
-        if: failure() && steps.pr-info.outputs.skip != 'true' && steps.scope-check.outputs.in_scope == 'true' && steps.pr-info.outputs.number != ''
+        if: failure() && steps.pr-info.outputs.number != '' && steps.scope-check.outputs.in_scope == 'true'
         run: |
           set -euo pipefail
-          PR_NUMBER="${{ steps.pr-info.outputs.number }}"
-
-          # ラベル付与を試行
-          if ! LABEL_ERR=$(gh issue edit "$PR_NUMBER" --add-label "auto:failed" 2>&1); then
-            echo "::error::Failed to add auto:failed label: $LABEL_ERR"
+          # エラーハンドラ: checkout 失敗の可能性があるため source は best-effort
+          COMMON_SCRIPT="$GITHUB_WORKSPACE/.github/scripts/auto-fix/_common.sh"
+          SOURCED=false
+          if [ -f "$COMMON_SCRIPT" ]; then
+            if ! SYNTAX_ERR=$(bash -n "$COMMON_SCRIPT" 2>&1); then
+              echo "::error::Syntax error in $COMMON_SCRIPT: $SYNTAX_ERR — falling back"
+            elif ! source "$COMMON_SCRIPT"; then
+              echo "::error::Failed to source $COMMON_SCRIPT — falling back"
+            else
+              SOURCED=true
+            fi
           fi
 
-          # コメント投稿を試行
-          if ! COMMENT_ERR=$(gh pr comment "$PR_NUMBER" --body "## auto-fix: エラー発生
+          if [ "$SOURCED" = true ]; then
+            PR_NUMBER="${{ steps.pr-info.outputs.number }}"
+            gh_best_effort gh issue edit "$PR_NUMBER" --add-label "auto:failed"
+            gh_comment "$PR_NUMBER" "## auto-fix: エラー発生
+
+          自動修正処理中にエラーが発生しました。\`auto:failed\` ラベルを付与して自動処理を停止します。
+
+          **次のアクション**: [Actions ログ](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) を確認し、問題を解消してください。
+          対応完了後、\`auto:failed\` を除去して \`/review\` コメントを投稿すると再開できます。"
+          else
+            # フォールバック: 共通関数なしでベストエフォート
+            set -euo pipefail
+            PR_NUMBER="${{ steps.pr-info.outputs.number }}"
+            if ! LABEL_ERR=$(gh issue edit "$PR_NUMBER" --add-label "auto:failed" 2>&1); then
+              echo "::error::Failed to add auto:failed label: $LABEL_ERR"
+            fi
+            if ! COMMENT_ERR=$(gh pr comment "$PR_NUMBER" --body "## auto-fix: エラー発生
 
           自動修正処理中にエラーが発生しました。\`auto:failed\` ラベルを付与して自動処理を停止します。
 
           **次のアクション**: [Actions ログ](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) を確認し、問題を解消してください。
           対応完了後、\`auto:failed\` を除去して \`/review\` コメントを投稿すると再開できます。" 2>&1); then
-            echo "::error::Failed to post error comment: $COMMENT_ERR"
+              echo "::error::Failed to post error comment: $COMMENT_ERR"
+            fi
           fi
         env:
           GH_TOKEN: ${{ github.token }}
