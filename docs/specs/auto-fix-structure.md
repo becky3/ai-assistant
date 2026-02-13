@@ -72,7 +72,7 @@ pr-review.yml は `/review` コメント（`issue_comment`）で起動した場�
 | # | ステップ名 | 行数 | 責務 | 外部化 |
 |---|-----------|------|------|--------|
 | 1 | Get PR number | 35 | PR番号取得（workflow_run → PR特定） | する |
-| 2 | Check auto-implement scope | 35 | `auto-progress` ラベルでスコープ判定（workflow_run パス）、labeled パスは無条件通過 | しない（短い） |
+| 2 | Check auto-progress scope | 35 | `auto-progress` ラベルでスコープ判定（workflow_run パス）、labeled パスは無条件通過 | しない（短い） |
 | 3 | Remove auto-implement label | 40 | リンクIssueからラベル除去 | する |
 | 4 | Check auto:failed label | 20 | failedラベル有無チェック | しない（短い） |
 | 5 | Check loop count | 28 | ループカウント取得 | する |
@@ -560,7 +560,7 @@ fi
 
 以下のステップはスクリプト外部化せず、YAML内に残す:
 
-- Check auto-implement scope（`auto-progress` ラベル確認 + labeled パス分岐）
+- Check auto-progress scope（`auto-progress` ラベル確認 + labeled パス分岐）
 - Check auto:failed label（20行、単純なチェック）
 - Evaluate guards（23行、step outputs の読み取りのみ）
 - Handle loop limit（15行、`source` + `gh_comment`）
@@ -611,7 +611,7 @@ fi
 - [ ] AC5: 既存の auto-fix ワークフローの動作が変わらないこと（機能的に等価）
 - [ ] AC6: `_common.sh` が全スクリプトから正しく source されること
 - [ ] AC7: `${{ }}` 式が全て環境変数経由でスクリプトに渡されること
-- [ ] AC8: 以下のステップはYAML内に残っていること: Check auto-implement scope, Check auto:failed label, Evaluate guards, Handle loop limit, Handle forbidden, Post loop marker, Request re-review, Merge conditions not met
+- [ ] AC8: 以下のステップはYAML内に残っていること: Check auto-progress scope, Check auto:failed label, Evaluate guards, Handle loop limit, Handle forbidden, Post loop marker, Request re-review, Merge conditions not met
 
 ## 関連ファイル
 

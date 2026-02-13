@@ -75,7 +75,7 @@ jobs:
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           PR_NUMBER_FROM_EVENT: ${{ github.event.pull_request.number }}
 
-      - name: Check auto-implement scope
+      - name: Check auto-progress scope
         if: steps.pr-info.outputs.skip != 'true'
         id: scope-check
         run: |
@@ -99,7 +99,13 @@ jobs:
           fi
 
           if ! LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' 2>&1); then
-            echo "::warning::Failed to get PR labels: $LABELS. Skipping as precaution."
+            # 認証/権限エラーはファイル冒頭の方針に従い即停止
+            if echo "$LABELS" | grep -qiE "(401|403|authentication failed|forbidden|resource not accessible)"; then
+              echo "::error::Authentication/permission error getting PR labels: $LABELS"
+              exit 1
+            fi
+            # それ以外の一時的エラーは予防的にスキップ
+            echo "::warning::Failed to get PR labels (transient error): $LABELS. Skipping as precaution."
             echo "in_scope=false" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -131,9 +137,13 @@ jobs:
           set -euo pipefail
           PR_NUMBER="${{ steps.pr-info.outputs.number }}"
 
-          # 方針: 一時的API障害 → warning で安全側（skip）に倒す
+          # 方針: 認証/権限エラー → 即停止、一時的API障害 → warning で安全側（skip）に倒す
           if ! LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' 2>&1); then
-            echo "::warning::Failed to get PR labels: $LABELS. Skipping as precaution."
+            if echo "$LABELS" | grep -qiE "(401|403|authentication failed|forbidden|resource not accessible)"; then
+              echo "::error::Authentication/permission error getting PR labels: $LABELS"
+              exit 1
+            fi
+            echo "::warning::Failed to get PR labels (transient error): $LABELS. Skipping as precaution."
             echo "skip=true" >> $GITHUB_OUTPUT
             exit 0
           fi
