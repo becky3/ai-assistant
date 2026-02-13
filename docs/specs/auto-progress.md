@@ -237,6 +237,7 @@ flowchart TD
 | ラベル | 色 | 用途 | 付与タイミング |
 |--------|-----|------|--------------|
 | `auto-implement` | `#0E8A16` (緑) | 自動実装トリガー | 管理者が手動 |
+| `auto-progress` | `#0E8A16` (緑) | auto-implement パイプラインで作成されたPRのマーカー（auto-fix.yml のスコープ判定に使用） | claude.yml が PR 作成時に付与 |
 | `auto-merged` | `#1D76DB` (青) | 自動マージ済みマーカー（post-merge.yml の発火条件） | auto-fix.yml がマージ直前に付与 |
 | `auto:failed` | `#d73a4a` (赤) | 自動処理の失敗・停止（緊急停止にも使用） | 各ワークフロー失敗時 or 管理者が手動 |
 | `auto:review-batch` | `#C2E0C6` (薄緑) | 自動マージレビューバッチIssue | post-merge.yml |

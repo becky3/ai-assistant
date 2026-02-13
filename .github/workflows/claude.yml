@@ -71,3 +71,26 @@ jobs:
           claude_args: "--model claude-opus-4-6 --max-turns 100 --dangerously-skip-permissions"
           show_full_output: true
           label_trigger: "auto-implement"
+
+      # auto-progress ラベルを付与（auto-fix.yml のスコープ判定に使用）
+      # claude-code-action が作成したPRをIssue番号+ブランチ命名規則で特定
+      - name: Add auto-progress label to PR
+        if: success()
+        run: |
+          set -euo pipefail
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
+
+          # claude-code-action のブランチ命名規則: claude/issue-{N}-{date}-{time}
+          PR_NUMBER=$(gh pr list --state open --json number,headRefName --jq \
+            "[.[] | select(.headRefName | startswith(\"claude/issue-${ISSUE_NUMBER}-\"))] | .[0].number // empty")
+
+          if [ -z "$PR_NUMBER" ]; then
+            echo "::warning::Could not find PR for issue #${ISSUE_NUMBER}. auto-progress label not added."
+            exit 0
+          fi
+
+          gh pr edit "$PR_NUMBER" --add-label "auto-progress"
+          echo "Added auto-progress label to PR #${PR_NUMBER}"
+        env:
+          GH_TOKEN: ${{ secrets.REPO_OWNER_PAT }}
+          GH_REPO: ${{ github.repository }}

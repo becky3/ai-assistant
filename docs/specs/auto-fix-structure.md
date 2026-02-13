@@ -31,7 +31,7 @@ on:
 | 項目 | workflow_run | pull_request(labeled) |
 |------|------------|----------------------|
 | 起動条件 | PR Review 成功完了 | `auto-implement` ラベル付与 |
-| scope-check | `claude/issue-*` ブランチのみ | スキップ（ラベル付与自体がスコープ制御） |
+| scope-check | PR に `auto-progress` ラベルがあるか確認 | スキップ（ラベル付与自体がスコープ制御） |
 | PR番号取得 | `workflow_run.pull_requests` or ブランチ名検索 | `github.event.pull_request.number` を直接使用 |
 | checkout ref | `workflow_run.head_branch` | `pull_request.head.ref` |
 | concurrency group | `auto-fix-{branch_name}` | `auto-fix-pr-{pr_number}` |
@@ -72,7 +72,7 @@ pr-review.yml は `/review` コメント（`issue_comment`）で起動した場�
 | # | ステップ名 | 行数 | 責務 | 外部化 |
 |---|-----------|------|------|--------|
 | 1 | Get PR number | 35 | PR番号取得（workflow_run → PR特定） | する |
-| 2 | Check auto-implement scope | 15 | ブランチ名でスコープ判定 | しない（短い） |
+| 2 | Check auto-implement scope | 35 | `auto-progress` ラベルでスコープ判定（workflow_run パス）、labeled パスは無条件通過 | しない（短い） |
 | 3 | Remove auto-implement label | 40 | リンクIssueからラベル除去 | する |
 | 4 | Check auto:failed label | 20 | failedラベル有無チェック | しない（短い） |
 | 5 | Check loop count | 28 | ループカウント取得 | する |
@@ -560,7 +560,7 @@ fi
 
 以下のステップはスクリプト外部化せず、YAML内に残す:
 
-- Check auto-implement scope（15行、単純な分岐）
+- Check auto-implement scope（`auto-progress` ラベル確認 + labeled パス分岐）
 - Check auto:failed label（20行、単純なチェック）
 - Evaluate guards（23行、step outputs の読み取りのみ）
 - Handle loop limit（15行、`source` + `gh_comment`）
