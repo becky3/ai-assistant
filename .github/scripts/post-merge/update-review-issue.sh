@@ -138,7 +138,7 @@ ${NEW_SECTION}"
 
   NEW_ISSUE_URL=""
   if ! NEW_ISSUE_URL=$(gh issue create \
-    --title "自動マージレビュー" \
+    --title "自動マージレビュー (created:${DATE})" \
     --body "$ISSUE_BODY" \
     --label "auto:review-batch" 2>&1); then
     echo "::warning::Failed to create review-batch issue: $NEW_ISSUE_URL"

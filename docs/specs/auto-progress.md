@@ -237,6 +237,7 @@ flowchart TD
 | ラベル | 色 | 用途 | 付与タイミング |
 |--------|-----|------|--------------|
 | `auto-implement` | `#0E8A16` (緑) | 自動実装トリガー | 管理者が手動 |
+| `auto-merged` | `#1D76DB` (青) | 自動マージ済みマーカー（post-merge.yml の発火条件） | auto-fix.yml がマージ直前に付与 |
 | `auto:failed` | `#d73a4a` (赤) | 自動処理の失敗・停止（緊急停止にも使用） | 各ワークフロー失敗時 or 管理者が手動 |
 | `auto:review-batch` | `#C2E0C6` (薄緑) | 自動マージレビューバッチIssue | post-merge.yml |
 
@@ -254,7 +255,7 @@ stateDiagram-v2
     PR作成 --> レビュー中: pr-review.yml
     レビュー中 --> 修正中: 指摘あり（auto-fix.yml）
     修正中 --> レビュー中: /review 再リクエスト
-    レビュー中 --> マージ済み: 品質ゲート通過（develop へマージ）
+    レビュー中 --> マージ済み: 品質ゲート通過（auto-merged 付与 → develop へマージ）
     レビュー中 --> auto_failed: 3回超過 or 禁止パターン
 
     マージ済み --> review_issue: src/変更あり
@@ -321,7 +322,9 @@ stateDiagram-v2
    - 指摘あり + 上限未到達 → `claude-code-action` で `/check-pr` を実行し自動修正 → 対応済みスレッドを `resolveReviewThread` で resolve → `REPO_OWNER_PAT` で `/review` コメント投稿（再レビュートリガー）
    - 指摘なし + 禁止パターンなし → マージ判定へ
 6. **マージ判定**: 4条件（レビュー指摘ゼロ、CI全通過、コンフリクトなし、`auto:failed` なし）を全て確認
-7. **自動マージ**: 条件クリアで `gh pr merge --merge` を `REPO_OWNER_PAT` で実行
+7. **自動マージ**: 条件クリアで `auto-merged` ラベルを付与した後、`gh pr merge --merge` を `REPO_OWNER_PAT` で実行
+   - `auto-merged` ラベルは post-merge.yml の発火条件
+   - ※ ラベル付与は Phase 1（auto-fix.yml）実装時に `merge-or-dryrun.sh` に追加予定
 
 **エラー時の共通挙動:**
 
@@ -555,6 +558,7 @@ auto:review-batch ラベルの Open Issue を検索
 
 **Issueの管理ルール:**
 
+- Issueタイトル: `自動マージレビュー (created:YYYY-MM-DD)`（作成日付を含める、UTC基準）
 - `auto:review-batch` ラベルの Open Issue は常に1つのみ
 - ピン留め（`gh issue pin`）して常に目につくようにする
 - 管理者がまとめてチェック → 問題なければIssueクローズ
