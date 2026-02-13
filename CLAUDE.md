@@ -96,6 +96,7 @@
   - `bugfix/{修正内容}-#{Issue番号}` — バグ修正（`develop` から分岐 → `develop` にマージ）
   - `hotfix/{修正内容}-#{Issue番号}` — 本番緊急修正（`main` から分岐 → `main` + `develop` にマージ）
   - `claude/issue-{N}-{date}-{id}` — Claude Code Action 自動生成（命名はシステム依存）
+- **マージ方式**: feature/bugfix → develop は通常マージ（`--merge`）、develop → main は squash マージ（`--squash`）。詳細は `docs/specs/git-flow.md`「マージ方式ルール」参照
 - コミット: `feat(f{N}): 説明 (#{Issue番号})`
 - PR作成時に `Closes #{Issue番号}` で紐付け
 - **PRのbaseブランチ**: 通常は `develop`、hotfix は `main`

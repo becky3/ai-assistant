@@ -48,7 +48,6 @@ IssueからPRマージまでの全工程を自動化するパイプライン。�
 | Require a pull request before merging | YES | 直 push 禁止 |
 | Require status checks to pass | YES | CI 必須（pytest, mypy, ruff, markdownlint） |
 | Require approvals | NO | 自動マージを許可するため |
-| Require linear history | YES | squash merge で履歴を綺麗に |
 | Include administrators | NO | 管理者は緊急時にバイパス可能 |
 | Allow auto-merge | YES | 自動マージを許可 |
 
@@ -59,9 +58,10 @@ IssueからPRマージまでの全工程を自動化するパイプライン。�
 | Require a pull request before merging | YES | 直 push 禁止 |
 | Require status checks to pass | YES | CI 必須 |
 | Require approvals | YES (1名) | 管理者の承認必須 |
-| Require linear history | YES | squash merge で履歴を綺麗に |
 | Include administrators | YES | 管理者も保護対象 |
 | Allow auto-merge | NO | 手動マージのみ |
+
+**マージ方式**: `docs/specs/git-flow.md`「マージ方式ルール」セクションを参照。
 
 ### リリースフロー（develop → main）
 
@@ -75,7 +75,7 @@ gh pr create --base main --head develop \
   --body "develop の変更を main にリリース"
 ```
 
-main 向き PR が作成 → pr-review.yml で自動レビュー → 管理者がマージ
+main 向き PR が作成 → pr-review.yml で自動レビュー → 管理者が squash マージ（`gh pr merge --squash`。マージ方式の詳細は `docs/specs/git-flow.md`「マージ方式ルール」参照）
 
 **main への自動マージは手動維持**。将来的に自動化する場合も、GitHub 通知で猶予期間（「30分以内に auto:failed がなければ自動マージ」）を設ける。
 
@@ -596,7 +596,7 @@ flowchart TD
 | コンフリクトなし | `gh pr view --json mergeable` が `MERGEABLE` |
 | `auto:failed` なし | PRのラベルに `auto:failed` が含まれない |
 
-マージ方式: `gh pr merge --merge`（通常マージ）
+マージ方式: `gh pr merge --merge`（通常マージ。`docs/specs/git-flow.md`「マージ方式ルール」参照）
 マージ先: `develop` ブランチ（main への直接マージは禁止）
 
 ## 失敗時の振る舞い

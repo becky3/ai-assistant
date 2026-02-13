@@ -102,7 +102,7 @@ sequenceDiagram
 ```
 
 - リリース日は設けず、ある程度機能がまとまったタイミングで `develop` → `main` にPR作成
-- マージ方法: **Create a merge commit**（履歴を保持）
+- マージ方法: **Squash and merge**（リリース単位で1コミットにまとめる。詳細は「マージ方式ルール」セクション参照）
 - マージ判断は開発者が行う
 
 ### hotfix（緊急修正）
@@ -125,6 +125,29 @@ sequenceDiagram
 2. 修正・コミット
 3. `main` に向けてPR作成・マージ
 4. `main` の変更を `develop` にもマージ（`git merge main` または PR）
+
+## マージ方式ルール
+
+マージ方式はマージ先ブランチに応じて使い分ける。
+
+| マージ先 | 方式 | コマンド | 理由 |
+|---------|------|---------|------|
+| feature/bugfix → develop | 通常マージ | `gh pr merge --merge` | 開発履歴を保持 |
+| hotfix → main | 通常マージ | `gh pr merge --merge` | 修正履歴を保持 |
+| develop → main（リリース） | squash マージ | `gh pr merge --squash` | リリース単位で1コミットにまとめ、main の履歴をきれいに保つ |
+
+### 理由
+
+- **develop への通常マージ**: 開発中のコミット履歴を保持することで、問題発生時のデバッグや `git bisect` が容易になる
+- **main への squash マージ**: リリース単位で1コミットにまとめることで、main の履歴がリリース単位で整理され、変更の追跡が容易になる
+
+### GitHub リポジトリ設定
+
+マージ方式ルールを運用するために、以下の設定が必要:
+
+- **Allow merge commits**: 有効（通常マージ用）
+- **Allow squash merging**: 有効（リリースマージ用）
+- **Allow rebase merging**: 任意（本ルールでは使用しない）
 
 ## コミットメッセージ規約
 
