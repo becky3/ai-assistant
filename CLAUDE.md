@@ -55,6 +55,7 @@
 
 - ruff でリント、mypy (strict) で型チェック
 - markdownlint でMarkdownチェック（`npx markdownlint-cli2@0.20.0` を使用、Node.js環境が必要）
+- shellcheck でシェルスクリプトチェック（`.github/scripts/` 配下が対象、`uv run shellcheck` を使用、dev依存に含む）
 - ドキュメント内の図表（フローチャート、シーケンス図、ER図等）はmermaid形式を使用する
   - ASCII図表は使用しない
   - 参考: <https://mermaid.js.org/>
@@ -195,10 +196,10 @@ GitHub Actions 環境では Skill ツールを使用しない。以下の4ステ
 #### ステップ 1/4: テスト実行
 
 ```bash
-uv run pytest && uv run ruff check src/ tests/ && uv run mypy src/ && npx markdownlint-cli2@0.20.0 "CLAUDE.md" "docs/**/*.md" "*.md" ".claude/**/*.md"
+uv run pytest && uv run ruff check src/ tests/ && uv run mypy src/ && npx markdownlint-cli2@0.20.0 "CLAUDE.md" "docs/**/*.md" "*.md" ".claude/**/*.md" && uv run shellcheck .github/scripts/auto-fix/*.sh .github/scripts/post-merge/*.sh
 ```
 
-- Markdown のみの変更の場合、pytest / ruff / mypy はスキップ可（markdownlint のみ実行）
+- Markdown のみの変更の場合、pytest / ruff / mypy / shellcheck はスキップ可（markdownlint のみ実行）
 - 失敗があれば修正して再実行。全て通過してから次へ進む
 
 #### ステップ 2/4: コードレビュー

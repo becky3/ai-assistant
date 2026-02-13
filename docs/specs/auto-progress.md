@@ -28,7 +28,7 @@ IssueからPRマージまでの全工程を自動化するパイプライン。�
 
 | ブランチ | 役割 | マージ方式 |
 |---------|------|-----------|
-| `main` | 本番（プロダクション）。常に安定版 | develop からの手動マージ（Phase 1）→ 定期自動（Phase 2） |
+| `main` | 本番（プロダクション）。常に安定版 | develop からの手動マージ |
 | `develop` | ステージング。自動マージ先。feature ブランチのベース | feature ブランチからの自動マージ |
 | `feature/*` | 機能開発ブランチ。develop から分岐 | develop へのPRマージ |
 
@@ -77,14 +77,7 @@ gh pr create --base main --head develop \
 
 main 向き PR が作成 → pr-review.yml で自動レビュー → 管理者がマージ
 
-**Phase 2: 定期リリース（release.yml）**
-
-- スケジュール: 毎週月曜 0:00 UTC（JST 09:00）
-- 処理: develop と main の差分コミット数をチェックし、差分があれば develop → main のリリースPRを自動作成
-- リリースPRの自動作成には `REPO_OWNER_PAT` を使用（pr-review.yml の自動レビューをトリガーするため）
-- 差分がなければ何もしない
-
-**main への自動マージは Phase 2 でも手動維持**。将来的に自動化する場合も、GitHub 通知で猶予期間（「30分以内に auto:failed がなければ自動マージ」）を設ける。
+**main への自動マージは手動維持**。将来的に自動化する場合も、GitHub 通知で猶予期間（「30分以内に auto:failed がなければ自動マージ」）を設ける。
 
 ### ワークフローへの影響
 
@@ -130,8 +123,7 @@ flowchart TD
     Q --> B
 
     O --> T{develop → main<br/>リリース}
-    T -->|Phase 1: 手動| U[管理者がリリースPR作成]
-    T -->|Phase 2: 自動| V[release.yml 定期実行]
+    T -->|手動| U[管理者がリリースPR作成]
 
     style O fill:#0d0,color:#fff
     style P fill:#d00,color:#fff
@@ -139,7 +131,6 @@ flowchart TD
     style S fill:#C2E0C6,color:#000
     style T fill:#1D76DB,color:#fff
     style U fill:#0E8A16,color:#fff
-    style V fill:#0E8A16,color:#fff
 ```
 
 ## 自動設計フェーズ
@@ -239,27 +230,13 @@ flowchart TD
 - 仕様書はPRに含まれるため、自動レビューで品質保証可能
 - `auto:failed` による事後停止で十分な安全性を確保できる
 
-### auto-triage との連携（Phase 2）
-
-auto-triage.yml がIssue更新時に事前スクリーニングを実施:
-
-| Issueの状態 | 判定結果 | アクション |
-|------------|---------|-----------|
-| 仕様書あり + AC定義済み | 自動実装可能 | 管理者に通知（ラベル付与は管理者判断） |
-| 仕様書あり + AC未定義 | 仕様書の補完が必要 | Issueにコメントで報告 |
-| 仕様書なし + Issue具体的 | 仕様書の作成が必要 | Issueにコメントで報告 |
-| 仕様書なし + Issue曖昧 | 人間の判断が必要 | Issueにコメントで報告 |
-| 依存Issueあり | ブロック中 | Issueにコメントで報告 |
-
-**注記**: Phase 2 で細分化ラベル（`auto:needs-spec`, `auto:needs-discussion` 等）が必要になったら追加する。
-
 ## ラベル設計
 
 ### ラベル一覧
 
 | ラベル | 色 | 用途 | 付与タイミング |
 |--------|-----|------|--------------|
-| `auto-implement` | `#0E8A16` (緑) | 自動実装トリガー | 管理者が手動 or post-merge.yml |
+| `auto-implement` | `#0E8A16` (緑) | 自動実装トリガー | 管理者が手動 |
 | `auto:failed` | `#d73a4a` (赤) | 自動処理の失敗・停止（緊急停止にも使用） | 各ワークフロー失敗時 or 管理者が手動 |
 | `auto:review-batch` | `#C2E0C6` (薄緑) | 自動マージレビューバッチIssue | post-merge.yml |
 
@@ -302,9 +279,7 @@ stateDiagram-v2
 | `claude.yml` | 既存改修 | `issues[labeled]` 追加 | `auto-implement` ラベルで自動実装開始 |
 | `pr-review.yml` | 据え置き | 変更なし | PR自動レビュー |
 | `auto-fix.yml` | 新規 | `workflow_run[completed]`（pr-review.yml） | レビュー指摘の自動修正 + マージ判定 |
-| `auto-triage.yml` | 新規（Phase 2） | `issues[opened, edited]`, `schedule` | Issue分析・ラベル自動付与 |
-| `post-merge.yml` | 新規（Phase 2） | `pull_request[closed]` | マージ後の次Issue自動ピックアップ |
-| `release.yml` | 新規（Phase 2） | `schedule`（週1回） | develop → main の定期リリースPR作成 |
+| `post-merge.yml` | 新規 | `pull_request[closed]` | マージ後の次Issue自動ピックアップ + 実行テスト通知 |
 
 ### claude.yml 改修内容
 
@@ -430,19 +405,14 @@ check-pr スキル（`.claude/skills/check-pr/SKILL.md`）のステップ11（�
 
 ## 安全弁設計
 
-### 多層防御（10層）
+### 多層防御（9層）
 
 **第1層: ループ回数制限**
 
 - レビュー→修正ループは最大3回まで
 - 超過時は `auto:failed` ラベル付与 + PRコメントで通知
 
-**第2層: 変更規模制限（Phase 2）**
-
-- 変更ファイル数20超 or 差分行数500超 → `auto:failed` ラベル付与
-- auto-triage.yml で自動判定
-
-**第3層: 禁止パターン（自動マージ不可ファイル）**
+**第2層: 禁止パターン（自動マージ不可ファイル）**
 
 以下のファイルが変更に含まれるPRは `auto:failed` ラベルを付与し、自動マージしない:
 
@@ -458,19 +428,19 @@ check-pr スキル（`.claude/skills/check-pr/SKILL.md`）のステップ11（�
 
 **注記**: リリースPR（develop → main）は管理者が手動で作成・マージするため、auto-fix.yml の処理対象外。ワークフロー変更を含む場合でも、リリースPRでの人間レビューが安全弁として機能する。
 
-**第4層: `auto:failed` ラベル（緊急停止ボタン兼用）**
+**第3層: `auto:failed` ラベル（緊急停止ボタン兼用）**
 
 - Issue/PRに `auto:failed` ラベルを付与すると全自動処理が即停止
 - 自動処理の失敗時にも自動付与される
 - 全ワークフローの if 条件で最初にチェックされる
 - 管理者が手動で除去し、`auto-implement` を再付与すると再開
 
-**第5層: concurrency グループ**
+**第4層: concurrency グループ**
 
 - PR番号ごとの concurrency グループで同じPRに対する同時実行を防止
 - `cancel-in-progress: false`（進行中のジョブはキャンセルしない）
 
-**第6層: マージ前4条件チェック**
+**第5層: マージ前4条件チェック**
 
 自動マージ実行前に以下を全て確認:
 
@@ -479,27 +449,26 @@ check-pr スキル（`.claude/skills/check-pr/SKILL.md`）のステップ11（�
 3. コンフリクトなし
 4. `auto:failed` ラベルなし
 
-**第7層: ブランチ保護ルール（2層構成）**
+**第6層: ブランチ保護ルール（2層構成）**
 
 - **develop**: PR必須 + CI必須。承認不要（自動マージ許可）
 - **main**: PR必須 + CI必須 + 承認必須。手動マージのみ
 - 自動マージは develop にのみ実行。main への直接自動マージは禁止
 
-**第8層: ロールバック準備**
+**第7層: ロールバック準備**
 
-- 自動マージ後に develop のテストが壊れた場合、revert PRを作成（Phase 2）
+- 自動マージ後に develop のテストが壊れた場合、revert PRを作成
 - main はリリースPR経由でのみ更新されるため、develop で revert すれば main は無傷
 
-**第9層: 段階的信頼（導入時の安全策）**
+**第8層: 段階的信頼（導入時の安全策）**
 
 - ドライラン → docs限定 → 全面解禁の段階的な移行
 - develop ブランチの採用により、全面解禁時のリスクが軽減（main への影響はリリースPRで制御）
 
-**第10層: リリースPRゲートキーピング**
+**第9層: リリースPRゲートキーピング**
 
 - develop → main のリリースPRで、自動マージされた全変更を管理者が一括確認
-- Phase 0-1: 手動リリースPR作成
-- Phase 2: 週1回の定期自動リリースPR（release.yml）
+- 管理者が手動でリリースPR作成
 
 ## GitHub Actions 環境の制約
 
@@ -575,15 +544,13 @@ auto:review-batch ラベルの Open Issue を検索
 ## PR #123: フィード追加機能の改善 (2026-02-12)
 
 - 変更: `src/services/feed.py`, `src/utils/parser.py`
-- [ ] Bot 起動確認（`uv run python -m src.main`）
-- [ ] フィード追加で URL のみ入力 → RSS 自動検出されること ※要実行テスト
+- [ ] Bot起動確認（`uv run python -m src.main`）
 - [ ] エラーログに異常がないこと
 
 ## PR #125: MCP サーバー設定変更 (2026-02-13)
 
 - 変更: `mcp-servers/weather/main.py`, `config/mcp_servers.json`
-- [ ] MCP サーバー起動確認 ※要実行テスト
-- [ ] 天気取得コマンドの動作確認 ※要実行テスト
+- [ ] MCPサーバー起動確認
 ```
 
 **Issueの管理ルール:**
@@ -592,7 +559,7 @@ auto:review-batch ラベルの Open Issue を検索
 - ピン留め（`gh issue pin`）して常に目につくようにする
 - 管理者がまとめてチェック → 問題なければIssueクローズ
 - 次の自動マージで新しいIssueが自動作成される
-- チェックリストは仕様書のACから「ローカル実行でのみ確認可能な項目」を自動抽出
+- チェックリストは変更ファイルパターンから自動テンプレート生成（`src/*` → Bot起動確認、`config/*` → 設定変更確認 等）
 
 **管理者のアクション:**
 
@@ -749,17 +716,14 @@ GitHub Actions は `GITHUB_TOKEN` で作成したイベントでは同一リポ�
 - 段階的マージ解禁の開始
 - develop → main のリリースPRは管理者が手動作成
 
-### Phase 2: フルサイクル自動化
+### Phase 2: マージ後処理の自動化
 
-**必須:**
+**実装済み:**
 
-- post-merge.yml の新規作成（マージ後の次Issue自動ピックアップ）
-- release.yml の新規作成（develop → main の定期リリースPR自動作成）
+- post-merge.yml の新規作成（マージ後の次Issue自動ピックアップ + 実行テスト通知）
 
 **検討（運用状況を見て判断）:**
 
-- auto-triage.yml の新規作成（Issue自動分析・ラベル付与）
-- 変更規模の自動判定（`auto:failed` 付与による大規模変更のブロック）
 - revert PR の自動作成（develop でテストが壊れた場合の自動ロールバック）
 
 ### 段階的マージ解禁
@@ -778,10 +742,8 @@ GitHub Actions は `GITHUB_TOKEN` で作成したイベントでは同一リポ�
 | 自動レビュー（pr-review.yml） | 〜$1 | 〜$20 |
 | 自動修正（auto-fix.yml）※平均1.5回 | 〜$3 | 〜$60 |
 | **Phase 1 合計** | **〜$12** | **〜$240** |
-| 定期リリースPR（release.yml）※Phase 2 | 〜$1 | 〜$4 |
-| Issue自動分析（auto-triage.yml）※Phase 2 | 〜$0.5 | 〜$5 |
-| マージ後処理（post-merge.yml）※Phase 2 | 〜$0.5 | 〜$6 |
-| **Phase 2 追加分合計** | **〜$2** | **〜$15** |
+| マージ後処理（post-merge.yml） | 〜$0.5 | 〜$6 |
+| **Phase 2 追加分合計** | **〜$0.5** | **〜$6** |
 
 GitHub Actions の実行時間（ubuntu-latest）は無料枠（2,000分/月）内で収まる見込み。
 
@@ -816,18 +778,12 @@ GitHub Actions の実行時間（ubuntu-latest）は無料枠（2,000分/月）�
 - [ ] AC19: Issue内容が曖昧な場合、`auto:failed` ラベルが付与され、不明点がIssueにコメントされる
 - [ ] AC20: 自動生成された仕様書がPRに含まれてコミットされる
 
-### Phase 1（実行テスト通知）
+### Phase 2（post-merge.yml）
 
-- [ ] AC21: `src/` 配下の変更を含むPRが自動マージされた場合、`auto:review-batch` レビューIssueにチェックリストが追記される
+- [ ] AC21: `src/` 配下の変更を含むPRがマージされた場合、`auto:review-batch` レビューIssueにチェックリストが追記される
 - [ ] AC22: `docs/` 配下のみの変更PRではレビューIssueへの追記が行われない
-- [ ] AC23: チェックリストが仕様書のACから自動生成される
-
-### Phase 2
-
-- [ ] AC24: Issue作成・更新時に auto-triage.yml が仕様書の有無を分析し、適切なラベルを自動付与する
-- [ ] AC25: PRマージ後に post-merge.yml が次の `auto-implement` 候補Issueをピックアップする
-- [ ] AC26: 変更ファイル数20超 or 差分行数500超のPRに `auto:failed` ラベルが付与される
-- [ ] AC27: release.yml が週次で develop → main のリリースPRを自動作成する（差分がある場合のみ）
+- [ ] AC23: チェックリストが変更ファイルパターンからテンプレート生成される（`src/*` → Bot起動確認、`config/*` → 設定変更確認、`mcp-servers/*` → MCPサーバー起動確認、`pyproject.toml` → 依存パッケージ確認）
+- [ ] AC24: PRマージ後に post-merge.yml が次の `auto-implement` 候補Issueをピックアップし、PRコメントに投稿する（ラベルは付与しない）
 
 ## テスト方針
 
@@ -838,7 +794,7 @@ GitHub Actions の実行時間（ubuntu-latest）は無料枠（2,000分/月）�
 - 安全弁テスト: `auto:failed` ラベルで処理が停止すること、ループ上限で停止すること、禁止パターンで `auto:failed` が付くことを各々確認
 - ブランチ戦略テスト: 自動実装PRのベースブランチが develop であること、main への直接自動マージが行われないことを確認
 - **注意**: GitHub Actions 環境ではローカル LLM・Slack Bot の統合テストは実行不可。pytest はモック使用のユニットテストのみ実行される
-- **Phase 2**: release.yml が作成するリリースPRの本文に、develop ブランチのフルCI実行状況（pytest, mypy, ruff, markdownlint の最新結果）を自動記載する
+- **Phase 2**: post-merge.yml がマージ後に正しくトリガーされ、変更ファイルの分類・review-batch Issue更新・次Issue候補の投稿が行われることを確認する
 
 ## 関連ファイル
 
@@ -847,9 +803,10 @@ GitHub Actions の実行時間（ubuntu-latest）は無料枠（2,000分/月）�
 | `.github/workflows/claude.yml` | 自動実装ワークフロー（既存改修） |
 | `.github/workflows/pr-review.yml` | PR自動レビュー（据え置き） |
 | `.github/workflows/auto-fix.yml` | レビュー指摘自動対応（新規） |
-| `.github/workflows/auto-triage.yml` | Issue自動分析（新規、Phase 2） |
-| `.github/workflows/post-merge.yml` | マージ後処理（新規、Phase 2） |
-| `.github/workflows/release.yml` | 定期リリースPR作成（新規、Phase 2） |
+| `.github/workflows/post-merge.yml` | マージ後処理（新規） |
+| `.github/scripts/post-merge/classify-changes.sh` | 変更ファイル分類スクリプト |
+| `.github/scripts/post-merge/update-review-issue.sh` | レビューIssue更新スクリプト |
+| `.github/scripts/post-merge/pick-next-issue.sh` | 次Issue候補ピックアップスクリプト |
 | `.claude/skills/check-pr/SKILL.md` | check-prスキル（resolve追加） |
 | `CLAUDE.md` | 自動進行ルールセクション追加 |
 

@@ -35,6 +35,7 @@ dev = [
     "ruff>=0.2",
     "mypy>=1.8",
     "types-PyYAML>=6.0",
+    "shellcheck-py>=0.10",
 ]
 
 [build-system]

@@ -323,7 +323,84 @@ AUTO_MERGE_ENABLED の実装で `== "true"` パターンを採用し、未設定
 
 3. **ラベル操作は冪等に設計する**: ラベルの有無にかかわらずエラーにならないようにすることで、ワークフローの再実行時にも安全に動作する
 
+---
+
+## Phase 2 実装: post-merge.yml + shellcheck 統合（Issue #310）
+
+### 何を実装したか
+
+PRマージ後の自動処理ワークフロー `post-merge.yml` を新規作成し、併せて shellcheck をテストスキルに統合した。
+
+**1. `.github/workflows/post-merge.yml`（新規作成）**
+
+- `pull_request[closed]` + `merged == true` トリガー
+- 3段構成: 変更ファイル分類 → review-batch Issue 更新 → 次Issue候補ピックアップ
+- `GITHUB_TOKEN` のみ使用（ワークフロー連鎖不要のため PAT 不要）
+- Slack通知（失敗時のみ）、concurrency: PR番号ベース
+
+**2. `.github/scripts/post-merge/`（3スクリプト新規作成）**
+
+- `classify-changes.sh`: PR変更ファイルを取得し、`src/*`, `config/*`, `mcp-servers/*`, `pyproject.toml` にマッチするか判定
+- `update-review-issue.sh`: `auto:review-batch` ラベルの Open Issue を検索し、追記 or 新規作成+ピン留め。チェックリストはファイルパターンからテンプレート生成
+- `pick-next-issue.sh`: 次の `auto-implement` 候補Issue（最大3件）をPRコメントに投稿。ラベル自動付与はしない（CLAUDE.md ルール準拠）
+
+**3. shellcheck のテストスキル統合**
+
+- `shellcheck-py` を pyproject.toml の dev 依存に追加（`uv run shellcheck` で実行可能）
+- `/test-run` スキルに shellcheck ステップを追加（ステップ7）
+- CLAUDE.md のコーディング規約・GitHub Actions 品質チェックコマンドに追加
+
+**4. `docs/specs/auto-progress.md` の仕様書整理**
+
+- `release.yml`（定期リリースPR）の全記述を削除
+- `auto-triage.yml`（Issue自動分析）の全記述を削除
+- Phase 2 セクションを post-merge.yml のみに再構成
+- 安全弁を10層→9層に振り直し（変更規模制限の削除に伴い）
+- コスト見積もり、AC、関連ファイルテーブルを更新
+
+### うまくいったこと
+
+#### 1. 既存パターンの活用で設計がスムーズ
+
+auto-fix スクリプト群（`_common.sh` の3段階エラーハンドリング、`require_env` / `validate_pr_number` パターン）を post-merge スクリプトでも踏襲した。`_common.sh` を相対パスで source する設計により、コード重複なしで共通関数を再利用できた。
+
+#### 2. shellcheck 統合による即時フィードバック
+
+shellcheck を導入した直後に、新規スクリプトの CRLF 問題と既存スクリプトの改善点（SC2129, SC2016 等）を即座に検出できた。既存スクリプトの指摘は別Issue（#313）に切り出し、スコープを明確に分離した。
+
+#### 3. ラベル自動付与の回避が設計に組み込まれた
+
+CLAUDE.md + MEMORY.md の「`auto-implement` ラベルを勝手に付けるな」ルールに従い、`pick-next-issue.sh` では候補の通知のみ行い、ラベル付与は管理者判断とした。コードレビューでもこの点は指摘なし。
+
+### ハマったこと・改善点
+
+#### 1. Windows 環境での CRLF 問題
+
+Write ツールで作成したシェルスクリプトが CRLF 改行になっており、shellcheck の SC1017 エラーが大量に発生した。`tr -d '\r'` で変換して対応。`.shellcheckrc` も同様に CRLF だった。
+
+**教訓**: Windows 環境でシェルスクリプトを作成する際は、必ず LF 改行に変換する。`.gitattributes` で `*.sh text eol=lf` を設定すべき（#313 で対応予定）。
+
+#### 2. shellcheck の glob 展開問題
+
+`uv run shellcheck .github/scripts/**/*.sh` は `globstar` が有効なシェルでしか再帰展開されない。ubuntu-latest のデフォルト bash では `**` は単一ディレクトリレベルのみマッチ。コードレビューで指摘され、明示的パス（`auto-fix/*.sh .github/scripts/post-merge/*.sh`）に変更した。
+
+**教訓**: GitHub Actions 環境で `**` glob を使う場合は `shopt -s globstar` が必要。もしくは明示パスか `find` を使う。
+
+#### 3. shellcheck-py による環境ポータブルなインストール
+
+shellcheck のインストール方法として `shellcheck-py`（Python パッケージ）を採用した。`uv` のdev依存に追加するだけで、Windows/macOS/Linux 全てで `uv run shellcheck` が使える。scoop/brew/apt 等の OS 固有のパッケージマネージャーが不要。
+
+### 次に活かすこと
+
+1. **シェルスクリプト作成時は LF 改行を徹底する**: Windows 環境では CRLF がデフォルト。`.gitattributes` での強制と、CI での shellcheck による検出の二重防御を構築する
+
+2. **静的解析ツールは dev 依存で管理する**: `shellcheck-py` のように Python パッケージとして提供されるツールは `pyproject.toml` の dev 依存に追加することで、環境構築が `uv sync --extra dev` だけで完結する
+
+3. **glob の `**` パターンは環境依存**: `globstar` オプションの有無で動作が変わる。CI/CD 環境では明示パスか `find` を使う方が確実
+
+4. **新しい静的解析ツール導入時は既存コードも検査する**: 新規ファイルだけでなく既存ファイルにも指摘が出る。スコープ管理のために既存コードの修正は別Issue に切り出す
+
 ## 参考
 
 - 仕様書: [docs/specs/auto-progress.md](../specs/auto-progress.md)
-- 関連Issue: #253（仕様策定）, #256（Phase 0 実装）, #257（Phase 1 実装）, #266（品質チェックスキル）, #288（Phase 1 残課題対応）
+- 関連Issue: #253（仕様策定）, #256（Phase 0 実装）, #257（Phase 1 実装）, #266（品質チェックスキル）, #288（Phase 1 残課題対応）, #310（Phase 2: post-merge.yml）, #313（既存スクリプト shellcheck 修正）

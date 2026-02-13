@@ -1,0 +1,83 @@
+# Post Merge — マージ後の自動処理ワークフロー
+#
+# コンセプト: 「YAMLはオーケストレーションのみ、ロジックはスクリプトに」
+# スクリプト: .github/scripts/post-merge/
+# 設計書: docs/specs/auto-progress.md
+#
+# 処理内容:
+#   1. 変更ファイルの分類（実行テスト要否の判定）
+#   2. 実行テスト必要 → auto:review-batch Issue に追記
+#   3. 次Issue候補のピックアップ（PRコメントに投稿）
+#
+# エラーハンドリング方針:
+#   classify-changes    → 失敗時は needs_runtime_test=false（安全側）
+#   update-review-issue → 失敗時は warning で続行
+#   pick-next-issue     → 全処理ベストエフォート
+
+name: Post Merge
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  post-merge:
+    # マージされた場合のみ実行（クローズのみは除外）
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout scripts
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+          sparse-checkout-cone-mode: false
+          fetch-depth: 1
+
+      - name: Classify changes
+        id: classify
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/post-merge/classify-changes.sh"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+
+      - name: Update review issue
+        if: steps.classify.outputs.needs_runtime_test == 'true'
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/post-merge/update-review-issue.sh"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          RUNTIME_FILES: ${{ steps.classify.outputs.runtime_files }}
+
+      - name: Pick next issue
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/post-merge/pick-next-issue.sh"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+
+      # Slack通知（失敗時のみ）
+      - name: Slack notification
+        if: failure()
+        continue-on-error: true
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+          mention: here
+          if_mention: failure
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+concurrency:
+  group: post-merge-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: false

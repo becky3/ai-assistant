@@ -1,6 +1,6 @@
 ---
 name: test-run
-description: pytest・ruff・mypy・markdownlint によるコード品質チェックの実行・分析・修正提案
+description: pytest・ruff・mypy・markdownlint・shellcheck によるコード品質チェックの実行・分析・修正提案
 user-invocable: true
 allowed-tools: Bash, Read, Grep, Glob, Edit
 argument-hint: "[diff|full]"
@@ -8,7 +8,7 @@ argument-hint: "[diff|full]"
 
 ## タスク
 
-pytest による自動テスト実行、ruff によるリント、mypy による型チェック、markdownlint による Markdown チェックを実行し、結果を分析して修正提案を行う。
+pytest による自動テスト実行、ruff によるリント、mypy による型チェック、markdownlint による Markdown チェック、shellcheck によるシェルスクリプトチェックを実行し、結果を分析して修正提案を行う。
 
 ## 引数
 
@@ -24,6 +24,7 @@ pytest による自動テスト実行、ruff によるリント、mypy による
 - `src/` および `tests/` のリントチェック（ruff）
 - `src/` の型チェック（mypy）
 - `docs/**/*.md`, `*.md`, `.claude/**/*.md` の Markdown チェック（markdownlint）
+- `.github/scripts/**/*.sh` のシェルスクリプトチェック（shellcheck）
 - プロジェクトは `uv` によるパッケージ管理を使用
 
 ## 実行コマンド
@@ -33,6 +34,7 @@ pytest による自動テスト実行、ruff によるリント、mypy による
 - 型チェック: `uv run mypy src/`
 - Markdown チェック: `npx markdownlint-cli2@0.20.0`
 - Markdown 自動修正: `npx markdownlint-cli2@0.20.0 --fix`
+- シェルスクリプトチェック: `uv run shellcheck .github/scripts/auto-fix/*.sh .github/scripts/post-merge/*.sh`
 
 ## 処理手順
 
@@ -58,7 +60,8 @@ pytest による自動テスト実行、ruff によるリント、mypy による
 **特殊ケース**:
 
 - 変更ファイル 0 件で指定もなし → `full` モードにフォールバック
-- Markdown ファイル（`*.md`）のみの変更 → pytest・ruff・mypy はスキップ、markdownlint のみ実行
+- Markdown ファイル（`*.md`）のみの変更 → pytest・ruff・mypy・shellcheck はスキップ、markdownlint のみ実行
+- シェルスクリプト（`*.sh`）のみの変更 → pytest・ruff・mypy・markdownlint はスキップ、shellcheck のみ実行
 - `pyproject.toml`, `conftest.py` の変更 → `full` モードにフォールバック
 
 #### full モードの場合
@@ -100,38 +103,48 @@ npx markdownlint-cli2@0.20.0
 
 diff モードでは変更された Markdown ファイルのみを対象にする。
 
-**重要**: pytest・ruff・mypy・markdownlint のいずれかが失敗してもプロセスを中断せず、すべてのチェックを実行して統合レポートを生成する。
+### 7. シェルスクリプトチェック (shellcheck) 実行
 
-### 7. 結果の解析
+```bash
+uv run shellcheck .github/scripts/auto-fix/*.sh .github/scripts/post-merge/*.sh
+```
+
+diff モードでは変更された `*.sh` ファイルのみを対象にする。
+シェルスクリプト（`*.sh`）が存在しない場合や変更がない場合はスキップする。
+
+**重要**: pytest・ruff・mypy・markdownlint・shellcheck のいずれかが失敗してもプロセスを中断せず、すべてのチェックを実行して統合レポートを生成する。
+
+### 8. 結果の解析
 
 - **pytest 成功時**: 実行件数、実行時間、カバレッジ率（要求された場合）
 - **pytest 失敗時**: 成功/失敗件数、各失敗テストのエラーメッセージ、スタックトレース
 - **ruff 違反あり時**: 違反ファイル、ルールコード、行番号、違反内容
 - **mypy エラーあり時**: エラーファイル、エラー種別、行番号、エラー内容
 - **markdownlint 違反あり時**: 違反ファイル、ルールコード、行番号、違反内容、自動修正可能かどうか
+- **shellcheck 違反あり時**: 違反ファイル、エラーコード（SC????）、行番号、違反内容、重大度（error/warning/info）
 
-### 8. 失敗時の詳細調査
+### 9. 失敗時の詳細調査
 
 - 失敗したテストファイルを Read で読み込み
 - テスト対象のソースコードを Read で読み込み
 - エラーの種類を特定（AssertionError, TypeError, AttributeError 等）
 - 根本原因を分析（テストコードの問題、ソースコードの問題、依存関係の問題）
-- リント違反・型エラー・Markdown 違反時も該当箇所のコードを Read で確認
+- リント違反・型エラー・Markdown 違反・shellcheck 違反時も該当箇所のコードを Read で確認
 
-### 9. 修正案の生成
+### 10. 修正案の生成
 
-各失敗テスト・リント違反・型エラー・Markdown 違反に対して:
+各失敗テスト・リント違反・型エラー・Markdown 違反・shellcheck 違反に対して:
 
 - エラー内容の要約
 - 原因の説明
 - 具体的な修正案（ファイルパス、行番号、修正コード）
 - 修正の優先度（Critical/Warning/Suggestion）
 
-### 10. 修正適用と再実行（オプション）
+### 11. 修正適用と再実行（オプション）
 
 - ユーザーが承認した場合、Edit ツールで修正を適用
 - markdownlint の場合は `--fix` オプションで自動修正を適用
-- 修正後に再度テスト・リント・型チェック・Markdown チェックを実行して確認
+- 修正後に再度テスト・リント・型チェック・Markdown チェック・shellcheck を実行して確認
 
 ## 出力フォーマット
 
@@ -151,6 +164,9 @@ diff モードでは変更された Markdown ファイルのみを対象にす�
 - **型エラー**: なし
 
 #### markdownlint
+- **違反**: なし
+
+#### shellcheck
 - **違反**: なし
 
 すべてのチェックが成功しました。
@@ -188,6 +204,9 @@ diff モードでは変更された Markdown ファイルのみを対象にす�
 - **型エラー**: {N}件（または「なし」）
 
 #### markdownlint
+- **違反**: {N}件（または「なし」）
+
+#### shellcheck
 - **違反**: {N}件（または「なし」）
 
 ---
@@ -273,6 +292,7 @@ def test_ac2_duplicate_articles_skipped():  # AC2に対応
 
 - `uv` コマンドが利用できない環境では適切にエラーを報告する
 - `npx` コマンドが利用できない環境では markdownlint をスキップし、他のチェックは続行する
+- `shellcheck` コマンドが利用できない環境（`uv run shellcheck --version` が失敗する場合）では shellcheck をスキップし、他のチェックは続行する
 - テスト失敗時は必ず失敗したテストのソースコードを読んでから分析する
 - リント違反・型エラー・Markdown 違反時は該当箇所のコードを読んでから分析する
 - 修正案は具体的で、ファイルパス・行番号を含める
