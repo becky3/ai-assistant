@@ -93,7 +93,10 @@ jobs:
           PR_NUMBER="${{ steps.pr-info.outputs.number }}"
 
           # PRのbodyから "Closes #N" パターンでIssue番号を抽出
-          PR_BODY=$(gh pr view "$PR_NUMBER" --json body --jq '.body // ""')
+          if ! PR_BODY=$(gh pr view "$PR_NUMBER" --json body --jq '.body // ""' 2>&1); then
+            echo "::error::Failed to fetch PR body: $PR_BODY"
+            exit 1
+          fi
 
           # 複数のCloses/Fixes/Resolves パターンに対応（大文字小文字不問）
           # grep -P（PCRE）は ubuntu-latest で未対応の場合があるため -E（ERE）を使用
@@ -103,8 +106,8 @@ jobs:
             # grep終了コード1 = マッチなし（正常）
             ISSUE_NUMBERS=""
           elif [ "$GREP_EXIT" -ge 2 ]; then
-            echo "::warning::grep failed with exit code $GREP_EXIT while parsing PR body"
-            ISSUE_NUMBERS=""
+            echo "::error::grep failed with exit code $GREP_EXIT while parsing PR body"
+            exit 1
           fi
 
           if [ -z "$ISSUE_NUMBERS" ]; then
@@ -515,13 +518,13 @@ jobs:
             ```bash
             PR_NUMBER=${{ steps.pr-info.outputs.number }}
 
-            # owner/repo の取得と検証
+            # owner/repo の取得と検証（環境情報付きエラーログ）
             if ! OWNER=$(gh repo view --json owner --jq '.owner.login' 2>&1); then
-              echo "::error::Failed to get repository owner: $OWNER"
+              echo "::error::Failed to get repository owner: $OWNER (GH_REPO=${GH_REPO:-unset}, GH_TOKEN length=${#GH_TOKEN})"
               exit 1
             fi
             if ! REPO=$(gh repo view --json name --jq '.name' 2>&1); then
-              echo "::error::Failed to get repository name: $REPO"
+              echo "::error::Failed to get repository name: $REPO (GH_REPO=${GH_REPO:-unset}, OWNER=$OWNER)"
               exit 1
             fi
 
@@ -542,15 +545,25 @@ jobs:
               }
             }" --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false) | .id' 2>&1); then
               QUERY_SUCCESS=false
-              if echo "$THREADS" | grep -qE '401|403|authentication|forbidden'; then
+              # GraphQLエラー形式を確認してからフォールバック
+              if echo "$THREADS" | jq -e '.errors' > /dev/null 2>&1; then
+                ERROR_TYPE=$(echo "$THREADS" | jq -r '.errors[0].type // "UNKNOWN"')
+                ERROR_MSG=$(echo "$THREADS" | jq -r '.errors[0].message // "No message"')
+                if [ "$ERROR_TYPE" = "FORBIDDEN" ] || [ "$ERROR_TYPE" = "UNAUTHORIZED" ]; then
+                  echo "::error::GraphQL auth error (type=$ERROR_TYPE): $ERROR_MSG"
+                  exit 1
+                fi
+                echo "::warning::GraphQL error (type=$ERROR_TYPE): $ERROR_MSG"
+              elif echo "$THREADS" | grep -qE '401|403|authentication|forbidden'; then
                 echo "::error::Authentication/permission error: $THREADS"
                 exit 1
+              else
+                echo "::warning::Failed to query review threads: $THREADS"
               fi
-              echo "::warning::Failed to query review threads: $THREADS"
               THREADS=""
             fi
 
-            # スレッドの resolve（失敗カウンター付き）
+            # スレッドの resolve（失敗カウンター付き、エラー種別分類）
             if [ -z "$THREADS" ]; then
               if [ "$QUERY_SUCCESS" = true ]; then
                 echo "No unresolved threads to resolve. Skipping."
@@ -569,7 +582,18 @@ jobs:
                   }
                 }' -f threadId="$THREAD_ID" 2>&1); then
                   FAILED=$((FAILED + 1))
-                  echo "::warning::Failed to resolve thread $THREAD_ID: $ERROR"
+                  # エラー種別の推定と分類
+                  if echo "$ERROR" | jq -e '.errors' > /dev/null 2>&1; then
+                    ERR_TYPE=$(echo "$ERROR" | jq -r '.errors[0].type // "UNKNOWN"')
+                    ERR_MSG=$(echo "$ERROR" | jq -r '.errors[0].message // "No message"')
+                    echo "::warning::Failed to resolve thread $THREAD_ID: [GraphQL $ERR_TYPE] $ERR_MSG"
+                  elif echo "$ERROR" | grep -qE '401|403|authentication|forbidden'; then
+                    echo "::warning::Failed to resolve thread $THREAD_ID: [AUTH] $ERROR"
+                  elif echo "$ERROR" | grep -qE 'not found|NOT_FOUND|Could not resolve'; then
+                    echo "::warning::Failed to resolve thread $THREAD_ID: [NOT_FOUND] $ERROR"
+                  else
+                    echo "::warning::Failed to resolve thread $THREAD_ID: [API_ERROR] $ERROR"
+                  fi
                 else
                   RESOLVED=$((RESOLVED + 1))
                 fi
@@ -577,7 +601,7 @@ jobs:
 
               echo "Resolved: $RESOLVED, Failed: $FAILED"
               if [ "$RESOLVED" -eq 0 ] && [ "$FAILED" -gt 0 ]; then
-                echo "::error::All thread resolutions failed. Possible auth/permission issue."
+                echo "::error::All thread resolutions failed ($FAILED threads). Possible auth/permission issue."
                 exit 1
               fi
             fi
@@ -746,9 +770,11 @@ jobs:
             echo "AUTO_MERGE_ENABLED=true: Executing merge"
             if ! MERGE_ERR=$(gh pr merge "$PR_NUMBER" --merge 2>&1); then
               echo "::error::Merge failed: $MERGE_ERR"
-              # マージ失敗時: auto:failed ラベル付与 + PRコメント
-              gh issue edit "$PR_NUMBER" --add-label "auto:failed" || echo "::warning::Failed to add auto:failed label"
-              gh pr comment "$PR_NUMBER" --body "## auto-fix: 自動マージ失敗
+              # マージ失敗時: auto:failed ラベル付与 + PRコメント（事後処理も error レベルで報告）
+              if ! LABEL_ADD_ERR=$(gh issue edit "$PR_NUMBER" --add-label "auto:failed" 2>&1); then
+                echo "::error::Failed to add auto:failed label: $LABEL_ADD_ERR — manual intervention required"
+              fi
+              if ! COMMENT_ERR=$(gh pr comment "$PR_NUMBER" --body "## auto-fix: 自動マージ失敗
 
           マージ条件は全て満たしていましたが、マージコマンドの実行に失敗しました:
 
@@ -758,11 +784,14 @@ jobs:
 
           **次のアクション**: エラー内容を確認し、手動でマージしてください。
 
-          [Actions ログ](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" || echo "::warning::Failed to post merge failure comment"
+          [Actions ログ](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" 2>&1); then
+                echo "::error::Failed to post merge failure comment: $COMMENT_ERR — manual intervention required"
+              fi
               exit 1
             fi
 
-            gh pr comment "$PR_NUMBER" --body "## auto-fix: 自動マージ完了
+            # マージ成功後のコメント投稿（非クリティカル: 失敗してもマージ自体は完了済み）
+            if ! COMMENT_ERR=$(gh pr comment "$PR_NUMBER" --body "## auto-fix: 自動マージ完了
 
           全てのマージ条件を満たしたため、自動マージを実行しました:
           - ✅ レビュー指摘ゼロ
@@ -770,10 +799,14 @@ jobs:
           - ✅ コンフリクトなし
           - ✅ auto:failed ラベルなし
 
-          [Actions ログ](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          [Actions ログ](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" 2>&1); then
+              echo "::warning::Merge succeeded but failed to post success comment: $COMMENT_ERR"
+              echo "::notice::Merge was completed successfully. The comment failure is non-critical."
+            fi
           else
             echo "AUTO_MERGE_ENABLED=${AUTO_MERGE_RAW:-<unset>}: Dry-run mode"
-            gh pr comment "$PR_NUMBER" --body "## auto-fix: マージ判定結果（ドライラン）
+            # ドライラン時のコメント投稿（非クリティカル: 失敗しても判定結果はログに残る）
+            if ! COMMENT_ERR=$(gh pr comment "$PR_NUMBER" --body "## auto-fix: マージ判定結果（ドライラン）
 
           全てのマージ条件を満たしています:
           - ✅ レビュー指摘ゼロ
@@ -787,7 +820,10 @@ jobs:
           gh pr merge $PR_NUMBER --merge
           \`\`\`
 
-          [Actions ログ](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          [Actions ログ](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" 2>&1); then
+              echo "::warning::Failed to post dry-run comment: $COMMENT_ERR"
+              echo "::notice::Dry-run judgment is complete. All merge conditions are met. See Actions log for details."
+            fi
           fi
         env:
           GH_TOKEN: ${{ secrets.REPO_OWNER_PAT }}
