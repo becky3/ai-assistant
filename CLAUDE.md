@@ -224,8 +224,8 @@ Critical/Warning レベルの問題があれば修正する。
 3. `git diff --cached --stat` で差分サマリ表示
 4. 変更内容からコミットメッセージ自動生成（優先順位: fix > feat > docs > ci）
 5. `git commit -m "生成したメッセージ"`
-6. `BRANCH=$(git branch --show-current)` && `git push origin "$BRANCH"`
-7. `gh pr create --base develop --title "タイトル" --body "説明\n\nCloses #Issue番号"`
+6. `BRANCH=$(git branch --show-current) && git push origin "$BRANCH"`
+7. `gh pr create --base develop --title "タイトル" --body $'説明\n\nCloses #Issue番号'`
 8. `gh issue comment <Issue番号> --body "対応が完了しました。PR #<PR番号> をご確認ください。"`
 
 エラー時: ステップ1-7は失敗で停止。ステップ8は警告して続行（PRは作成済み）。

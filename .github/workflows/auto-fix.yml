@@ -217,12 +217,13 @@ jobs:
               }
             ' -f owner="${REPO_OWNER}" -f name="${REPO_NAME}" -F number="$PR_NUMBER" \
               --jq '
-                if .data.repository.pullRequest == null then
-                  error("PR #\($number) not found")
+                .data.repository.pullRequest as $pr |
+                if $pr == null then
+                  error("PR not found")
                 else
-                  [.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length
+                  [$pr.reviewThreads.nodes[] | select(.isResolved == false)] | length
                 end
-              ' --arg number "$PR_NUMBER" 2>&1); then
+              ' 2>&1); then
               # 数値バリデーション（リトライループ内で実行）
               if ! [[ "$UNRESOLVED_COUNT" =~ ^[0-9]+$ ]]; then
                 echo "::warning::Invalid response format (attempt $i/5): '$UNRESOLVED_COUNT'. Retrying..."
@@ -231,10 +232,19 @@ jobs:
                 fi
                 LAST_ERROR="$UNRESOLVED_COUNT"
                 UNRESOLVED_COUNT=""
-                if [ "$i" -lt 5 ]; then sleep 10; fi
-                continue
+                if [ "$i" -lt 5 ]; then
+                  sleep 10
+                  continue
+                else
+                  echo "::error::Failed to get valid response after 5 attempts."
+                  echo "::error::First error: $FIRST_ERROR"
+                  echo "::error::Last error: $LAST_ERROR"
+                  exit 1
+                fi
               fi
-              # 成功
+              # 成功 - エラー記録をクリア
+              FIRST_ERROR=""
+              LAST_ERROR=""
               break
             fi
             echo "::warning::Failed to query review threads (attempt $i/5): $UNRESOLVED_COUNT"
