@@ -6,9 +6,20 @@ allowed-tools: Bash, Read, Grep, Glob
 argument-hint: "<Issue番号>"
 ---
 
-## タスク
+## 目的
 
-auto-implement 環境で品質チェック通過後に、commit / push / PR作成 / Issue完了コメント投稿までを確実に実行する。
+品質チェック通過済みの変更をリモートにpushし、PRを作成してIssueに完了報告すること。
+PRの作成が主たる成果物であり、Issue完了コメントは通知目的である。
+
+commitが成功していない状態でpushしないこと。
+
+### エラー時の動作
+
+| ステップ | 失敗時 |
+|---------|--------|
+| 1-5（git操作） | 停止 |
+| 6（PR作成） | 停止 |
+| 7（Issueコメント） | 警告を表示して続行（PRは作成済み） |
 
 ## 引数
 
@@ -19,15 +30,15 @@ auto-implement 環境で品質チェック通過後に、commit / push / PR作�
 
 ## 処理手順
 
-以下のステップを順番に実行する。各ステップでエラーが出たら即停止すること。
+以下のステップを順番に実行する。
 
 ### 1. 変更状態の確認
 
 ```bash
-git status
+git status --porcelain
 ```
 
-変更がなければ「コミットする変更がありません」と警告して停止。
+出力が空なら変更なし。「コミットする変更がありません」と警告して停止。
 
 ### 2. 全変更をステージング
 
@@ -43,12 +54,14 @@ git diff --cached --stat
 
 ### 4. コミット
 
-変更内容からコミットメッセージを自動生成する:
+変更内容からコミットメッセージを自動生成する。
 
+種別の判定（複数種別が混在する場合の優先順位: `fix` > `feat` > `docs` > `ci`）:
+
+- バグ修正を含む: `fix: 修正内容 (#Issue番号)`
 - `src/` の変更あり: `feat: 実装内容の説明 (#Issue番号)`
 - `docs/` や `CLAUDE.md` のみ: `docs: 変更内容 (#Issue番号)`
 - `.github/workflows/` のみ: `ci: 変更内容 (#Issue番号)`
-- バグ修正: `fix: 修正内容 (#Issue番号)`
 
 ```bash
 git commit -m "生成したメッセージ"
@@ -64,13 +77,17 @@ git push origin "$BRANCH"
 ### 6. PR作成
 
 ```bash
-gh pr create --base develop --title "コミットメッセージと同じタイトル" --body "説明
+gh pr create --base develop --title "コミットメッセージと同じタイトル" --body "$(cat <<'EOF'
+説明
 
-Closes #Issue番号"
+Closes #Issue番号
+EOF
+)"
 ```
 
 - baseブランチは常に `develop`
 - bodyに `Closes #Issue番号` を含める
+- `gh pr create` はPRのURLを標準出力に返す（例: `https://github.com/owner/repo/pull/123`）
 
 ### 7. Issue完了コメント投稿
 
@@ -78,7 +95,7 @@ Closes #Issue番号"
 gh issue comment <Issue番号> --body "対応が完了しました。PR #<PR番号> をご確認ください。"
 ```
 
-PR番号は手順6の出力から取得する。
+PR番号は手順6で `gh pr create` が返したURLの末尾から取得する。
 
 ### 8. 結果表示
 
