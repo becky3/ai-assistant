@@ -15,8 +15,7 @@ require_env GITHUB_OUTPUT
 
 # pull_request(labeled) トリガー: イベントから直接PR番号を取得
 if [ -n "${PR_NUMBER_FROM_EVENT:-}" ]; then
-  if ! [[ "$PR_NUMBER_FROM_EVENT" =~ ^[1-9][0-9]*$ ]]; then
-    echo "::error::Invalid PR_NUMBER_FROM_EVENT: '$PR_NUMBER_FROM_EVENT'"
+  if ! validate_pr_number "$PR_NUMBER_FROM_EVENT" "PR_NUMBER_FROM_EVENT"; then
     exit 1
   fi
   output "number" "$PR_NUMBER_FROM_EVENT"
@@ -51,8 +50,7 @@ if [ -z "$PR_NUMBER" ]; then
 fi
 
 # 数値バリデーション
-if ! [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
-  echo "::error::Invalid PR number: '$PR_NUMBER'"
+if ! validate_pr_number "$PR_NUMBER"; then
   exit 1
 fi
 

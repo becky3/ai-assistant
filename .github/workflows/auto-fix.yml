@@ -33,7 +33,8 @@ jobs:
     # pull_request(labeled): auto-implement ラベルが付与された場合のみ実行
     if: >-
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
-      (github.event_name == 'pull_request' && github.event.label.name == 'auto-implement')
+      (github.event_name == 'pull_request' && github.event.label.name == 'auto-implement'
+       && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     steps:
       # --- スクリプト・promptテンプレートの取得（全ステップで利用するため最初にcheckout） ---
@@ -52,8 +53,13 @@ jobs:
         run: |
           set -euo pipefail
           PR_NUMBER="${{ github.event.pull_request.number }}"
-          if ! gh pr edit "$PR_NUMBER" --remove-label "auto-implement" 2>/dev/null; then
-            echo "::notice::auto-implement label already removed or not found"
+          if ! ERROR_OUTPUT=$(gh pr edit "$PR_NUMBER" --remove-label "auto-implement" 2>&1); then
+            if echo "$ERROR_OUTPUT" | grep -qiE "(not found|no labels)"; then
+              echo "::notice::auto-implement label already removed or not found (PR #$PR_NUMBER)"
+            else
+              echo "::error::Failed to remove auto-implement label (PR #$PR_NUMBER): $ERROR_OUTPUT"
+              exit 1
+            fi
           fi
         env:
           GH_TOKEN: ${{ github.token }}

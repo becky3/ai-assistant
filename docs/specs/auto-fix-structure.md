@@ -35,11 +35,11 @@ on:
 | PR番号取得 | `workflow_run.pull_requests` or ブランチ名検索 | `github.event.pull_request.number` を直接使用 |
 | checkout ref | `workflow_run.head_branch` | `pull_request.head.ref` |
 | concurrency group | `auto-fix-{branch_name}` | `auto-fix-pr-{pr_number}` |
-| ラベル除去 | リンクIssueから除去（既存ステップ） | PR自体から即座に除去（ループ防止） |
+| ラベル除去 | リンクIssueから除去（既存ステップ） | PRから即座に除去（ループ防止） + リンクIssueからも除去（既存ステップ） |
 
 ### ラベル除去（ループ防止）
 
-labeled トリガー時は起動直後に `auto-implement` ラベルをPRから除去する。これにより、ワークフロー内の処理（コミット等）が再度 `labeled` イベントを発火させることを防ぐ。
+labeled トリガー時は起動直後に `auto-implement` ラベルをPRから除去する。これにより、ラベルが付いたままの状態で後続のレビューや手動操作によって同じラベルが再度付与された場合に、意図せずワークフローが繰り返し実行されることを防ぐ。また、既存の remove-label.sh ステップにより、リンクIssueからも `auto-implement` ラベルが除去される。
 
 ### get-pr-number.sh の拡張
 

@@ -98,6 +98,19 @@ output() {
   echo "$key=$value" >> "$GITHUB_OUTPUT"
 }
 
+# validate_pr_number: PR番号が正の整数かどうかを検証
+# 用途: PR番号の入力バリデーション（0や負数を拒否）
+# 使用例: if ! validate_pr_number "$PR_NUMBER" "PR_NUMBER_FROM_EVENT"; then exit 1; fi
+# 引数: $1 = 値, $2 = 変数名（ログ用、省略可）
+validate_pr_number() {
+  local value="$1"
+  local name="${2:-PR number}"
+  if ! [[ "$value" =~ ^[1-9][0-9]*$ ]]; then
+    echo "::error::Invalid $name: '$value'" >&2
+    return 1
+  fi
+}
+
 # validate_numeric: 値が数値かどうかを検証
 # 用途: API応答の数値バリデーション
 # 使用例: if ! validate_numeric "$COUNT" "loop count"; then COUNT=0; fi
