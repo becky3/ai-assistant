@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.services.ogp_extractor import OgpExtractor
@@ -123,3 +124,107 @@ async def test_ac10_returns_none_on_non_200() -> None:
         result = await extractor.extract_image_url("https://example.com/article")
 
     assert result is None
+
+
+@pytest.mark.parametrize("status_code", [301, 302, 303, 307, 308])
+async def test_ac10_returns_none_on_redirect(status_code: int) -> None:
+    """AC10: リダイレクト応答時はSSRF対策としてNoneを返す."""
+    extractor = OgpExtractor()
+
+    mock_resp = AsyncMock()
+    mock_resp.status = status_code
+    mock_resp.headers = {"Location": "http://internal-server/secret"}
+    mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_resp.__aexit__ = AsyncMock(return_value=False)
+
+    mock_session = AsyncMock()
+    mock_session.get = MagicMock(return_value=mock_resp)
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("src.services.ogp_extractor.aiohttp.ClientSession", return_value=mock_session):
+        result = await extractor.extract_image_url("https://example.com/article")
+
+    assert result is None
+
+
+async def test_ac10_redirect_logs_warning() -> None:
+    """AC10: リダイレクト検出時にwarningログを出力する."""
+    extractor = OgpExtractor()
+
+    mock_resp = AsyncMock()
+    mock_resp.status = 302
+    mock_resp.headers = {"Location": "http://192.168.1.1/admin"}
+    mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_resp.__aexit__ = AsyncMock(return_value=False)
+
+    mock_session = AsyncMock()
+    mock_session.get = MagicMock(return_value=mock_resp)
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=False)
+
+    with (
+        patch("src.services.ogp_extractor.aiohttp.ClientSession", return_value=mock_session),
+        patch("src.services.ogp_extractor.logger") as mock_logger,
+    ):
+        result = await extractor.extract_image_url("https://example.com/article")
+
+    assert result is None
+    mock_logger.warning.assert_called_once_with(
+        "Redirect detected (SSRF protection): %s -> %s",
+        "https://example.com/article",
+        "http://192.168.1.1/admin",
+    )
+
+
+async def test_ac10_redirect_without_location_header() -> None:
+    """AC10: Locationヘッダーがないリダイレクト応答でもNoneを返す."""
+    extractor = OgpExtractor()
+
+    mock_resp = AsyncMock()
+    mock_resp.status = 301
+    mock_resp.headers = {}
+    mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_resp.__aexit__ = AsyncMock(return_value=False)
+
+    mock_session = AsyncMock()
+    mock_session.get = MagicMock(return_value=mock_resp)
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=False)
+
+    with (
+        patch("src.services.ogp_extractor.aiohttp.ClientSession", return_value=mock_session),
+        patch("src.services.ogp_extractor.logger") as mock_logger,
+    ):
+        result = await extractor.extract_image_url("https://example.com/article")
+
+    assert result is None
+    mock_logger.warning.assert_called_once_with(
+        "Redirect detected (SSRF protection): %s -> %s",
+        "https://example.com/article",
+        "unknown",
+    )
+
+
+async def test_ac10_allow_redirects_false_is_set() -> None:
+    """AC10: _fetch_og_imageがallow_redirects=Falseでリクエストする."""
+    extractor = OgpExtractor()
+
+    html = '<html><head><meta property="og:image" content="https://example.com/img.png"></head></html>'
+    mock_resp = AsyncMock()
+    mock_resp.status = 200
+    mock_resp.text = AsyncMock(return_value=html)
+    mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_resp.__aexit__ = AsyncMock(return_value=False)
+
+    mock_session = AsyncMock()
+    mock_session.get = MagicMock(return_value=mock_resp)
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("src.services.ogp_extractor.aiohttp.ClientSession", return_value=mock_session):
+        await extractor.extract_image_url("https://example.com/article")
+
+    mock_session.get.assert_called_once_with(
+        "https://example.com/article", allow_redirects=False
+    )
