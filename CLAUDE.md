@@ -99,6 +99,7 @@
 - コミット: `feat(f{N}): 説明 (#{Issue番号})`
 - PR作成時に `Closes #{Issue番号}` で紐付け
 - **PRのbaseブランチ**: 通常は `develop`、hotfix は `main`
+- **マージ方式**: feature/bugfix → develop は通常マージ（`--merge`）、develop → main は squash マージ（`--squash`）。詳細は `docs/specs/git-flow.md` の「マージ方式」セクション参照
 - GitHub Milestones で Step 単位の進捗管理
 - `gh` コマンドで Issue/PR を操作
 
