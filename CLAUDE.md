@@ -187,14 +187,50 @@ PRに対するレビュー指摘（自動レビューツール、人間問わず
 
 ### 品質チェック（GitHub Actions 環境）
 
-GitHub Actions 環境（claude-code-action）ではサブエージェント（Task tool）が安定しないため、品質チェックにはスキルを直接使用する:
+GitHub Actions 環境では Skill ツールを使用しない。以下の4ステップを順番に全て実行すること。
+途中で停止しないこと。全ステップ完了まで続けること。
 
-1. `/test-run` — pytest / ruff / mypy / markdownlint を実行
-2. `/code-review` — 変更差分のセルフコードレビュー
-3. `/doc-review` — ドキュメント変更がある場合の品質レビュー
-4. `/auto-finalize <Issue番号>` — commit / push / PR作成 / Issue完了コメント投稿
+#### ステップ 1/4: テスト実行
 
-**重要**: ステップ1-3の品質チェックは中間ステップであり、必ずステップ4まで実行してタスクを完了すること。
+```bash
+uv run pytest && uv run ruff check src/ tests/ && uv run mypy src/
+npx markdownlint-cli2@0.20.0 "CLAUDE.md" "docs/**/*.md" "*.md" ".claude/**/*.md"
+```
+
+- Markdown のみの変更の場合、pytest / ruff / mypy はスキップ可（markdownlint のみ実行）
+- 失敗があれば修正して再実行。全て通過してから次へ進む
+
+#### ステップ 2/4: コードレビュー
+
+`git diff` で変更差分を確認し、以下の観点でセルフレビュー:
+
+- テスト名と実装の整合性
+- エラーハンドリング（except pass の有無）
+- バリデーション漏れ（境界値: 0, 負数, 空文字列）
+- セキュリティ（コマンドインジェクション、XSS等）
+
+Critical/Warning レベルの問題があれば修正する。
+
+#### ステップ 3/4: ドキュメントレビュー
+
+`docs/` や `CLAUDE.md` に変更がある場合、仕様書との整合性を確認する。
+ドキュメント変更がなければスキップ可。
+
+**ここで停止しないこと。次のステップ4を必ず実行すること。**
+
+#### ステップ 4/4: 完了処理（commit / push / PR作成 / Issue完了コメント）
+
+1. `git status --porcelain` で変更確認（空なら停止）
+2. `git add -A`
+3. `git diff --cached --stat` で差分サマリ表示
+4. 変更内容からコミットメッセージ自動生成（優先順位: fix > feat > docs > ci）
+5. `git commit -m "生成したメッセージ"`
+6. `git push origin $(git branch --show-current)`
+7. `gh pr create --base develop`（bodyに `Closes #Issue番号` を含める）
+8. `gh issue comment <Issue番号>` で完了報告
+
+エラー時: ステップ1-7は失敗で停止。ステップ8は警告して続行（PRは作成済み）。
+commitが成功していない状態でpushしないこと。
 
 ## Bot プロセスガード
 
