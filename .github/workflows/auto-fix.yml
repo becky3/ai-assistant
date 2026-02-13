@@ -75,7 +75,7 @@ jobs:
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           PR_NUMBER_FROM_EVENT: ${{ github.event.pull_request.number }}
 
-      - name: Check auto-implement scope
+      - name: Check auto-progress scope
         if: steps.pr-info.outputs.skip != 'true'
         id: scope-check
         run: |
@@ -88,20 +88,39 @@ jobs:
             exit 0
           fi
 
-          # workflow_run トリガー時: auto-implement 経由のPR（claude/issue-* ブランチ）のみ対象
-          BRANCH="${{ github.event.workflow_run.head_branch }}"
-          if [ -z "$BRANCH" ]; then
-            echo "::error::workflow_run.head_branch is empty"
-            exit 1
-          elif [[ "$BRANCH" == claude/issue-* ]]; then
+          # workflow_run トリガー時: auto-progress ラベル付きのPRのみ対象
+          # auto-progress ラベルは claude.yml (auto-implement) が PR 作成時に付与する
+          # ブランチ名 claude/issue-* は @claude メンションと区別できないため使用しない
+          PR_NUMBER="${{ steps.pr-info.outputs.number }}"
+          if [ -z "$PR_NUMBER" ]; then
+            echo "in_scope=false" >> $GITHUB_OUTPUT
+            echo "::notice::PR number not available. Skipping."
+            exit 0
+          fi
+
+          if ! LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' 2>&1); then
+            # 認証/権限エラーはファイル冒頭の方針に従い即停止
+            if echo "$LABELS" | grep -qiE "(401|403|authentication failed|forbidden|resource not accessible)"; then
+              echo "::error::Authentication/permission error getting PR labels: $LABELS"
+              exit 1
+            fi
+            # それ以外の一時的エラーは予防的にスキップ
+            echo "::warning::Failed to get PR labels (transient error): $LABELS. Skipping as precaution."
+            echo "in_scope=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if echo "$LABELS" | grep -q "^auto-progress$"; then
             echo "in_scope=true" >> $GITHUB_OUTPUT
-            echo "Branch '$BRANCH' matches auto-implement pattern"
+            echo "PR #$PR_NUMBER has auto-progress label"
           else
             echo "in_scope=false" >> $GITHUB_OUTPUT
-            echo "::notice::Branch '$BRANCH' is not an auto-implement branch. Skipping."
+            echo "::notice::PR #$PR_NUMBER does not have auto-progress label. Skipping."
           fi
         env:
           EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
 
       - name: Remove auto-implement label from linked Issue
         if: steps.pr-info.outputs.skip != 'true' && steps.scope-check.outputs.in_scope == 'true'
@@ -118,9 +137,13 @@ jobs:
           set -euo pipefail
           PR_NUMBER="${{ steps.pr-info.outputs.number }}"
 
-          # 方針: 一時的API障害 → warning で安全側（skip）に倒す
+          # 方針: 認証/権限エラー → 即停止、一時的API障害 → warning で安全側（skip）に倒す
           if ! LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' 2>&1); then
-            echo "::warning::Failed to get PR labels: $LABELS. Skipping as precaution."
+            if echo "$LABELS" | grep -qiE "(401|403|authentication failed|forbidden|resource not accessible)"; then
+              echo "::error::Authentication/permission error getting PR labels: $LABELS"
+              exit 1
+            fi
+            echo "::warning::Failed to get PR labels (transient error): $LABELS. Skipping as precaution."
             echo "skip=true" >> $GITHUB_OUTPUT
             exit 0
           fi
