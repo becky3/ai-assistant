@@ -2,7 +2,7 @@
 
 ## 概要
 
-`auto-fix.yml`（937行、16個の `run: |` ブロック + 1個の `uses:` アクション）のシェルスクリプトを外部ファイルに切り出し、`direct_prompt` を外部Markdownファイルに分離する。動作を変えず、保守性・テスト可能性・レビュー品質を向上させる。
+`auto-fix.yml`（937行、16個の `run: |` ブロック + 1個の `uses:` アクション）のシェルスクリプトを外部ファイルに切り出し、`prompt` を外部Markdownファイルに分離する。動作を変えず、保守性・テスト可能性・レビュー品質を向上させる。
 
 **コンセプト**: 「YAMLはオーケストレーションのみ、ロジックはスクリプトに」
 
@@ -63,7 +63,7 @@
       merge-or-dryrun.sh       # マージ実行 or ドライラン
       handle-errors.sh         # エラーハンドラ
   prompts/
-    auto-fix-check-pr.md       # direct_prompt テンプレート
+    auto-fix-check-pr.md       # prompt テンプレート
 ```
 
 ### 各スクリプトの責務
@@ -239,15 +239,16 @@ YAML (auto-fix.yml)
 - `${{ }}` と `$VAR` の変数展開スコープが混在
 - 編集時にネストの把握が困難
 
-### 注記: `direct_prompt` と `prompt` の関係
+### 注記: `direct_prompt` から `prompt` への移行（#297 で対応済み）
 
-- `direct_prompt` は `claude-code-action` の `action.yml` の `inputs` に定義されていないが、現在のバージョン（v1.0.46）では動作している
-- 公式に定義されている入力パラメータは `prompt`
-- 将来のバージョンアップ時に `prompt` への移行を検討する
+- `direct_prompt` は `claude-code-action` v0.x の旧パラメータで、v1.0 で `prompt` に置き換えられた（DEPRECATED）
+- `action.yml` の `inputs` には `prompt` のみ定義されており、`direct_prompt` は未定義
+- `direct_prompt` で渡した値は `PROMPT` 環境変数にマッピングされず、プロンプトとして機能しない
+- **対応**: auto-fix.yml の `direct_prompt` を `prompt` に変更済み
 
 ### 設計
 
-`direct_prompt`（実装時に `prompt` への移行を検討）の内容を `.github/prompts/auto-fix-check-pr.md` に外部化する。
+`prompt` の内容を `.github/prompts/auto-fix-check-pr.md` に外部化する。
 
 **YAMLでの読み込み:**
 
@@ -255,7 +256,7 @@ YAML (auto-fix.yml)
 - name: Auto-fix with Claude
   uses: anthropics/claude-code-action@...
   with:
-    direct_prompt: |
+    prompt: |
       ${{ steps.load-prompt.outputs.prompt }}
 ```
 
@@ -534,7 +535,7 @@ fi
 
 ### ステップ 2: prompt テンプレートの作成
 
-1. `direct_prompt` の内容を `.github/prompts/auto-fix-check-pr.md` に移動
+1. `prompt` の内容を `.github/prompts/auto-fix-check-pr.md` に移動
 2. `${{ }}` 式を `{{VAR_NAME}}` プレースホルダーに置換
 3. prompt 読み込みステップを追加
 
@@ -558,7 +559,7 @@ fi
 ## 受け入れ条件
 
 - [ ] AC1: `auto-fix.yml` の外部化対象ステップが `.github/scripts/auto-fix/` の独立スクリプトに切り出されている
-- [ ] AC2: `direct_prompt` が `.github/prompts/auto-fix-check-pr.md` に外部ファイル化されている
+- [ ] AC2: `prompt` が `.github/prompts/auto-fix-check-pr.md` に外部ファイル化されている
 - [ ] AC3: `shellcheck` が全スクリプトに対して通過する
 - [ ] AC4: `markdownlint` が prompt テンプレートに対して通過する
 - [ ] AC5: 既存の auto-fix ワークフローの動作が変わらないこと（機能的に等価）

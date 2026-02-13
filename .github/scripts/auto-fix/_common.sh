@@ -71,6 +71,33 @@ gh_comment() {
   fi
 }
 
+# require_env: 必須環境変数の存在を検証
+# 用途: スクリプト冒頭で必須パラメータを検証
+# 使用例: require_env PR_NUMBER GITHUB_OUTPUT
+require_env() {
+  local missing=()
+  for var in "$@"; do
+    if ! declare -p "$var" >/dev/null 2>&1; then
+      missing+=("$var")
+    elif [ -z "${!var}" ]; then
+      missing+=("$var (defined but empty)")
+    fi
+  done
+  if [ ${#missing[@]} -gt 0 ]; then
+    echo "::error::Missing or empty required environment variables: ${missing[*]}" >&2
+    exit 1
+  fi
+}
+
+# output: $GITHUB_OUTPUT にキー=値を書き出し
+# 用途: ステップ出力の設定
+# 使用例: output "number" "$PR_NUMBER"
+output() {
+  local key="$1"
+  local value="$2"
+  echo "$key=$value" >> "$GITHUB_OUTPUT"
+}
+
 # validate_numeric: 値が数値かどうかを検証
 # 用途: API応答の数値バリデーション
 # 使用例: if ! validate_numeric "$COUNT" "loop count"; then COUNT=0; fi

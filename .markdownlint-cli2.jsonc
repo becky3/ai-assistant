@@ -15,6 +15,7 @@
   "globs": [
     "docs/**/*.md",
     "*.md",
-    ".claude/**/*.md"
+    ".claude/**/*.md",
+    ".github/prompts/*.md"
   ]
 }

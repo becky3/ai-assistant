@@ -1,0 +1,6 @@
+# GitHub Actions 環境で使用するシェルスクリプト用
+shell=bash
+# 外部ソースのファイルを追従
+external-sources=true
+# GitHub Actions 環境変数（GITHUB_OUTPUT, GH_TOKEN 等）はスクリプト外で定義されるため抑制
+disable=SC2154
