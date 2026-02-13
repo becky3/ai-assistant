@@ -36,7 +36,7 @@
 | 9 | Handle loop limit | 15 | ループ上限到達時の通知 | しない（短い、通知のみ） |
 | 10 | Handle forbidden | 18 | 禁止パターン検出時の通知 | しない（短い、通知のみ） |
 | 11 | Post loop marker | 10 | ループマーカーコメント投稿 | しない（短い、通知のみ） |
-| 12 | Auto-fix with Claude | N/A | claude-code-action（uses:） | prompt外部化 |
+| 12 | Auto-fix with Claude | N/A | claude-code-action（※ `run: \|` ではなく `uses:` アクション） | prompt外部化 |
 | 13 | Request re-review | 15 | `/review` コメント投稿 | しない（短い） |
 | 14 | Merge check | 77 | マージ条件4項目チェック | する |
 | 15 | Merge or dry-run | 69 | マージ実行 or ドライラン | する |
@@ -90,7 +90,7 @@
 - **入力**: 環境変数 `PR_NUMBER`
 - **出力**: `$GITHUB_OUTPUT` に `loop_count`, `limit_reached` を書き出し
 - **元ステップ**: #5 Check loop count
-- **エラー方針**: API失敗/不正値 → デフォルト0で続行
+- **エラー方針**: API失敗/不正値 → デフォルト0で続行（ループカウント0は上限チェックが緩くなるだけで安全。最悪でも余分に1回ループするだけ）
 
 #### `check-review-result.sh`
 
@@ -98,7 +98,7 @@
 - **入力**: 環境変数 `PR_NUMBER`, `GITHUB_REPOSITORY`
 - **出力**: `$GITHUB_OUTPUT` に `has_issues` を書き出し
 - **元ステップ**: #6 Check review result
-- **エラー方針**: 全リトライ失敗 → `exit 1`
+- **エラー方針**: 全リトライ失敗 → `exit 1`（レビュー結果は「修正するか/マージするか」の分岐判断に必須。不明なまま続行すると誤マージまたは不要な修正が発生するため厳格にエラー）
 
 #### `check-forbidden.sh`
 
@@ -178,27 +178,45 @@ gh pr view "$PR_NUMBER" ...
 
 ### 必須環境変数の検証パターン
 
-各スクリプトの冒頭で、必須環境変数の存在を `${VAR:?message}` パターンで検証する。
+2つの検証方法を用途に応じて使い分ける:
+
+- **`require_env`**: スクリプト冒頭で複数の必須環境変数を一括チェックする場合に使用。未設定の変数を全てまとめてエラー報告できるため、デバッグが容易
+- **`${VAR:?message}`**: スクリプト途中で特定の条件下のみ必要になる変数を即時検証する場合に使用
 
 ```bash
 #!/usr/bin/env bash
 source "$(dirname "$0")/_common.sh"
 
-: "${PR_NUMBER:?PR_NUMBER is required}"
-: "${GITHUB_OUTPUT:?GITHUB_OUTPUT is required}"
+# スクリプト冒頭: 一括チェック（require_env）
+require_env PR_NUMBER GITHUB_OUTPUT
+
+# スクリプト途中: 条件付き即時検証（${VAR:?}）
+if [ "$NEED_TOKEN" = true ]; then
+  : "${GH_TOKEN:?GH_TOKEN is required for this operation}"
+fi
 ```
+
+### `GH_REPO` と `GITHUB_REPOSITORY` の使い分け
+
+| 変数 | 用途 | 形式 |
+|------|------|------|
+| `GH_REPO` | `gh` CLI が自動認識する対象リポジトリ指定 | `owner/repo` |
+| `GITHUB_REPOSITORY` | GraphQL API 等で owner と repo を個別に分解して使う場合 | `owner/repo`（分解して使用） |
+
+`gh` CLI のみを使用するスクリプトでは `GH_REPO` で十分。GraphQL API で `owner` と `name` を個別に渡す必要がある `check-review-result.sh` では `GITHUB_REPOSITORY` から分解する。
 
 ### 環境変数一覧
 
 | 環境変数 | 値の出所 | 使用スクリプト |
 |---------|---------|--------------|
-| `PR_NUMBER` | `steps.pr-info.outputs.number` | ほぼ全スクリプト |
-| `GH_TOKEN` | `github.token` or `secrets.REPO_OWNER_PAT` | ほぼ全スクリプト |
-| `GH_REPO` | `github.repository` | ほぼ全スクリプト |
+| `PR_NUMBER` | `steps.pr-info.outputs.number` | `remove-label.sh`, `check-loop-count.sh`, `check-review-result.sh`, `check-forbidden.sh`, `merge-check.sh`, `merge-or-dryrun.sh`, `handle-errors.sh`, 通知ステップ（YAML内） |
+| `GH_TOKEN` | `github.token` or `secrets.REPO_OWNER_PAT` | `get-pr-number.sh`, `remove-label.sh`, `check-loop-count.sh`, `check-review-result.sh`, `check-forbidden.sh`, `merge-check.sh`, `merge-or-dryrun.sh`, `handle-errors.sh` |
+| `GH_REPO` | `github.repository` | `get-pr-number.sh`, `remove-label.sh`, `check-loop-count.sh`, `check-forbidden.sh`, `merge-check.sh`, `merge-or-dryrun.sh`, `handle-errors.sh` |
+| `GITHUB_REPOSITORY` | `github.repository` | `check-review-result.sh`（owner/repo分解用） |
 | `PULL_REQUESTS_JSON` | `toJson(github.event.workflow_run.pull_requests)` | `get-pr-number.sh` |
 | `HEAD_BRANCH` | `github.event.workflow_run.head_branch` | `get-pr-number.sh` |
 | `AUTO_MERGE_ENABLED` | `vars.AUTO_MERGE_ENABLED` | `merge-or-dryrun.sh` |
-| `ACTIONS_URL` | `github.server_url/.../runs/github.run_id` | 通知系スクリプト |
+| `ACTIONS_URL` | `github.server_url/.../runs/github.run_id` | `merge-or-dryrun.sh`, `handle-errors.sh`, 通知ステップ（YAML内） |
 | `FORBIDDEN_FILES` | `steps.forbidden-check.outputs.forbidden_files` | 通知ステップ（YAML内） |
 | `LOOP_COUNT` | `steps.loop-check.outputs.loop_count` | 通知ステップ（YAML内） |
 | `MERGE_REASONS` | `steps.merge-check.outputs.reasons` | 通知ステップ（YAML内） |
@@ -260,6 +278,8 @@ YAML (auto-fix.yml)
     PROMPT="${PROMPT//\{\{PR_NUMBER\}\}/$PR_NUMBER}"
 
     # multiline output の設定
+    # heredoc形式: 開始デリミタ → 内容 → 終了デリミタ
+    # 参考: https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#multiline-strings
     echo "prompt<<PROMPT_EOF" >> "$GITHUB_OUTPUT"
     echo "$PROMPT" >> "$GITHUB_OUTPUT"
     echo "PROMPT_EOF" >> "$GITHUB_OUTPUT"
@@ -330,6 +350,11 @@ gh pr view {{PR_NUMBER}} --json title,body,headRefName,baseRefName
 - `$GITHUB_OUTPUT` への出力変数名と値のフォーマット
 - PRコメントの文面（テンプレートリテラル部分）
 
+### テスト方針の補足
+
+- 各スクリプトの単体テスト（BATS等のシェルテストフレームワーク）は実装フェーズで検討する
+- 等価性テストの自動化（リファクタリング前後の出力比較等）は将来的な改善として検討する
+
 ## shellcheck 適用方針
 
 ### 対象
@@ -362,10 +387,12 @@ shellcheck .github/scripts/auto-fix/*.sh
 
 ### 抑制が必要な既知パターン
 
+グローバル抑制（`.shellcheckrc`）は使用せず、各スクリプトで個別に `# shellcheck disable=SCXXXX` を適用する。抑制範囲を最小化し、意図しない警告の見落としを防ぐ。
+
 | コード | 理由 | 対応 |
 |--------|------|------|
-| SC2154 | `$GITHUB_OUTPUT` 等の環境変数がスクリプト外で定義 | `# shellcheck disable=SC2154` or `.shellcheckrc` |
-| SC2086 | 意図的な word splitting（該当箇所がある場合） | 個別に `# shellcheck disable=SC2086` |
+| SC2154 | `$GITHUB_OUTPUT` 等の環境変数がスクリプト外で定義 | 該当スクリプトの冒頭で `# shellcheck disable=SC2154` を個別に記述 |
+| SC2086 | 意図的な word splitting（該当箇所がある場合） | 該当行の直前に `# shellcheck disable=SC2086` を個別に記述 |
 
 ## `_common.sh` の拡張
 
@@ -451,6 +478,27 @@ output() {
     HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
 ```
 
+**スクリプト側（`get-pr-number.sh`）での使用例:**
+
+```bash
+#!/usr/bin/env bash
+source "$(dirname "$0")/_common.sh"
+
+require_env PULL_REQUESTS_JSON HEAD_BRANCH GITHUB_OUTPUT
+
+# 環境変数から PR 番号を取得
+PR_NUMBER=$(echo "$PULL_REQUESTS_JSON" | jq -r '.[0].number // empty')
+
+if [ -z "$PR_NUMBER" ]; then
+  # ブランチ名から検索
+  if ! PR_NUMBER=$(gh pr list --head "$HEAD_BRANCH" --json number --jq '.[0].number // empty'); then
+    echo "::error::Failed to search PR by branch name: $HEAD_BRANCH"
+    exit 1
+  fi
+fi
+# ... 後続処理 ...
+```
+
 ### YAML内に残すステップ（短い通知系）
 
 以下のステップはスクリプト外部化せず、YAML内に残す:
@@ -506,7 +554,7 @@ output() {
 - [ ] AC5: 既存の auto-fix ワークフローの動作が変わらないこと（機能的に等価）
 - [ ] AC6: `_common.sh` が全スクリプトから正しく source されること
 - [ ] AC7: `${{ }}` 式が全て環境変数経由でスクリプトに渡されること
-- [ ] AC8: 短い通知ステップ（30行未満）はYAML内に残っていること
+- [ ] AC8: 以下のステップはYAML内に残っていること: Check auto-implement scope, Check auto:failed label, Evaluate guards, Handle loop limit, Handle forbidden, Post loop marker, Request re-review, Merge conditions not met
 
 ## 関連ファイル
 
