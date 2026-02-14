@@ -49,8 +49,12 @@ ERROR_COMMENT="## auto-fix: エラー発生
 対応完了後、\`auto:failed\` を除去して \`/fix\` コメントを投稿すると再開できます。"
 
 if [ "$SOURCED" = true ]; then
-  gh_best_effort gh issue edit "$PR_NUMBER" --add-label "auto:failed" || true
-  gh_comment "$PR_NUMBER" "$ERROR_COMMENT" || true
+  if ! gh_best_effort gh issue edit "$PR_NUMBER" --add-label "auto:failed"; then
+    echo "::warning::Failed to add auto:failed label in error handler."
+  fi
+  if ! gh_comment "$PR_NUMBER" "$ERROR_COMMENT"; then
+    echo "::warning::Failed to post error comment in error handler."
+  fi
 else
   # フォールバック: 共通関数なしでベストエフォート
   if ! LABEL_ERR=$(gh issue edit "$PR_NUMBER" --add-label "auto:failed" 2>&1); then

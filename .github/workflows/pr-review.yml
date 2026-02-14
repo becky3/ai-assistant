@@ -207,7 +207,7 @@ jobs:
         if: |
           success() && (
             (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/fix')) ||
-            (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'auto:pipeline'))
+            github.event_name == 'pull_request'
           )
         run: |
           set -euo pipefail
@@ -219,14 +219,26 @@ jobs:
             exit 0
           fi
 
-          # auto:failed ラベルがある場合はスキップ（自動処理停止中）
-          if LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' 2>&1); then
-            if echo "$LABELS" | grep -q "^auto:failed$"; then
-              echo "::notice::PR #$PR_NUMBER has auto:failed label. Skipping auto:fix-requested label."
+          # 現在のラベルを API で取得
+          # 注意: event payload の labels はPR作成時のスナップショットであり、
+          # claude.yml が PR 作成後に auto:pipeline を付与するため最新状態を反映しない。
+          # そのため gh pr view で最新のラベルを取得して判定する。
+          if ! LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' 2>&1); then
+            echo "::warning::Failed to fetch labels for PR #$PR_NUMBER: $LABELS. Skipping."
+            exit 0
+          fi
+
+          # pull_request[opened] の場合、auto:pipeline ラベルがなければスキップ
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            if ! echo "$LABELS" | grep -q "^auto:pipeline$"; then
+              echo "PR #$PR_NUMBER does not have auto:pipeline label. Skipping auto:fix-requested."
               exit 0
             fi
-          else
-            echo "::warning::Failed to fetch labels for PR #$PR_NUMBER: $LABELS. Skipping."
+          fi
+
+          # auto:failed ラベルがある場合はスキップ（自動処理停止中）
+          if echo "$LABELS" | grep -q "^auto:failed$"; then
+            echo "::notice::PR #$PR_NUMBER has auto:failed label. Skipping auto:fix-requested label."
             exit 0
           fi
 
