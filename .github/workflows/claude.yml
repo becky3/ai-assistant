@@ -65,9 +65,10 @@ jobs:
       - uses: anthropics/claude-code-action@5994afaaa7f44611addc97a696a135acff5fd218 # v1.0.46
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # REPO_OWNER_PAT を使用: GITHUB_TOKEN で作成されたPRイベントでは
-          # pr-review.yml が再トリガーされないため（GitHub の無限ループ防止仕様）
-          github_token: ${{ secrets.REPO_OWNER_PAT }}
+          # GITHUB_TOKEN を使用: PR作成イベントが pr-review.yml をトリガーしない
+          # （GitHub の無限ループ防止仕様）。auto:pipeline ラベル付与前に
+          # PRKit が走るレースコンディションを根本回避する。
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           bot_name: "claude[bot]"
           bot_id: "209825114"
           claude_args: "--model claude-opus-4-6 --max-turns 100 --dangerously-skip-permissions"
