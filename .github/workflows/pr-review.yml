@@ -204,14 +204,12 @@ jobs:
       #   - pull_request[opened] + auto:pipeline ラベルあり: 自動パイプラインで作成されたPRの初回レビュー後
       # /review のみ: ラベル付与なし（レビューのみ実行）
       - name: Add auto:fix-requested label for auto-fix
-        if: |
-          success() && (
-            (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/fix')) ||
-            (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'auto:pipeline'))
-          )
+        if: success()
         run: |
           set -euo pipefail
           PR_NUMBER="${{ steps.pr-number.outputs.number }}"
+          EVENT_NAME="${{ github.event_name }}"
+          COMMENT_BODY="${{ github.event.comment.body }}"
 
           # REPO_OWNER_PAT チェック（未設定だと後続の gh コマンドも全て失敗するため先にチェック）
           if [ -z "${GH_TOKEN:-}" ]; then
@@ -219,10 +217,33 @@ jobs:
             exit 0
           fi
 
-          # auto:failed ラベルがある場合はスキップ（自動処理停止中）
+          # 最新のラベルを取得（イベントペイロードはスナップショットのため使用しない）
           if LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' 2>&1); then
+            # auto:failed ラベルがある場合はスキップ（自動処理停止中）
             if echo "$LABELS" | grep -q "^auto:failed$"; then
               echo "::notice::PR #$PR_NUMBER has auto:failed label. Skipping auto:fix-requested label."
+              exit 0
+            fi
+
+            # トリガー条件を判定
+            # 1. /fix コマンド時は無条件に実行
+            # 2. pull_request[opened] イベントの場合は auto:pipeline ラベルがある場合のみ実行
+            SHOULD_ADD_LABEL=false
+            if [ "$EVENT_NAME" = "issue_comment" ] && [[ "$COMMENT_BODY" == /fix* ]]; then
+              echo "Triggered by /fix command"
+              SHOULD_ADD_LABEL=true
+            elif [ "$EVENT_NAME" = "pull_request" ]; then
+              if echo "$LABELS" | grep -q "^auto:pipeline$"; then
+                echo "Triggered by pull_request[opened] with auto:pipeline label"
+                SHOULD_ADD_LABEL=true
+              else
+                echo "::notice::pull_request event without auto:pipeline label. Skipping auto:fix-requested label."
+                exit 0
+              fi
+            fi
+
+            if [ "$SHOULD_ADD_LABEL" = false ]; then
+              echo "::notice::Conditions not met for adding auto:fix-requested label."
               exit 0
             fi
           else
