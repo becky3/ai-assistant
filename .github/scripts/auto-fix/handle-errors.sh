@@ -46,11 +46,15 @@ ERROR_COMMENT="## auto-fix: エラー発生
 自動修正処理中にエラーが発生しました。\`auto:failed\` ラベルを付与して自動処理を停止します。
 
 **次のアクション**: [Actions ログ]($ACTIONS_URL) を確認し、問題を解消してください。
-対応完了後、\`auto:failed\` を除去して \`/review\` コメントを投稿すると再開できます。"
+対応完了後、\`auto:failed\` を除去して \`/fix\` コメントを投稿すると再開できます。"
 
 if [ "$SOURCED" = true ]; then
-  gh_best_effort gh issue edit "$PR_NUMBER" --add-label "auto:failed" || true
-  gh_comment "$PR_NUMBER" "$ERROR_COMMENT" || true
+  if ! gh_best_effort gh issue edit "$PR_NUMBER" --add-label "auto:failed"; then
+    echo "::warning::Failed to add auto:failed label in error handler."
+  fi
+  if ! gh_comment "$PR_NUMBER" "$ERROR_COMMENT"; then
+    echo "::warning::Failed to post error comment in error handler."
+  fi
 else
   # フォールバック: 共通関数なしでベストエフォート
   if ! LABEL_ERR=$(gh issue edit "$PR_NUMBER" --add-label "auto:failed" 2>&1); then

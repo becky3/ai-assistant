@@ -29,10 +29,10 @@ on:
 jobs:
   post-merge:
     # 自動マージされたPRのみ実行（手動マージは除外）
-    # auto-fix.yml がマージ前に auto-merged ラベルを付与する想定
+    # merge-or-dryrun.sh がマージ前に auto:merged ラベルを付与する想定
     if: >-
       github.event.pull_request.merged == true &&
-      contains(github.event.pull_request.labels.*.name, 'auto-merged')
+      contains(github.event.pull_request.labels.*.name, 'auto:merged')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout scripts

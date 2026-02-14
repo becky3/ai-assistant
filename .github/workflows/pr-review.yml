@@ -14,7 +14,7 @@ on:
 
 jobs:
   pr-review:
-    # PR作成時 OR PRへの /review コメント時に実行
+    # PR作成時 OR PRへの /review or /fix コメント時に実行
     if: |
       (
         (github.event_name == 'pull_request' &&
@@ -22,7 +22,7 @@ jobs:
         (github.event_name == 'issue_comment' &&
          github.actor == 'becky3' &&
          github.event.issue.pull_request &&
-         startsWith(github.event.comment.body, '/review'))
+         (startsWith(github.event.comment.body, '/review') || startsWith(github.event.comment.body, '/fix')))
       )
     runs-on: ubuntu-latest
     steps:
@@ -198,45 +198,61 @@ jobs:
 
                **重要**: `commit=` にはレビュー対象のコミットSHAを含めてください。auto-fix.yml は最新コミットに対応するフラグのみを判定対象とします。
 
-      # /review 経由時: auto-implement ラベルを付与して auto-fix を起動
-      # 背景: /review (issue_comment) → pr-review → workflow_run → auto-fix の経路では
-      #       workflow_run.pull_requests が空になり PR 番号が消失する（GitHub Actions 既知制限）
-      #       labeled トリガーで auto-fix を直接起動することで回避する
-      # NOTE: pull_request トリガー（初回レビュー）時は workflow_run 経路が正常動作するため不要
-      - name: Add auto-implement label for auto-fix
-        if: success() && github.event_name == 'issue_comment'
+      # auto:fix-requested ラベルを付与して auto-fix を起動
+      # 条件:
+      #   - /fix コマンド時: ユーザーが手動で auto-fix を起動したい場合
+      #   - pull_request[opened] + auto:pipeline ラベルあり: 自動パイプラインで作成されたPRの初回レビュー後
+      # /review のみ: ラベル付与なし（レビューのみ実行）
+      - name: Add auto:fix-requested label for auto-fix
+        if: |
+          success() && (
+            (github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/fix')) ||
+            github.event_name == 'pull_request'
+          )
         run: |
           set -euo pipefail
           PR_NUMBER="${{ steps.pr-number.outputs.number }}"
 
           # REPO_OWNER_PAT チェック（未設定だと後続の gh コマンドも全て失敗するため先にチェック）
           if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::warning::REPO_OWNER_PAT is not set. Cannot add auto-implement label."
+            echo "::warning::REPO_OWNER_PAT is not set. Cannot add auto:fix-requested label."
             exit 0
           fi
 
-          # auto:failed ラベルがある場合はスキップ（自動処理停止中）
-          if LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' 2>&1); then
-            if echo "$LABELS" | grep -q "^auto:failed$"; then
-              echo "::notice::PR #$PR_NUMBER has auto:failed label. Skipping auto-implement label."
+          # 現在のラベルを API で取得
+          # 注意: event payload の labels はPR作成時のスナップショットであり、
+          # claude.yml が PR 作成後に auto:pipeline を付与するため最新状態を反映しない。
+          # そのため gh pr view で最新のラベルを取得して判定する。
+          if ! LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' 2>&1); then
+            echo "::warning::Failed to fetch labels for PR #$PR_NUMBER: $LABELS. Skipping."
+            exit 0
+          fi
+
+          # pull_request[opened] の場合、auto:pipeline ラベルがなければスキップ
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            if ! echo "$LABELS" | grep -q "^auto:pipeline$"; then
+              echo "PR #$PR_NUMBER does not have auto:pipeline label. Skipping auto:fix-requested."
               exit 0
             fi
-          else
-            echo "::warning::Failed to fetch labels for PR #$PR_NUMBER: $LABELS. Skipping."
+          fi
+
+          # auto:failed ラベルがある場合はスキップ（自動処理停止中）
+          if echo "$LABELS" | grep -q "^auto:failed$"; then
+            echo "::notice::PR #$PR_NUMBER has auto:failed label. Skipping auto:fix-requested label."
             exit 0
           fi
 
           # ラベルが既に付与済みの場合、--add-label では labeled イベントが発火しない
           # 除去→再付与で確実にイベントを発火させる
-          if echo "$LABELS" | grep -q "^auto-implement$"; then
-            echo "PR #$PR_NUMBER already has auto-implement label. Removing to retrigger."
-            gh pr edit "$PR_NUMBER" --remove-label "auto-implement" 2>&1 || true
+          if echo "$LABELS" | grep -q "^auto:fix-requested$"; then
+            echo "PR #$PR_NUMBER already has auto:fix-requested label. Removing to retrigger."
+            gh pr edit "$PR_NUMBER" --remove-label "auto:fix-requested" 2>&1 || true
           fi
 
-          if ! ERROR_OUTPUT=$(gh pr edit "$PR_NUMBER" --add-label "auto-implement" 2>&1); then
-            echo "::warning::Failed to add auto-implement label to PR #$PR_NUMBER: $ERROR_OUTPUT"
+          if ! ERROR_OUTPUT=$(gh pr edit "$PR_NUMBER" --add-label "auto:fix-requested" 2>&1); then
+            echo "::warning::Failed to add auto:fix-requested label to PR #$PR_NUMBER: $ERROR_OUTPUT"
           else
-            echo "Added auto-implement label to PR #$PR_NUMBER (triggers auto-fix via labeled event)"
+            echo "Added auto:fix-requested label to PR #$PR_NUMBER (triggers auto-fix via labeled event)"
           fi
         env:
           GH_TOKEN: ${{ secrets.REPO_OWNER_PAT }}

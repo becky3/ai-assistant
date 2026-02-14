@@ -33,10 +33,19 @@ fi
 
 if [ "$AUTO_MERGE_LOWER" = "true" ]; then
   echo "AUTO_MERGE_ENABLED=true: Executing merge"
+
+  # マージ前に auto:merged ラベルを付与（post-merge.yml の発火条件）
+  # ラベル付与失敗時もマージは続行（post-merge 未実行よりマージ失敗の方が重大）
+  if ! gh_best_effort gh pr edit "$PR_NUMBER" --add-label "auto:merged"; then
+    echo "::warning::auto:merged label not added. post-merge.yml may not trigger."
+  fi
+
   if ! MERGE_ERR=$(gh pr merge "$PR_NUMBER" --merge 2>&1); then
     echo "::error::Merge failed: $MERGE_ERR"
     # マージ失敗時: auto:failed ラベル付与 + PRコメント（事後処理はベストエフォート）
-    gh_best_effort gh issue edit "$PR_NUMBER" --add-label "auto:failed" || true
+    if ! gh_best_effort gh issue edit "$PR_NUMBER" --add-label "auto:failed"; then
+      echo "::warning::Failed to add auto:failed label after merge failure."
+    fi
     gh_comment "$PR_NUMBER" "## auto-fix: 自動マージ失敗
 
 マージ条件は全て満たしていましたが、マージコマンドの実行に失敗しました:
