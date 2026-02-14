@@ -11,51 +11,51 @@
 - アーキテクト分析（[#257 コメント](https://github.com/becky3/ai-assistant/issues/257#issuecomment-3894836004)）で特定された構造的問題への対応
 - 前提の Issue #293（エラーハンドリング統一 + ガード集約）は PR #294 で完了済み
 
-## labeled トリガー（#303 で追加）
+## トリガー設計（#335 で簡素化）
 
-PRに `auto-implement` ラベルを付与すると auto-fix が起動する仕組み。既存の `workflow_run` トリガー（PR Review 完了後に自動起動）に加えて、手動でレビュー→修正ループを開始できる。
+auto-fix.yml は `pull_request[labeled]` トリガーのみで起動する。PRに `auto:fix-requested` ラベルが付与されると auto-fix が開始する。
 
-### トリガー設計
+**背景**: 以前は `workflow_run` と `pull_request[labeled]` の2系統があったが、
+`workflow_run` 経路では `/review`（issue_comment）起源時に PR 番号が消失する問題があった
+（GitHub Actions 既知制限: actions/runner#3438）。Issue #335 で `workflow_run` を廃止し、
+`pull_request[labeled]` に一本化した。
+
+### YAML定義
 
 ```yaml
 on:
-  workflow_run:
-    workflows: ["PR Review"]
-    types: [completed]
   pull_request:
     types: [labeled]
 ```
 
-### 動作の違い
+### 動作
 
-| 項目 | workflow_run | pull_request(labeled) |
-|------|------------|----------------------|
-| 起動条件 | PR Review 成功完了 | `auto-implement` ラベル付与 |
-| scope-check | PR に `auto-progress` ラベルがあるか確認 | スキップ（ラベル付与自体がスコープ制御） |
-| PR番号取得 | `workflow_run.pull_requests` or ブランチ名検索 | `github.event.pull_request.number` を直接使用 |
-| checkout ref | `workflow_run.head_branch` | `pull_request.head.ref` |
-| concurrency group | `auto-fix-{branch_name}` | `auto-fix-pr-{pr_number}` |
-| ラベル除去 | リンクIssueから除去（既存ステップ） | PRから即座に除去（ループ防止） + リンクIssueからも除去（既存ステップ） |
+| 項目 | 値 |
+|------|-----|
+| 起動条件 | `auto:fix-requested` ラベル付与 |
+| PR番号取得 | `github.event.pull_request.number` を直接使用 |
+| checkout ref | `pull_request.head.ref` |
+| concurrency group | `auto-fix-pr-{pr_number}` |
 
 ### ラベル除去（ループ防止）
 
-labeled トリガー時は起動直後に `auto-implement` ラベルをPRから除去する。これにより、ラベルが付いたままの状態で後続のレビューや手動操作によって同じラベルが再度付与された場合に、意図せずワークフローが繰り返し実行されることを防ぐ。また、既存の remove-label.sh ステップにより、リンクIssueからも `auto-implement` ラベルが除去される。
+起動直後に `auto:fix-requested` ラベルをPRから除去する（YAMLインラインステップ）。これにより、後続の処理中に同じラベルが再度付与されても意図しない重複実行を防止する。さらに、remove-label.sh ステップにより、リンクIssueからも `auto-implement` ラベルが除去される。
 
-### pr-review.yml からのラベル付与（#311 で追加）
+### pr-review.yml からの `auto:fix-requested` 付与
 
-pr-review.yml は `/review` コメント（`issue_comment`）で起動した場合、レビュー完了後に `auto-implement` ラベルをPRに付与する。これにより auto-fix が labeled トリガーで起動し、レビュー→修正ループが継続する。
+pr-review.yml は以下の条件で `auto:fix-requested` ラベルをPRに付与し、auto-fix を起動する:
 
-**背景**: `/review`（issue_comment）起源の `workflow_run` では `pull_requests: []` になり、auto-fix が PR 番号を特定できない（GitHub Actions 既知制限: actions/runner#3438）。labeled トリガーはこの問題を回避する。
+| 条件 | 説明 |
+|------|------|
+| `/fix` コマンド | ユーザーが手動で auto-fix を起動したい場合 |
+| `pull_request[opened]` + `auto:pipeline` あり | 自動パイプライン（claude.yml）で作成されたPRの初回レビュー後 |
 
-**条件**:
+**付与しない場合**:
 
-- `issue_comment` イベント時のみ付与（`pull_request` イベント時は `workflow_run` 経路が正常動作するため不要）
-- `auto:failed` ラベルがある場合はスキップ
-- `REPO_OWNER_PAT` を使用（`GITHUB_TOKEN` では `labeled` イベントがトリガーされない）
+- `/review` コマンド → レビューのみ実行、auto-fix は起動しない
+- `auto:failed` ラベルがある場合 → スキップ
 
-### get-pr-number.sh の拡張
-
-`PR_NUMBER_FROM_EVENT` 環境変数が設定されている場合（= labeled トリガー）、`workflow_run.pull_requests` の解析をスキップして即座にPR番号を返す。
+**トークン**: `REPO_OWNER_PAT` を使用（`GITHUB_TOKEN` では `labeled` イベントがトリガーされない）
 
 ### 現在の問題
 
@@ -69,10 +69,12 @@ pr-review.yml は `/review` コメント（`issue_comment`）で起動した場�
 
 ### `run: |` ブロック一覧（16個）
 
+> 番号は既存 YAML のステップ番号と対応している。#2（Check auto-progress scope）は
+> `workflow_run` 廃止により削除されたため欠番。
+
 | # | ステップ名 | 行数 | 責務 | 外部化 |
 |---|-----------|------|------|--------|
-| 1 | Get PR number | 35 | PR番号取得（workflow_run → PR特定） | する |
-| 2 | Check auto-progress scope | 35 | `auto-progress` ラベルでスコープ判定（workflow_run パス）、labeled パスは無条件通過 | しない（短い） |
+| 1 | Get PR number | 10 | PR番号取得（`github.event.pull_request.number` を直接使用） | しない（短い） |
 | 3 | Remove auto-implement label | 40 | リンクIssueからラベル除去 | する |
 | 4 | Check auto:failed label | 20 | failedラベル有無チェック | しない（短い） |
 | 5 | Check loop count | 28 | ループカウント取得 | する |
@@ -83,7 +85,7 @@ pr-review.yml は `/review` コメント（`issue_comment`）で起動した場�
 | 10 | Handle forbidden | 18 | 禁止パターン検出時の通知 | しない（短い、通知のみ） |
 | 11 | Post loop marker | 10 | ループマーカーコメント投稿 | しない（短い、通知のみ） |
 | 12 | Auto-fix with Claude | N/A | claude-code-action（※ `run: \|` ではなく `uses:` アクション） | prompt外部化 |
-| 13 | Request re-review | 15 | `/review` コメント投稿 | しない（短い） |
+| 13 | Request re-review | 15 | `/fix` コメント投稿 | しない（短い） |
 | 14 | Merge check | 77 | マージ条件4項目チェック | する |
 | 15 | Merge or dry-run | 69 | マージ実行 or ドライラン | する |
 | 16 | Merge conditions not met | 12 | マージ条件未達通知 | しない（短い、通知のみ） |
@@ -100,7 +102,6 @@ pr-review.yml は `/review` コメント（`issue_comment`）で起動した場�
   scripts/
     auto-fix/
       _common.sh              # 既存（共通関数）
-      get-pr-number.sh         # PR番号取得
       remove-label.sh          # auto-implementラベル除去
       check-loop-count.sh      # ループカウント取得
       check-review-result.sh   # レビュー結果判定（GraphQL + リトライ）
@@ -114,13 +115,9 @@ pr-review.yml は `/review` コメント（`issue_comment`）で起動した場�
 
 ### 各スクリプトの責務
 
-#### `get-pr-number.sh`
+#### ~~`get-pr-number.sh`~~（廃止）
 
-- **責務**: workflow_run イベントからPR番号を特定
-- **入力**: 環境変数 `PULL_REQUESTS_JSON`, `HEAD_BRANCH`
-- **出力**: `$GITHUB_OUTPUT` に `number`, `skip` を書き出し
-- **元ステップ**: #1 Get PR number
-- **エラー方針**: PR未発見 → `skip=true`、API失敗/不正値 → `exit 1`
+`workflow_run` 廃止により不要。PR番号は `github.event.pull_request.number` から直接取得できるため、YAML内のインラインステップで処理する。
 
 #### `remove-label.sh`
 
@@ -256,11 +253,9 @@ fi
 | 環境変数 | 値の出所 | 使用スクリプト |
 |---------|---------|--------------|
 | `PR_NUMBER` | `steps.pr-info.outputs.number` | `remove-label.sh`, `check-loop-count.sh`, `check-review-result.sh`, `check-forbidden.sh`, `merge-check.sh`, `merge-or-dryrun.sh`, `handle-errors.sh`, 通知ステップ（YAML内） |
-| `GH_TOKEN` | `github.token` or `secrets.REPO_OWNER_PAT` | `get-pr-number.sh`, `remove-label.sh`, `check-loop-count.sh`, `check-review-result.sh`, `check-forbidden.sh`, `merge-check.sh`, `merge-or-dryrun.sh`, `handle-errors.sh` |
-| `GH_REPO` | `github.repository` | `get-pr-number.sh`, `remove-label.sh`, `check-loop-count.sh`, `check-forbidden.sh`, `merge-check.sh`, `merge-or-dryrun.sh`, `handle-errors.sh` |
+| `GH_TOKEN` | `github.token` or `secrets.REPO_OWNER_PAT` | `remove-label.sh`, `check-loop-count.sh`, `check-review-result.sh`, `check-forbidden.sh`, `merge-check.sh`, `merge-or-dryrun.sh`, `handle-errors.sh` |
+| `GH_REPO` | `github.repository` | `remove-label.sh`, `check-loop-count.sh`, `check-forbidden.sh`, `merge-check.sh`, `merge-or-dryrun.sh`, `handle-errors.sh` |
 | `GITHUB_REPOSITORY` | `github.repository` | `check-review-result.sh`（owner/repo分解用） |
-| `PULL_REQUESTS_JSON` | `toJson(github.event.workflow_run.pull_requests)` | `get-pr-number.sh` |
-| `HEAD_BRANCH` | `github.event.workflow_run.head_branch` | `get-pr-number.sh` |
 | `AUTO_MERGE_ENABLED` | `vars.AUTO_MERGE_ENABLED` | `merge-or-dryrun.sh` |
 | `ACTIONS_URL` | `github.server_url/.../runs/github.run_id` | `merge-or-dryrun.sh`, `handle-errors.sh`, 通知ステップ（YAML内） |
 | `FORBIDDEN_FILES` | `steps.forbidden-check.outputs.forbidden_files` | 通知ステップ（YAML内） |
@@ -507,60 +502,38 @@ output() {
 
 ## YAML変換後のイメージ
 
-### 変換前（例: Get PR number）
+### 変換前（例: Remove label）
 
 ```yaml
-- name: Get PR number from workflow_run
-  id: pr-info
+- name: Remove auto-implement label from linked issues
+  id: remove-label
   run: |
     set -euo pipefail
-    PR_NUMBER=$(echo '${{ toJson(...) }}' | jq -r '...')
-    # ... 35行のシェルスクリプト ...
-    echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
+    PR_BODY=$(gh pr view "$PR_NUMBER" --json body --jq '.body')
+    # ... 40行のシェルスクリプト ...
   env:
     GH_TOKEN: ${{ github.token }}
     GH_REPO: ${{ github.repository }}
+    PR_NUMBER: ${{ steps.pr-info.outputs.number }}
 ```
 
 ### 変換後
 
 ```yaml
-- name: Get PR number from workflow_run
-  id: pr-info
-  run: bash "$GITHUB_WORKSPACE/.github/scripts/auto-fix/get-pr-number.sh"
+- name: Remove auto-implement label from linked issues
+  id: remove-label
+  run: bash "$GITHUB_WORKSPACE/.github/scripts/auto-fix/remove-label.sh"
   env:
     GH_TOKEN: ${{ github.token }}
     GH_REPO: ${{ github.repository }}
-    PULL_REQUESTS_JSON: ${{ toJson(github.event.workflow_run.pull_requests) }}
-    HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
-```
-
-**スクリプト側（`get-pr-number.sh`）での使用例:**
-
-```bash
-#!/usr/bin/env bash
-source "$(dirname "$0")/_common.sh"
-
-require_env PULL_REQUESTS_JSON HEAD_BRANCH GITHUB_OUTPUT
-
-# 環境変数から PR 番号を取得
-PR_NUMBER=$(echo "$PULL_REQUESTS_JSON" | jq -r '.[0].number // empty')
-
-if [ -z "$PR_NUMBER" ]; then
-  # ブランチ名から検索
-  if ! PR_NUMBER=$(gh pr list --head "$HEAD_BRANCH" --json number --jq '.[0].number // empty'); then
-    echo "::error::Failed to search PR by branch name: $HEAD_BRANCH"
-    exit 1
-  fi
-fi
-# ... 後続処理 ...
+    PR_NUMBER: ${{ steps.pr-info.outputs.number }}
 ```
 
 ### YAML内に残すステップ（短い通知系）
 
 以下のステップはスクリプト外部化せず、YAML内に残す:
 
-- Check auto-progress scope（`auto-progress` ラベル確認 + labeled パス分岐）
+- Get PR number（10行、`github.event.pull_request.number` の取得のみ）
 - Check auto:failed label（20行、単純なチェック）
 - Evaluate guards（23行、step outputs の読み取りのみ）
 - Handle loop limit（15行、`source` + `gh_comment`）
@@ -611,7 +584,7 @@ fi
 - [ ] AC5: 既存の auto-fix ワークフローの動作が変わらないこと（機能的に等価）
 - [ ] AC6: `_common.sh` が全スクリプトから正しく source されること
 - [ ] AC7: `${{ }}` 式が全て環境変数経由でスクリプトに渡されること
-- [ ] AC8: 以下のステップはYAML内に残っていること: Check auto-progress scope, Check auto:failed label, Evaluate guards, Handle loop limit, Handle forbidden, Post loop marker, Request re-review, Merge conditions not met
+- [ ] AC8: 以下のステップはYAML内に残っていること: Get PR number, Check auto:failed label, Evaluate guards, Handle loop limit, Handle forbidden, Post loop marker, Request re-review, Merge conditions not met
 
 ## 関連ファイル
 
