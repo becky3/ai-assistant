@@ -109,7 +109,7 @@ flowchart TD
     I --> J{指摘あり?}
     J -->|あり| K[auto-fix.yml: 自動修正]
     K --> L[Resolve conversation]
-    L --> M[/review 再リクエスト]
+    L --> M[/fix 再リクエスト]
     M --> I
     J -->|なし| N{品質ゲート通過?}
     N -->|全条件クリア| O[自動マージ → develop]
@@ -132,6 +132,23 @@ flowchart TD
     style T fill:#1D76DB,color:#fff
     style U fill:#0E8A16,color:#fff
 ```
+
+## コマンド体系
+
+PRコメントで使用する auto-fix 関連コマンド:
+
+| コマンド | 動作 |
+|----------|------|
+| `/review` | レビューのみ実行。auto-fix は起動しない |
+| `/fix`（新設） | レビュー実行後、`auto:fix-requested` ラベルを付与して auto-fix を起動する |
+
+**使い分け**:
+
+- 手動でレビュー結果だけ見たい場合 → `/review`
+- レビュー→自動修正ループを開始したい場合 → `/fix`
+- 自動パイプライン（claude.yml → PR作成 → レビュー）では `/fix` 相当の動作が自動で行われる
+
+**ガード条件**: `auto:failed` ラベルが付いたPRでは `/fix` を実行しても `auto:fix-requested` は付与されない（安全弁として機能）
 
 ## 自動設計フェーズ
 
@@ -236,13 +253,16 @@ flowchart TD
 
 | ラベル | 色 | 用途 | 付与タイミング |
 |--------|-----|------|--------------|
-| `auto-implement` | `#0E8A16` (緑) | 自動実装トリガー | 管理者が手動 |
-| `auto-progress` | `#0E8A16` (緑) | auto-implement パイプラインで作成されたPRのマーカー（auto-fix.yml のスコープ判定に使用） | claude.yml が PR 作成時に付与 |
-| `auto-merged` | `#1D76DB` (青) | 自動マージ済みマーカー（post-merge.yml の発火条件） | auto-fix.yml がマージ直前に付与 |
+| `auto-implement` | `#0E8A16` (緑) | 自動実装トリガー（Issue用） | 管理者が手動 |
+| `auto:pipeline` | `#0E8A16` (緑) | 自動パイプラインで作成されたPRのマーカー | claude.yml が PR 作成時に付与 |
+| `auto:fix-requested` | `#FBCA04` (黄) | auto-fix の起動トリガー | pr-review.yml が `/fix` or `auto:pipeline` 検出時に付与（`auto:failed` がない場合のみ） |
+| `auto:merged` | `#1D76DB` (青) | 自動マージ済みマーカー（post-merge.yml の発火条件） | auto-fix.yml がマージ直前に付与 |
 | `auto:failed` | `#d73a4a` (赤) | 自動処理の失敗・停止（緊急停止にも使用） | 各ワークフロー失敗時 or 管理者が手動 |
 | `auto:review-batch` | `#C2E0C6` (薄緑) | 自動マージレビューバッチIssue | post-merge.yml |
 
-**設計方針**: ラベルは最小限に抑え、Phase 2 で必要になったら追加する。自動処理の状態は GitHub Actions の実行状態で把握できるため、中間状態ラベル（`auto:in-progress` 等）は不要。`auto:failed` は失敗と緊急停止の両方をカバーする（旧 `auto:hold` の機能を統合）。ラベルなし = 自動処理対象外（旧 `skip-auto` に相当）。
+**命名規則**: `auto-implement` = Issue 側（ユーザーが手動付与）、`auto:*` = PR 側（ワークフローが自動管理）。
+
+**設計方針**: ラベルは最小限に抑え、必要になったら追加する。自動処理の状態は GitHub Actions の実行状態で把握できるため、中間状態ラベル（`auto:in-progress` 等）は不要。`auto:failed` は失敗と緊急停止の両方をカバーする。ラベルなし = 自動処理対象外。
 
 ### ラベル状態遷移
 
@@ -255,8 +275,8 @@ stateDiagram-v2
 
     PR作成 --> レビュー中: pr-review.yml
     レビュー中 --> 修正中: 指摘あり（auto-fix.yml）
-    修正中 --> レビュー中: /review 再リクエスト
-    レビュー中 --> マージ済み: 品質ゲート通過（auto-merged 付与 → develop へマージ）
+    修正中 --> レビュー中: /fix 再リクエスト（auto:fix-requested 経由）
+    レビュー中 --> マージ済み: 品質ゲート通過（auto:merged 付与 → develop へマージ）
     レビュー中 --> auto_failed: 3回超過 or 禁止パターン
 
     マージ済み --> review_issue: src/変更あり
@@ -280,7 +300,7 @@ stateDiagram-v2
 |----------|------|---------|------|
 | `claude.yml` | 既存改修 | `issues[labeled]` 追加 | `auto-implement` ラベルで自動実装開始 |
 | `pr-review.yml` | 据え置き | 変更なし | PR自動レビュー |
-| `auto-fix.yml` | 新規 | `workflow_run[completed]`（pr-review.yml） | レビュー指摘の自動修正 + マージ判定 |
+| `auto-fix.yml` | 新規 | `pull_request[labeled]`（`auto:fix-requested`） | レビュー指摘の自動修正 + マージ判定 |
 | `post-merge.yml` | 新規 | `pull_request[closed]` | マージ後の次Issue自動ピックアップ + 実行テスト通知 |
 
 ### claude.yml 改修内容
@@ -298,12 +318,14 @@ stateDiagram-v2
 
 **トリガー条件:**
 
-- イベント: `workflow_run[completed]`（pr-review.yml の完了時）
+- イベント: `pull_request[labeled]`（`auto:fix-requested` ラベル付与時）
 - 発火条件:
-  1. pr-review.yml が `completed`（成功/失敗問わず）
-  2. 対象PRに `auto:failed` ラベルが付いていない
-- 理由: pr-review.yml の全レビュアー（prt-* ツール群）がコメント投稿を完了してから auto-fix を開始するため。`issue_comment` トリガーではコメント逐次投稿による早期発火のリスクがある
-- 同時実行制御: workflow_run から対象PR番号を取得し、PR番号ごとの concurrency グループで制御（cancel-in-progress: false）
+  1. PRに `auto:fix-requested` ラベルが付与される
+  2. 起動直後にラベルを除去（ループ防止）
+- `auto:fix-requested` の付与元:
+  - pr-review.yml が `/fix` コマンド受信時に付与
+  - pr-review.yml が `pull_request[opened]` + `auto:pipeline` ラベル検出時に付与
+- 同時実行制御: PR番号ごとの concurrency グループで制御（cancel-in-progress: false）
 
 **対象レビューツール:**
 
@@ -313,18 +335,18 @@ stateDiagram-v2
 
 **処理フロー:**
 
-1. **対象PR特定**: workflow_run イベントのペイロードから、トリガー元の pr-review.yml が処理したPR番号を取得
+1. **対象PR特定**: `github.event.pull_request.number` からPR番号を直接取得
 2. **ループ回数チェック**: PR内の `github-actions[bot]` による「レビュー指摘への自動対応」コメント数をカウント。3回以上なら上限到達
 3. **レビュー結果判定（GraphQL unresolvedスレッド方式）**: GraphQL API で PR の reviewThreads を取得し、isResolved == false のスレッド数で指摘の有無を判定
 4. **禁止パターンチェック**: PRの変更ファイルを走査し、禁止パターン（`CLAUDE.md`, `.claude/settings.json`, `.env*`, `pyproject.toml` の dependencies 変更）に該当するか判定。`.github/workflows/*` は develop 向き緩和により対象外
 5. **分岐処理**:
    - ループ上限到達 + 指摘あり → `auto:failed` 付与 + PRコメントで通知
    - 禁止パターン検出 → `auto:failed` 付与 + PRコメントで通知
-   - 指摘あり + 上限未到達 → `claude-code-action` で `/check-pr` を実行し自動修正 → 対応済みスレッドを `resolveReviewThread` で resolve → `REPO_OWNER_PAT` で `/review` コメント投稿（再レビュートリガー）
+   - 指摘あり + 上限未到達 → `claude-code-action` で `/check-pr` を実行し自動修正 → 対応済みスレッドを `resolveReviewThread` で resolve → `REPO_OWNER_PAT` で `/fix` コメント投稿（再レビュー + auto-fix トリガー）
    - 指摘なし + 禁止パターンなし → マージ判定へ
 6. **マージ判定**: 4条件（レビュー指摘ゼロ、CI全通過、コンフリクトなし、`auto:failed` なし）を全て確認
-7. **自動マージ**: 条件クリアで `auto-merged` ラベルを付与した後、`gh pr merge --merge` を `REPO_OWNER_PAT` で実行
-   - `auto-merged` ラベルは post-merge.yml の発火条件
+7. **自動マージ**: 条件クリアで `auto:merged` ラベルを付与した後、`gh pr merge --merge` を `REPO_OWNER_PAT` で実行
+   - `auto:merged` ラベルは post-merge.yml の発火条件
    - ※ ラベル付与は Phase 1（auto-fix.yml）実装時に `merge-or-dryrun.sh` に追加予定
 
 **エラー時の共通挙動:**
@@ -339,7 +361,7 @@ stateDiagram-v2
 | シークレット | 用途 |
 |-------------|------|
 | `CLAUDE_CODE_OAUTH_TOKEN` | claude-code-action の認証 |
-| `REPO_OWNER_PAT` | `/review` コメント投稿（ワークフロー連鎖）+ 自動マージ実行 |
+| `REPO_OWNER_PAT` | `/fix` コメント投稿（ワークフロー連鎖）+ 自動マージ実行 |
 | `GITHUB_TOKEN` | その他のGitHub API操作（ラベル付与、PRチェック等） |
 
 ## Resolve conversation 自動化
@@ -403,7 +425,7 @@ check-pr スキル（`.claude/skills/check-pr/SKILL.md`）のステップ11（�
 
 ```
 レビュー指摘検出 → Claude が /check-pr で修正 → コミット & push
-→ 対応コメント投稿 → 対応済みスレッドを resolve → /review 再リクエスト
+→ 対応コメント投稿 → 対応済みスレッドを resolve → /fix 再リクエスト
 → 再レビュー（resolve済みスレッドは対象外）
 ```
 
@@ -676,14 +698,14 @@ GitHub Actions は `GITHUB_TOKEN` で作成したイベントでは同一リポ�
 
 ### 解決策
 
-`REPO_OWNER_PAT`（Personal Access Token）を使用して `/review` コメントを投稿する。PATで作成されたイベントは `github.actor` がPAT所有者のログイン名になるため、`pr-review.yml` の if 条件（`github.actor` によるフィルタ）を通過してワークフロー連鎖が成立する。
+`REPO_OWNER_PAT`（Personal Access Token）を使用して `/fix` コメントを投稿する。PATで作成されたイベントは `github.actor` がPAT所有者のログイン名になるため、`pr-review.yml` の if 条件（`github.actor` によるフィルタ）を通過してワークフロー連鎖が成立する。
 
 ### 必要なシークレット
 
 | シークレット名 | 用途 | スコープ |
 |---------------|------|---------|
 | `CLAUDE_CODE_OAUTH_TOKEN` | 既存。claude-code-action の認証 | — |
-| `REPO_OWNER_PAT` | 新規。ワークフロー連鎖トリガー + 自動マージ | Fine-grained PAT 推奨（詳細は下記） |
+| `REPO_OWNER_PAT` | 新規。`/fix` コメント投稿（ワークフロー連鎖）+ 自動マージ実行 | Fine-grained PAT 推奨（詳細は下記） |
 
 **REPO_OWNER_PAT の作成手順（推奨: Fine-grained PAT）:**
 
@@ -763,10 +785,10 @@ GitHub Actions の実行時間（ubuntu-latest）は無料枠（2,000分/月）�
 
 ### Phase 1
 
-- [ ] AC5: pr-review.yml の完了後（`workflow_run[completed]`）、auto-fix.yml が自動的に起動する
+- [ ] AC5: PRに `auto:fix-requested` ラベルが付与されると auto-fix.yml が起動する
 - [ ] AC6: auto-fix.yml が既存の check-pr スキルを使用してレビュー指摘に自動対応する
 - [ ] AC7: 対応済みのレビュースレッドが `resolveReviewThread` で自動的に resolve される
-- [ ] AC8: 修正後に `/review` が自動投稿され、pr-review.yml の再レビューがトリガーされる
+- [ ] AC8: 修正後に `/fix` が自動投稿され、pr-review.yml の再レビュー + auto-fix がトリガーされる
 - [ ] AC9: レビュー→修正ループが最大3回で停止し、超過時は `auto:failed` ラベルが付与される
 - [ ] AC10: レビュー指摘ゼロ・CI全通過・コンフリクトなし・auto:failedなしの4条件を全て満たす場合のみ自動マージが実行される
 - [ ] AC11: 禁止パターンに該当するファイルが変更に含まれるPRは自動マージされず `auto:failed` ラベルが付与される
@@ -777,18 +799,27 @@ GitHub Actions の実行時間（ubuntu-latest）は無料枠（2,000分/月）�
 - [ ] AC16: develop ブランチに保護ルールが設定されている（CI必須、PR必須）
 - [ ] AC17: main ブランチに保護ルールが設定されている（承認必須、手動マージのみ）
 
+### Phase 1（コマンド体系・ラベル連携）
+
+- [ ] AC18: `/review` コマンド実行時、レビューは実行されるが `auto:fix-requested` ラベルは付与されない
+- [ ] AC19: `/fix` コマンド実行時、レビュー実行後に `auto:fix-requested` ラベルがPRに付与される
+- [ ] AC20: `auto:failed` ラベルが付いたPRで `/fix` を実行した場合、`auto:fix-requested` ラベルは付与されない（ガード動作）
+- [ ] AC21: `auto:pipeline` ラベル付きPRが `pull_request[opened]` でレビューされた場合、レビュー完了後に `auto:fix-requested` ラベルが付与される
+- [ ] AC22: `auto:pipeline` ラベルなしPRが `pull_request[opened]` でレビューされた場合、`auto:fix-requested` ラベルは付与されない
+- [ ] AC23: `auto:pipeline` + `auto:failed` の両方が付いたPRでは、`auto:fix-requested` ラベルが付与されない
+
 ### Phase 1（自動設計フェーズ）
 
-- [ ] AC18: 仕様書がないIssueに `auto-implement` が付与された場合、`/doc-gen spec` で仕様書が自動生成され、停止せずそのまま実装に進む
-- [ ] AC19: Issue内容が曖昧な場合、`auto:failed` ラベルが付与され、不明点がIssueにコメントされる
-- [ ] AC20: 自動生成された仕様書がPRに含まれてコミットされる
+- [ ] AC24: 仕様書がないIssueに `auto-implement` が付与された場合、`/doc-gen spec` で仕様書が自動生成され、停止せずそのまま実装に進む
+- [ ] AC25: Issue内容が曖昧な場合、`auto:failed` ラベルが付与され、不明点がIssueにコメントされる
+- [ ] AC26: 自動生成された仕様書がPRに含まれてコミットされる
 
 ### Phase 2（post-merge.yml）
 
-- [ ] AC21: `src/` 配下の変更を含むPRがマージされた場合、`auto:review-batch` レビューIssueにチェックリストが追記される
-- [ ] AC22: `docs/` 配下のみの変更PRではレビューIssueへの追記が行われない
-- [ ] AC23: チェックリストが変更ファイルパターンからテンプレート生成される（`src/*` → Bot起動確認、`config/*` → 設定変更確認、`mcp-servers/*` → MCPサーバー起動確認、`pyproject.toml` → 依存パッケージ確認）
-- [ ] AC24: PRマージ後に post-merge.yml が次の `auto-implement` 候補Issueをピックアップし、PRコメントに投稿する（ラベルは付与しない）
+- [ ] AC27: `src/` 配下の変更を含むPRがマージされた場合、`auto:review-batch` レビューIssueにチェックリストが追記される
+- [ ] AC28: `docs/` 配下のみの変更PRではレビューIssueへの追記が行われない
+- [ ] AC29: チェックリストが変更ファイルパターンからテンプレート生成される（`src/*` → Bot起動確認、`config/*` → 設定変更確認、`mcp-servers/*` → MCPサーバー起動確認、`pyproject.toml` → 依存パッケージ確認）
+- [ ] AC30: PRマージ後に post-merge.yml が次の `auto-implement` 候補Issueをピックアップし、PRコメントに投稿する（ラベルは付与しない）
 
 ## テスト方針
 
