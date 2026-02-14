@@ -365,6 +365,16 @@ commitが成功していない状態でpushしないこと。
 **定義ファイル**: `.claude/agents/` 配下
 **仕様書**: `docs/specs/planner-agent.md`, `docs/specs/code-review-agent.md`, `docs/specs/doc-review-agent.md`, `docs/specs/test-runner-agent.md`
 
+<!-- CLI-BUG: classifyHandoffIfNeeded (anthropics/claude-code#24181) -->
+> **⚠ Task ツールの `run_in_background: true` は使用禁止**
+>
+> Claude Code CLI の既知バグにより、バックグラウンドモードで起動したサブエージェントの結果が
+> 正常に返らない（`classifyHandoffIfNeeded is not defined`）。フォアグラウンド（デフォルト）は正常。
+>
+> - サブエージェントは常にフォアグラウンド（`run_in_background` を指定しない）で起動すること
+> - 参照: [anthropics/claude-code#24181](https://github.com/anthropics/claude-code/issues/24181)
+> - **解除条件**: CLI でバグが修正されたことを確認後、このブロックと `CLI-BUG` マーカーを削除する
+
 ### PR Review Toolkit（プラグイン）
 
 Anthropic 公式の PR レビュー専門エージェント群です。既存のサブエージェントを補完し、より専門的な観点でのレビューを提供します。
