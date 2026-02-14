@@ -347,7 +347,7 @@ stateDiagram-v2
 6. **マージ判定**: 4条件（レビュー指摘ゼロ、CI全通過、コンフリクトなし、`auto:failed` なし）を全て確認
 7. **自動マージ**: 条件クリアで `auto:merged` ラベルを付与した後、`gh pr merge --merge` を `REPO_OWNER_PAT` で実行
    - `auto:merged` ラベルは post-merge.yml の発火条件
-   - ※ ラベル付与は Phase 1（auto-fix.yml）実装時に `merge-or-dryrun.sh` に追加予定
+   - `merge-or-dryrun.sh` でマージ直前に `auto:merged` ラベルを付与する
 
 **エラー時の共通挙動:**
 

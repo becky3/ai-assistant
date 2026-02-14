@@ -21,20 +21,15 @@ permissions:
   id-token: write
 
 on:
-  workflow_run:
-    workflows: ["PR Review"]
-    types: [completed]
   pull_request:
     types: [labeled]
 
 jobs:
   auto-fix:
-    # workflow_run: PR Review が success で完了した場合のみ実行（スキップ/失敗は除外）
-    # pull_request(labeled): auto-implement ラベルが付与された場合のみ実行
+    # auto:fix-requested ラベルが付与された場合のみ実行
     if: >-
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
-      (github.event_name == 'pull_request' && github.event.label.name == 'auto-implement'
-       && github.event.pull_request.head.repo.full_name == github.repository)
+      github.event.label.name == 'auto:fix-requested'
+      && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       # --- スクリプト・promptテンプレートの取得（全ステップで利用するため最初にcheckout） ---
@@ -47,17 +42,16 @@ jobs:
           sparse-checkout-cone-mode: false
           fetch-depth: 1
 
-      # labeled トリガー時: ループ防止のためラベルを即座に除去
-      - name: Remove auto-implement label (labeled trigger)
-        if: github.event_name == 'pull_request'
+      # ループ防止のためラベルを即座に除去
+      - name: Remove auto:fix-requested label
         run: |
           set -euo pipefail
           PR_NUMBER="${{ github.event.pull_request.number }}"
-          if ! ERROR_OUTPUT=$(gh pr edit "$PR_NUMBER" --remove-label "auto-implement" 2>&1); then
+          if ! ERROR_OUTPUT=$(gh pr edit "$PR_NUMBER" --remove-label "auto:fix-requested" 2>&1); then
             if echo "$ERROR_OUTPUT" | grep -qiE "(not found|no labels)"; then
-              echo "::notice::auto-implement label already removed or not found (PR #$PR_NUMBER)"
+              echo "::notice::auto:fix-requested label already removed or not found (PR #$PR_NUMBER)"
             else
-              echo "::error::Failed to remove auto-implement label (PR #$PR_NUMBER): $ERROR_OUTPUT"
+              echo "::error::Failed to remove auto:fix-requested label (PR #$PR_NUMBER): $ERROR_OUTPUT"
               exit 1
             fi
           fi
@@ -67,60 +61,24 @@ jobs:
 
       - name: Get PR number
         id: pr-info
-        run: bash "$GITHUB_WORKSPACE/.github/scripts/auto-fix/get-pr-number.sh"
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          PULL_REQUESTS_JSON: ${{ toJson(github.event.workflow_run.pull_requests) }}
-          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          PR_NUMBER_FROM_EVENT: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          if [ -z "$PR_NUMBER" ] || ! [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Invalid PR number: '$PR_NUMBER'"
+            exit 1
+          fi
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "PR number: $PR_NUMBER"
 
-      - name: Check auto-progress scope
+      # labeled トリガーのみのため、ラベル付与自体がスコープ制御
+      - name: Check scope
         if: steps.pr-info.outputs.skip != 'true'
         id: scope-check
         run: |
-          set -euo pipefail
-
-          # labeled トリガー時: ラベル付与自体がスコープ制御のためスキップ
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            echo "in_scope=true" >> $GITHUB_OUTPUT
-            echo "Labeled trigger: scope check skipped (label itself is the scope control)"
-            exit 0
-          fi
-
-          # workflow_run トリガー時: auto-progress ラベル付きのPRのみ対象
-          # auto-progress ラベルは claude.yml (auto-implement) が PR 作成時に付与する
-          # ブランチ名 claude/issue-* は @claude メンションと区別できないため使用しない
-          PR_NUMBER="${{ steps.pr-info.outputs.number }}"
-          if [ -z "$PR_NUMBER" ]; then
-            echo "in_scope=false" >> $GITHUB_OUTPUT
-            echo "::notice::PR number not available. Skipping."
-            exit 0
-          fi
-
-          if ! LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' 2>&1); then
-            # 認証/権限エラーはファイル冒頭の方針に従い即停止
-            if echo "$LABELS" | grep -qiE "(401|403|authentication failed|forbidden|resource not accessible)"; then
-              echo "::error::Authentication/permission error getting PR labels: $LABELS"
-              exit 1
-            fi
-            # それ以外の一時的エラーは予防的にスキップ
-            echo "::warning::Failed to get PR labels (transient error): $LABELS. Skipping as precaution."
-            echo "in_scope=false" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          if echo "$LABELS" | grep -q "^auto-progress$"; then
-            echo "in_scope=true" >> $GITHUB_OUTPUT
-            echo "PR #$PR_NUMBER has auto-progress label"
-          else
-            echo "in_scope=false" >> $GITHUB_OUTPUT
-            echo "::notice::PR #$PR_NUMBER does not have auto-progress label. Skipping."
-          fi
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
+          echo "in_scope=true" >> "$GITHUB_OUTPUT"
+          echo "Labeled trigger: auto:fix-requested label itself is the scope control"
 
       - name: Remove auto-implement label from linked Issue
         if: steps.pr-info.outputs.skip != 'true' && steps.scope-check.outputs.in_scope == 'true'
@@ -233,7 +191,7 @@ jobs:
           未解決の指摘が残っているため、\`auto:failed\` ラベルを付与して自動処理を停止します。
 
           **次のアクション**: 管理者が手動で指摘に対応してください。
-          対応完了後、\`auto:failed\` を除去して \`/review\` コメントを投稿すると再開できます。
+          対応完了後、\`auto:failed\` を除去して \`/fix\` コメントを投稿すると再開できます。
 
           [Actions ログ](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
         env:
@@ -288,7 +246,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.event.workflow_run.head_branch }}
+          ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Load prompt template
         if: steps.guards.outputs.proceed == 'true' && steps.guards.outputs.path == 'auto_fix'
@@ -332,7 +290,7 @@ jobs:
       # auto-fix.yml 側で無条件に全スレッドを resolve すると、未対応の指摘までクローズされるため、
       # ここでは resolve を行わない。
 
-      # /review 再リクエスト（REPO_OWNER_PAT でワークフロー連鎖）
+      # /fix 再リクエスト（REPO_OWNER_PAT でワークフロー連鎖）
       - name: Request re-review
         if: steps.guards.outputs.proceed == 'true' && steps.guards.outputs.path == 'auto_fix'
         run: |
@@ -344,10 +302,10 @@ jobs:
             exit 1
           fi
 
-          # REPO_OWNER_PAT で /review コメントを投稿（pr-review.yml の再トリガー）
+          # REPO_OWNER_PAT で /fix コメントを投稿（pr-review.yml の再トリガー + auto:fix-requested 付与）
           # NOTE: pr-review.yml の if 条件は github.actor == 'becky3' を要求する。
           # REPO_OWNER_PAT の所有者がリポジトリオーナー (becky3) である前提で動作する。
-          gh_safe gh pr comment "$PR_NUMBER" --body "/review"
+          gh_safe gh pr comment "$PR_NUMBER" --body "/fix"
         env:
           GH_TOKEN: ${{ secrets.REPO_OWNER_PAT }}
           GH_REPO: ${{ github.repository }}
@@ -387,7 +345,7 @@ jobs:
 
           ${{ steps.merge-check.outputs.reasons }}
 
-          **次のアクション**: 上記の条件を解消してから \`/review\` で再レビューを実行してください。
+          **次のアクション**: 上記の条件を解消してから \`/fix\` で再チェックを実行してください。
 
           [Actions ログ](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
         env:
@@ -414,7 +372,7 @@ jobs:
           自動修正処理中にエラーが発生しました。\`auto:failed\` ラベルを付与して自動処理を停止します。
 
           **次のアクション**: [Actions ログ]($ACTIONS_URL) を確認し、問題を解消してください。
-          対応完了後、\`auto:failed\` を除去して \`/review\` コメントを投稿すると再開できます。" 2>&1); then
+          対応完了後、\`auto:failed\` を除去して \`/fix\` コメントを投稿すると再開できます。" 2>&1); then
               echo "::error::Failed to post error comment: $COMMENT_ERR"
             fi
           fi
@@ -438,14 +396,6 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
-# concurrency 制御
-# workflow_run: ブランチ名ベース（PR番号が事前に不明なため）
-# pull_request: PR番号ベース（直接取得可能）
 concurrency:
-  group: >-
-    auto-fix-${{
-      github.event_name == 'pull_request'
-      && format('pr-{0}', github.event.pull_request.number)
-      || github.event.workflow_run.head_branch
-    }}
+  group: auto-fix-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: false

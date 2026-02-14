@@ -33,6 +33,10 @@ fi
 
 if [ "$AUTO_MERGE_LOWER" = "true" ]; then
   echo "AUTO_MERGE_ENABLED=true: Executing merge"
+
+  # マージ前に auto:merged ラベルを付与（post-merge.yml の発火条件）
+  gh_best_effort gh pr edit "$PR_NUMBER" --add-label "auto:merged" || true
+
   if ! MERGE_ERR=$(gh pr merge "$PR_NUMBER" --merge 2>&1); then
     echo "::error::Merge failed: $MERGE_ERR"
     # マージ失敗時: auto:failed ラベル付与 + PRコメント（事後処理はベストエフォート）
