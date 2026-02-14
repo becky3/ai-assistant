@@ -101,18 +101,42 @@ class OgpExtractor:
 
     async def _fetch_og_image(self, url: str) -> str | None:
         """記事URLにアクセスしてog:imageメタタグを抽出する."""
-        async with aiohttp.ClientSession(timeout=self._timeout) as session:
-            async with session.get(url, allow_redirects=False) as resp:
-                if resp.status in (301, 302, 303, 307, 308):
-                    logger.warning(
-                        "Redirect detected (SSRF protection): %s -> %s",
-                        url,
-                        resp.headers.get("Location", "unknown"),
-                    )
-                    return None
-                if resp.status != 200:
-                    return None
-                html = await resp.text(errors="replace")
+        try:
+            async with aiohttp.ClientSession(timeout=self._timeout) as session:
+                async with session.get(url, allow_redirects=False) as resp:
+                    if resp.status in (301, 302, 303, 307, 308):
+                        logger.warning(
+                            "Redirect detected (SSRF protection): %s -> %s",
+                            url,
+                            resp.headers.get("Location", "unknown"),
+                        )
+                        return None
+                    if resp.status != 200:
+                        return None
+                    html = await resp.text(errors="replace")
+        except aiohttp.ClientError as e:
+            logger.warning(
+                "Network error while fetching OG image from %s: %s",
+                url,
+                e,
+                exc_info=True,
+            )
+            return None
+        except TimeoutError:
+            logger.warning(
+                "Timeout while fetching OG image from %s (timeout=%s)",
+                url,
+                self._timeout,
+            )
+            return None
+        except Exception as e:
+            logger.error(
+                "Unexpected error while fetching OG image from %s: %s",
+                url,
+                e,
+                exc_info=True,
+            )
+            return None
 
         # <head> 部分のみ検索（パフォーマンス最適化）
         head_end = html.lower().find("</head>")

@@ -128,36 +128,131 @@ async def test_ac10_returns_none_on_non_200() -> None:
     assert result is None
 
 
+@pytest.mark.parametrize("status", [301, 302, 303, 307, 308])
 async def test_ac10_returns_none_on_redirect_ssrf_protection(
+    status: int,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """AC10: リダイレクト応答時はSSRF対策としてNoneを返しwarningログを出す."""
     extractor = OgpExtractor()
 
-    for status in (301, 302, 303, 307, 308):
-        mock_resp = AsyncMock()
-        mock_resp.status = status
-        mock_resp.headers = {"Location": "http://internal.local/secret"}
-        mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
-        mock_resp.__aexit__ = AsyncMock(return_value=False)
+    mock_resp = AsyncMock()
+    mock_resp.status = status
+    mock_resp.headers = {"Location": "http://internal.local/secret"}
+    mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_resp.__aexit__ = AsyncMock(return_value=False)
 
-        mock_session = AsyncMock()
-        mock_session.get = MagicMock(return_value=mock_resp)
-        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_session.__aexit__ = AsyncMock(return_value=False)
+    mock_session = AsyncMock()
+    mock_session.get = MagicMock(return_value=mock_resp)
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=False)
 
-        with (
-            patch(
-                "src.services.ogp_extractor.aiohttp.ClientSession",
-                return_value=mock_session,
-            ),
-            caplog.at_level(logging.WARNING),
-        ):
-            caplog.clear()
-            result = await extractor.extract_image_url(
-                "https://example.com/article"
-            )
+    with (
+        patch(
+            "src.services.ogp_extractor.aiohttp.ClientSession",
+            return_value=mock_session,
+        ),
+        caplog.at_level(logging.WARNING),
+    ):
+        result = await extractor.extract_image_url(
+            "https://example.com/article"
+        )
 
-        assert result is None, f"Expected None for redirect status {status}"
-        assert "Redirect detected (SSRF protection)" in caplog.text
-        assert "http://internal.local/secret" in caplog.text
+    assert result is None
+    # allow_redirects=False が渡されることを検証
+    mock_session.get.assert_called_once_with(
+        "https://example.com/article",
+        allow_redirects=False,
+    )
+    # ログフォーマットの正確性を検証
+    assert "https://example.com/article -> http://internal.local/secret" in caplog.text
+
+
+async def test_ac10_redirect_without_location_header(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """AC10: Locationヘッダーが存在しないリダイレクト応答でもNoneを返す."""
+    extractor = OgpExtractor()
+
+    mock_resp = AsyncMock()
+    mock_resp.status = 302
+    mock_resp.headers = {}  # Locationヘッダーなし
+    mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_resp.__aexit__ = AsyncMock(return_value=False)
+
+    mock_session = AsyncMock()
+    mock_session.get = MagicMock(return_value=mock_resp)
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=False)
+
+    with (
+        patch(
+            "src.services.ogp_extractor.aiohttp.ClientSession",
+            return_value=mock_session,
+        ),
+        caplog.at_level(logging.WARNING),
+    ):
+        result = await extractor.extract_image_url(
+            "https://example.com/article"
+        )
+
+    assert result is None
+    # ログに "unknown" が含まれることを検証
+    assert "unknown" in caplog.text
+    assert "Redirect detected (SSRF protection)" in caplog.text
+
+
+async def test_ac10_handles_network_errors(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """AC10: ネットワークエラー時はwarningログを出してNoneを返す."""
+    import aiohttp
+
+    extractor = OgpExtractor()
+
+    # _fetch_og_imageを直接呼ぶことで内部のエラーハンドリングをテスト
+    mock_session = AsyncMock()
+    mock_session.get = MagicMock(
+        side_effect=aiohttp.ClientError("Connection refused")
+    )
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=False)
+
+    with (
+        patch(
+            "src.services.ogp_extractor.aiohttp.ClientSession",
+            return_value=mock_session,
+        ),
+        caplog.at_level(logging.WARNING),
+    ):
+        result = await extractor._fetch_og_image("https://example.com/article")
+
+    assert result is None
+    assert "Network error while fetching OG image" in caplog.text
+    assert "https://example.com/article" in caplog.text
+
+
+async def test_ac10_handles_timeout_errors(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """AC10: タイムアウトエラー時はwarningログを出してNoneを返す."""
+    extractor = OgpExtractor()
+
+    # _fetch_og_imageを直接呼ぶことで内部のエラーハンドリングをテスト
+    mock_session = AsyncMock()
+    mock_session.get = MagicMock(side_effect=TimeoutError("Request timeout"))
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=False)
+
+    with (
+        patch(
+            "src.services.ogp_extractor.aiohttp.ClientSession",
+            return_value=mock_session,
+        ),
+        caplog.at_level(logging.WARNING),
+    ):
+        result = await extractor._fetch_og_image("https://example.com/article")
+
+    assert result is None
+    assert "Timeout while fetching OG image" in caplog.text
+    assert "https://example.com/article" in caplog.text
