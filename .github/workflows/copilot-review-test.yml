@@ -1,0 +1,101 @@
+# Copilot Review Event Test — 検証用ワークフロー（検証後に削除）
+#
+# 検証項目:
+#   1. pull_request_review[submitted] で Copilot レビュー完了を検知できるか
+#   2. reviewer の判別ができるか
+#   3. unresolved threads をカウントできるか
+#
+# 関連: Issue #351
+
+name: Copilot Review Test
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  copilot-review-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log review event
+        run: |
+          echo "=== Review Event Info ==="
+          echo "Reviewer: ${{ github.event.review.user.login }}"
+          echo "Review state: ${{ github.event.review.state }}"
+          echo "Review ID: ${{ github.event.review.id }}"
+          echo "PR number: ${{ github.event.pull_request.number }}"
+          echo "Event action: ${{ github.event.action }}"
+          echo ""
+          echo "=== Review Body (first 500 chars) ==="
+          echo "${{ github.event.review.body }}" | head -c 500
+          echo ""
+
+      - name: Check if Copilot review
+        id: check-copilot
+        run: |
+          REVIEWER="${{ github.event.review.user.login }}"
+          echo "Reviewer login: $REVIEWER"
+
+          if [ "$REVIEWER" = "copilot-pull-request-reviewer[bot]" ]; then
+            echo "is_copilot=true" >> "$GITHUB_OUTPUT"
+            echo "✅ This is a Copilot review"
+          else
+            echo "is_copilot=false" >> "$GITHUB_OUTPUT"
+            echo "ℹ️ This is NOT a Copilot review (reviewer: $REVIEWER)"
+          fi
+
+      - name: Count unresolved threads
+        if: steps.check-copilot.outputs.is_copilot == 'true'
+        run: |
+          set -euo pipefail
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          REPO_OWNER="${{ github.repository_owner }}"
+          REPO_NAME="${{ github.event.repository.name }}"
+
+          echo "=== Querying unresolved review threads ==="
+
+          # GraphQL で unresolved threads をカウント（check-review-result.sh と同じロジック）
+          # shellcheck disable=SC2016
+          UNRESOLVED_COUNT=$(gh api graphql -f query='
+            query($owner: String!, $name: String!, $number: Int!) {
+              repository(owner: $owner, name: $name) {
+                pullRequest(number: $number) {
+                  reviewThreads(first: 100) {
+                    nodes {
+                      isResolved
+                    }
+                  }
+                }
+              }
+            }
+          ' -f owner="$REPO_OWNER" -f name="$REPO_NAME" -F number="$PR_NUMBER" \
+            --jq '[$.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)] | length')
+
+          echo "Unresolved threads: $UNRESOLVED_COUNT"
+
+          if [ "$UNRESOLVED_COUNT" -eq 0 ]; then
+            echo "✅ No unresolved threads → merge path"
+          else
+            echo "⚠️ $UNRESOLVED_COUNT unresolved thread(s) → auto-fix path"
+          fi
+
+      - name: Count Copilot inline comments
+        if: steps.check-copilot.outputs.is_copilot == 'true'
+        run: |
+          set -euo pipefail
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+
+          echo "=== Copilot inline comments ==="
+
+          COPILOT_COMMENTS=$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER/comments" \
+            --jq '[.[] | select(.user.login == "copilot-pull-request-reviewer[bot]")] | length')
+
+          echo "Copilot inline comments: $COPILOT_COMMENTS"
+
+          # レビュー本文も確認
+          echo ""
+          echo "=== Copilot review body ==="
+          gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER/reviews" \
+            --jq '.[] | select(.user.login == "copilot-pull-request-reviewer[bot]") | .body' | tail -1
+        env:
+          GH_TOKEN: ${{ github.token }}
