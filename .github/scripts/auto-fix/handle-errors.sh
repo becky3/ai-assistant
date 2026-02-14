@@ -46,7 +46,7 @@ ERROR_COMMENT="## auto-fix: エラー発生
 自動修正処理中にエラーが発生しました。\`auto:failed\` ラベルを付与して自動処理を停止します。
 
 **次のアクション**: [Actions ログ]($ACTIONS_URL) を確認し、問題を解消してください。
-対応完了後、\`auto:failed\` を除去して \`/fix\` コメントを投稿すると再開できます。"
+対応完了後、\`auto:failed\` を除去し、Copilot に再レビューをリクエストすると再開できます。"
 
 if [ "$SOURCED" = true ]; then
   if ! gh_best_effort gh issue edit "$PR_NUMBER" --add-label "auto:failed"; then

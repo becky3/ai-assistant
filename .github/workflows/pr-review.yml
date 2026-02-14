@@ -6,6 +6,7 @@ permissions:
   issues: write
   id-token: write
 
+# 通常PRは PRKit でレビュー。auto:pipeline ラベル付きPRは copilot-auto-fix.yml に委譲。
 on:
   pull_request:
     types: [opened]
@@ -53,6 +54,22 @@ jobs:
             exit 1
           fi
           echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
+
+      # auto:pipeline ラベル付きPRは copilot-auto-fix.yml がレビューするためスキップ
+      - name: Skip if auto:pipeline
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          PR_NUMBER="${{ steps.pr-number.outputs.number }}"
+          if ! LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' 2>&1); then
+            echo "::warning::Failed to check labels for PR #$PR_NUMBER: $LABELS. Continuing with review."
+          elif echo "$LABELS" | grep -q "^auto:pipeline$"; then
+            echo "::notice::PR #$PR_NUMBER has auto:pipeline label. Skipping PRKit review (handled by copilot-auto-fix.yml)."
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
 
       - name: Get base branch
         id: base
