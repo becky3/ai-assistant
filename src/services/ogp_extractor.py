@@ -102,7 +102,15 @@ class OgpExtractor:
     async def _fetch_og_image(self, url: str) -> str | None:
         """記事URLにアクセスしてog:imageメタタグを抽出する."""
         async with aiohttp.ClientSession(timeout=self._timeout) as session:
-            async with session.get(url) as resp:
+            async with session.get(url, allow_redirects=False) as resp:
+                # SSRF対策: リダイレクト応答の場合はログを出してNoneを返す
+                if resp.status in (301, 302, 303, 307, 308):
+                    logger.warning(
+                        "Redirect detected (SSRF protection): %s -> %s",
+                        url,
+                        resp.headers.get("Location", "unknown"),
+                    )
+                    return None
                 if resp.status != 200:
                     return None
                 html = await resp.text(errors="replace")

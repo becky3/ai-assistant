@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from src.services.ogp_extractor import OgpExtractor
 
@@ -123,3 +126,74 @@ async def test_ac10_returns_none_on_non_200() -> None:
         result = await extractor.extract_image_url("https://example.com/article")
 
     assert result is None
+
+
+@pytest.mark.parametrize("status_code", [301, 302, 303, 307, 308])
+async def test_ac10_ssrf_redirect_returns_none(status_code: int) -> None:
+    """AC10: リダイレクト応答(SSRF対策)でNoneを返す."""
+    extractor = OgpExtractor()
+
+    mock_resp = AsyncMock()
+    mock_resp.status = status_code
+    mock_resp.headers = {"Location": "http://internal-server/secret"}
+    mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_resp.__aexit__ = AsyncMock(return_value=False)
+
+    mock_session = AsyncMock()
+    mock_session.get = MagicMock(return_value=mock_resp)
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("src.services.ogp_extractor.aiohttp.ClientSession", return_value=mock_session):
+        result = await extractor.extract_image_url("https://example.com/article")
+
+    assert result is None
+
+
+async def test_ac10_ssrf_redirect_logs_warning(caplog: pytest.LogCaptureFixture) -> None:
+    """AC10: リダイレクト検出時にwarningログを出力する."""
+    extractor = OgpExtractor()
+
+    mock_resp = AsyncMock()
+    mock_resp.status = 302
+    mock_resp.headers = {"Location": "http://192.168.1.1/internal"}
+    mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_resp.__aexit__ = AsyncMock(return_value=False)
+
+    mock_session = AsyncMock()
+    mock_session.get = MagicMock(return_value=mock_resp)
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=False)
+
+    with (
+        patch("src.services.ogp_extractor.aiohttp.ClientSession", return_value=mock_session),
+        caplog.at_level(logging.WARNING),
+    ):
+        result = await extractor.extract_image_url("https://example.com/article")
+
+    assert result is None
+    assert "Redirect detected (SSRF protection)" in caplog.text
+    assert "http://192.168.1.1/internal" in caplog.text
+
+
+async def test_ac10_ssrf_allow_redirects_false() -> None:
+    """AC10: session.get()にallow_redirects=Falseが渡される."""
+    extractor = OgpExtractor()
+
+    mock_resp = AsyncMock()
+    mock_resp.status = 200
+    mock_resp.text = AsyncMock(return_value="<html><head></head></html>")
+    mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_resp.__aexit__ = AsyncMock(return_value=False)
+
+    mock_session = AsyncMock()
+    mock_session.get = MagicMock(return_value=mock_resp)
+    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_session.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("src.services.ogp_extractor.aiohttp.ClientSession", return_value=mock_session):
+        await extractor.extract_image_url("https://example.com/article")
+
+    mock_session.get.assert_called_once_with(
+        "https://example.com/article", allow_redirects=False
+    )
