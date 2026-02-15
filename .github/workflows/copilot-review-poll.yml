@@ -43,7 +43,7 @@ jobs:
 
           # auto/ ブランチプレフィックスでフィルタし、
           # auto:copilot-reviewed / auto:failed ラベル付きをスキップ
-          FILTERED=$(echo "$PRS" | jq -c '
+          if ! FILTERED=$(echo "$PRS" | jq -c '
             [.[] |
               select(.headRefName | startswith("auto/")) |
               select(
@@ -51,9 +51,19 @@ jobs:
                 and (.labels | map(.name) | index("auto:failed")) == null
               )
             ]
-          ')
+          ' 2>&1); then
+            echo "::warning::Failed to filter PR list: $FILTERED"
+            exit 0
+          fi
 
-          COUNT=$(echo "$FILTERED" | jq 'length')
+          if ! COUNT=$(echo "$FILTERED" | jq 'length' 2>&1); then
+            echo "::warning::Failed to count PRs: $COUNT"
+            exit 0
+          fi
+          if ! [[ "$COUNT" =~ ^[0-9]+$ ]]; then
+            echo "::warning::Invalid PR count: $COUNT"
+            exit 0
+          fi
           echo "Found $COUNT auto/ PRs to check"
 
           if [ "$COUNT" -eq 0 ]; then
@@ -61,24 +71,35 @@ jobs:
             exit 0
           fi
 
-          echo "$FILTERED" | jq -c '.[]' | while read -r PR; do
+          # jq でループ対象を事前展開し、パイプのサブシェル問題を回避
+          PR_ITEMS=$(echo "$FILTERED" | jq -c '.[]') || {
+            echo "::warning::Failed to iterate PR list"
+            exit 0
+          }
+
+          while IFS= read -r PR; do
+            [ -z "$PR" ] && continue
             PR_NUMBER=$(echo "$PR" | jq -r '.number')
             BRANCH=$(echo "$PR" | jq -r '.headRefName')
             echo "---"
             echo "Checking PR #$PR_NUMBER ($BRANCH)..."
 
             # Copilot レビューを検索（state != "PENDING" で完了判定）
+            # DISMISSED も含む（copilot-auto-fix.yml が unresolved threads で最終判断するため）
             REVIEWS=$(gh api "repos/${GH_REPO}/pulls/$PR_NUMBER/reviews" 2>&1) || {
               echo "::warning::Failed to fetch reviews for PR #$PR_NUMBER: $REVIEWS"
               continue
             }
 
-            COPILOT_REVIEW_COUNT=$(echo "$REVIEWS" | jq '
+            if ! COPILOT_REVIEW_COUNT=$(echo "$REVIEWS" | jq '
               [.[] |
                 select(.user.login == "copilot-pull-request-reviewer[bot]") |
                 select(.state != "PENDING")
               ] | length
-            ')
+            ' 2>&1); then
+              echo "::warning::Failed to parse reviews for PR #$PR_NUMBER: $COPILOT_REVIEW_COUNT"
+              continue
+            fi
 
             if [ "$COPILOT_REVIEW_COUNT" -gt 0 ]; then
               echo "Copilot review detected on PR #$PR_NUMBER ($COPILOT_REVIEW_COUNT reviews). Adding label..."
@@ -90,6 +111,6 @@ jobs:
             else
               echo "No completed Copilot review on PR #$PR_NUMBER yet."
             fi
-          done
+          done <<< "$PR_ITEMS"
 
           echo "Poll complete."

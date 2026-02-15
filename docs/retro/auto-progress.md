@@ -526,7 +526,7 @@ GitHub の内部イベント発火に依存しない、**観測可能な事実�
 
 #### 1. 過去の経験値が調査を加速させた
 
-#357（レースコンディション）と #360（branch_prefix 方式）で「GitHub のイベント発火の仕組み」「`GITHUB_TOKEN` vs `REPO_OWNER_PAT` のトレードオフ」「ラベル vs ブランチプレフィックスの堅牢性」を深く理解していたため、今回の問題の切り分けと代替案の評価が迅速に進んだ。特に:
+Issue #357（レースコンディション）と #360（branch_prefix 方式）で「GitHub のイベント発火の仕組み」「`GITHUB_TOKEN` vs `REPO_OWNER_PAT` のトレードオフ」「ラベル vs ブランチプレフィックスの堅牢性」を深く理解していたため、今回の問題の切り分けと代替案の評価が迅速に進んだ。特に:
 
 - `GITHUB_TOKEN` でラベルを付与すると `labeled` イベントが発火しないことを既に知っていた → PAT 必須の判断が即座にできた
 - ラベルトリガー方式の実装パターン（`pull_request[labeled]` + `github.event.label.name` 判定）が #360 で検証済みだった
@@ -543,7 +543,9 @@ GitHub の内部イベント発火に依存しない、**観測可能な事実�
 
 #### 1. `pull_request_review[submitted]` への過信
 
-Phase 3（#353）で copilot-auto-fix.yml を実装した際、`pull_request_review[submitted]` が Copilot のレビューで確実に発火すると想定していた。PR #352 の検証では Events API にイベントが記録されることを確認したが、**workflow run が生成されるかどうか**は別問題だった。イベントの存在と workflow run の生成は同一ではない。
+Phase 3（#353）で copilot-auto-fix.yml を実装した際、`pull_request_review[submitted]` が Copilot のレビューで確実に発火すると想定していた。
+PR #352 の検証では Events API にイベントが記録されることを確認したが、**workflow run が生成されるかどうか**は別問題だった。
+イベントの存在と workflow run の生成は同一ではない。
 
 **教訓**: 外部サービス（GitHub の内部ワークフロー）の挙動に依存するトリガーは、実際のパイプラインで E2E テストするまで信頼しない。Events API での確認だけでは不十分。
 
@@ -566,4 +568,7 @@ Phase 3（#353）で copilot-auto-fix.yml を実装した際、`pull_request_rev
 ## 参考
 
 - 仕様書: [docs/specs/auto-progress.md](../specs/auto-progress.md)
-- 関連Issue: #253（仕様策定）, #256（Phase 0 実装）, #257（Phase 1 実装）, #266（品質チェックスキル）, #288（Phase 1 残課題対応）, #310（Phase 2: post-merge.yml）, #313（既存スクリプト shellcheck 修正）, #357（ワークフロー修正）, #360（レースコンディション設計見直し）, #365（copilot-auto-fix.yml トリガー問題）
+- 関連Issue:
+  #253（仕様策定）, #256（Phase 0 実装）, #257（Phase 1 実装）, #266（品質チェックスキル）,
+  #288（Phase 1 残課題対応）, #310（Phase 2: post-merge.yml）, #313（既存スクリプト shellcheck 修正）,
+  #357（ワークフロー修正）, #360（レースコンディション設計見直し）, #365（copilot-auto-fix.yml トリガー問題）
