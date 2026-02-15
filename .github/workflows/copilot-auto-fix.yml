@@ -316,6 +316,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ steps.pr-info.outputs.number }}
+          EXCLUDE_CHECK: "copilot-auto-fix"
 
       - name: Merge or dry-run
         if: steps.merge-check.outputs.merge_ready == 'true'
