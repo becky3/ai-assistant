@@ -1,0 +1,95 @@
+# Copilot Review Poll — Copilot レビュー完了を検知してラベル付与
+#
+# 背景: copilot-auto-fix.yml の pull_request_review[submitted] トリガーが、
+#   Copilot の内部 dynamic ワークフロー実行中に発火しない問題 (Issue #365) の回避策。
+# 方式: schedule ポーリングで auto/ ブランチの open PR を監視し、
+#   Copilot レビュー完了を検知したら auto:copilot-reviewed ラベルを付与する。
+#   このラベルにより copilot-auto-fix.yml (pull_request[labeled]) がトリガーされる。
+#
+# 設計書: docs/specs/copilot-auto-fix.md
+# 関連: docs/specs/auto-progress.md
+
+name: Copilot Review Poll
+
+on:
+  schedule:
+    - cron: '*/3 * * * *'
+  workflow_dispatch:
+
+permissions:
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: copilot-review-poll
+  cancel-in-progress: true
+
+jobs:
+  poll-copilot-reviews:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for Copilot reviews on auto/ PRs
+        env:
+          GH_TOKEN: ${{ secrets.REPO_OWNER_PAT }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          echo "Fetching open PRs..."
+          PRS=$(gh pr list --state open --json number,headRefName,labels 2>&1) || {
+            echo "::warning::Failed to fetch PR list: $PRS"
+            exit 0
+          }
+
+          # auto/ ブランチプレフィックスでフィルタし、
+          # auto:copilot-reviewed / auto:failed ラベル付きをスキップ
+          FILTERED=$(echo "$PRS" | jq -c '
+            [.[] |
+              select(.headRefName | startswith("auto/")) |
+              select(
+                (.labels | map(.name) | index("auto:copilot-reviewed")) == null
+                and (.labels | map(.name) | index("auto:failed")) == null
+              )
+            ]
+          ')
+
+          COUNT=$(echo "$FILTERED" | jq 'length')
+          echo "Found $COUNT auto/ PRs to check"
+
+          if [ "$COUNT" -eq 0 ]; then
+            echo "No PRs to check. Exiting."
+            exit 0
+          fi
+
+          echo "$FILTERED" | jq -c '.[]' | while read -r PR; do
+            PR_NUMBER=$(echo "$PR" | jq -r '.number')
+            BRANCH=$(echo "$PR" | jq -r '.headRefName')
+            echo "---"
+            echo "Checking PR #$PR_NUMBER ($BRANCH)..."
+
+            # Copilot レビューを検索（state != "PENDING" で完了判定）
+            REVIEWS=$(gh api "repos/${GH_REPO}/pulls/$PR_NUMBER/reviews" 2>&1) || {
+              echo "::warning::Failed to fetch reviews for PR #$PR_NUMBER: $REVIEWS"
+              continue
+            }
+
+            COPILOT_REVIEW_COUNT=$(echo "$REVIEWS" | jq '
+              [.[] |
+                select(.user.login == "copilot-pull-request-reviewer[bot]") |
+                select(.state != "PENDING")
+              ] | length
+            ')
+
+            if [ "$COPILOT_REVIEW_COUNT" -gt 0 ]; then
+              echo "Copilot review detected on PR #$PR_NUMBER ($COPILOT_REVIEW_COUNT reviews). Adding label..."
+              if ! LABEL_RESULT=$(gh issue edit "$PR_NUMBER" --add-label "auto:copilot-reviewed" 2>&1); then
+                echo "::warning::Failed to add label to PR #$PR_NUMBER: $LABEL_RESULT"
+                continue
+              fi
+              echo "Label added to PR #$PR_NUMBER"
+            else
+              echo "No completed Copilot review on PR #$PR_NUMBER yet."
+            fi
+          done
+
+          echo "Poll complete."

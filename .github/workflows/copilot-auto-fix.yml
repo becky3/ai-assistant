@@ -4,7 +4,10 @@
 # スクリプト: .github/scripts/auto-fix/（既存スクリプト流用）
 # 設計書: docs/specs/copilot-auto-fix.md
 #
-# トリガー: Copilot のレビュー完了（pull_request_review[submitted]）
+# トリガー: auto:copilot-reviewed ラベル付与（pull_request[labeled]）
+# ラベルは copilot-review-poll.yml（schedule ワークフロー）が Copilot レビュー検知時に付与する。
+# 元の pull_request_review[submitted] トリガーは Copilot の内部 dynamic ワークフロー実行中に
+# 発火しない問題 (Issue #365) があるため、ラベルトリガー方式に変更した。
 # 再レビューループなし: 単方向フロー（レビュー → 修正 → マージ）
 #
 # エラーハンドリング方針:
@@ -22,17 +25,16 @@ permissions:
   id-token: write
 
 on:
-  pull_request_review:
-    types: [submitted]
+  pull_request:
+    types: [labeled]
 
 jobs:
   copilot-auto-fix:
-    # Copilot のレビュー完了時のみ実行（フォーク PR は除外）
-    # reviewer 名は取得元で異なる（イベント: "Copilot", REST API: "copilot-pull-request-reviewer[bot]"）
+    # auto:copilot-reviewed ラベル付与時のみ実行（フォーク PR は除外）
+    # ラベルは copilot-review-poll.yml が Copilot レビュー検知時に REPO_OWNER_PAT で付与する
     # auto/ ブランチプレフィックスで自動パイプライン由来のPRに限定（Actions分数節約）
     if: >-
-      (github.event.review.user.login == 'Copilot'
-       || github.event.review.user.login == 'copilot-pull-request-reviewer[bot]')
+      github.event.label.name == 'auto:copilot-reviewed'
       && github.event.pull_request.head.repo.full_name == github.repository
       && startsWith(github.event.pull_request.head.ref, 'auto/')
     runs-on: ubuntu-latest
@@ -192,9 +194,6 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          # Copilot のレビュー完了（pull_request_review[submitted]）でトリガーされるため
-          # github.actor が Copilot になる。デフォルトでは bot はブロックされるため明示許可。
-          allowed_bots: "Copilot"
           bot_name: "claude[bot]"
           bot_id: "209825114"
           claude_args: "--model claude-sonnet-4-5-20250929 --max-turns 100 --dangerously-skip-permissions"
