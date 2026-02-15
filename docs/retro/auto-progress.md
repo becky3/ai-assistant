@@ -481,7 +481,89 @@ mixed-genius チームで根本設計を見直した。
 
 5. **パラメータ変更時は参照箇所を網羅的に確認する**: `branch_prefix` 変更時にPR検索パターン（`startswith("claude/issue-...")`）の更新が漏れかけた。コードレビューで検出。パラメータの値を変更したら、その値を参照している全箇所を grep で洗い出す
 
+## copilot-auto-fix.yml トリガー問題の修正（Issue #365）
+
+### 何が起きたか
+
+`copilot-auto-fix.yml` の `pull_request_review[submitted]` トリガーが、Copilot の内部 `dynamic` ワークフロー実行中にレビューが投稿された場合に発火しない問題が判明した。
+
+**発覚の経緯**:
+
+- PR #354, #356 で copilot-auto-fix.yml が動作しないケースが発生
+- Events API には `PullRequestReviewEvent` が記録されている（イベント自体は発火する）のに、workflow run が生成されない
+- PR #356 で動いたケースは PRKit のレビューイベント（`REPO_OWNER_PAT` 経由）が生成した run と推定
+
+**根本原因**: GitHub の内部 `dynamic` ワークフロー（Copilot がレビューを実行する際に使用）の実行中に投稿されたレビューでは、`pull_request_review[submitted]` の workflow run が生成されない。GitHub の内部動作であり、こちらからは制御不可能。
+
+### 却下された代替案
+
+| 案 | 却下理由 |
+|----|---------|
+| `claude.yml` 内ポーリング | Copilot レビュー中 + 待機で Actions 時間二重消費 |
+| `sleep` 定期チェック | sleep 中もランナー確保で Actions 時間消費 |
+| `check_suite[completed]` | GitHub Actions 生成分は明示的に除外（公式ドキュメント） |
+| `workflow_run[completed]` | 内部 `dynamic` ワークフローを `workflows:` で指定する方法がない |
+| `pull_request_review[submitted]` 維持 | 元の問題そのもの |
+
+全て公式ドキュメントか実データで裏取りし、消去法で却下した。
+
+### 確定した解決策: schedule ポーリング + ラベルトリガー
+
+GitHub の内部イベント発火に依存しない、**観測可能な事実のみに基づく方式**に変更した。
+
+1. `copilot-review-poll.yml`（schedule: 3分おき）が REST API で Copilot レビューの存在を直接確認
+2. 完了検知 → `auto:copilot-reviewed` ラベルを `REPO_OWNER_PAT` で付与
+3. `copilot-auto-fix.yml` のトリガーを `pull_request[labeled]` に変更
+
+**設計のポイント**:
+
+- Copilot の内部動作に一切依存しない。API で「レビューが存在するか」という事実だけを見る
+- `REPO_OWNER_PAT` でラベル付与することで `GITHUB_TOKEN` のワークフロー連鎖抑制を回避
+- 対象 PR がない場合は早期 exit するため、Actions 分数の消費は最小限
+- エラーは warning でログして continue（次の 3 分で再試行される）
+
+### うまくいったこと
+
+#### 1. 過去の経験値が調査を加速させた
+
+#357（レースコンディション）と #360（branch_prefix 方式）で「GitHub のイベント発火の仕組み」「`GITHUB_TOKEN` vs `REPO_OWNER_PAT` のトレードオフ」「ラベル vs ブランチプレフィックスの堅牢性」を深く理解していたため、今回の問題の切り分けと代替案の評価が迅速に進んだ。特に:
+
+- `GITHUB_TOKEN` でラベルを付与すると `labeled` イベントが発火しないことを既に知っていた → PAT 必須の判断が即座にできた
+- ラベルトリガー方式の実装パターン（`pull_request[labeled]` + `github.event.label.name` 判定）が #360 で検証済みだった
+
+#### 2. 消去法による堅実な設計
+
+5つの代替案を全て公式ドキュメントか実データで検証・却下し、残った schedule ポーリング方式を採用した。「推測で判断しない」（CLAUDE.md の裏付け義務）が機能した形。
+
+#### 3. 地味だが壊れにくい方式を選べた
+
+「GitHub のイベント発火に依存する」（エレガントだが壊れやすい）ではなく、「REST API で定期的にポーリングする」（地味だが堅牢）を選んだ。デバッグしやすさ（Actions ログで「どの PR を見て」「何を検知したか」が全部出る）も利点。
+
+### ハマったこと・改善点
+
+#### 1. `pull_request_review[submitted]` への過信
+
+Phase 3（#353）で copilot-auto-fix.yml を実装した際、`pull_request_review[submitted]` が Copilot のレビューで確実に発火すると想定していた。PR #352 の検証では Events API にイベントが記録されることを確認したが、**workflow run が生成されるかどうか**は別問題だった。イベントの存在と workflow run の生成は同一ではない。
+
+**教訓**: 外部サービス（GitHub の内部ワークフロー）の挙動に依存するトリガーは、実際のパイプラインで E2E テストするまで信頼しない。Events API での確認だけでは不十分。
+
+#### 2. 問題の再現に時間がかかった
+
+「動くこともある」（PR #356）状態だったため、問題の特定に複数セッションを要した。PR #356 で動いた原因の推定（PRKit のレビューイベント経由）が正しいかどうかも、完全には確認できていない。
+
+**教訓**: 間欠的に発生する問題は、再現条件の特定に固執するより、再現しない状況でも動作する方式に切り替える方が効率的なことがある。
+
+### 次に活かすこと
+
+1. **GitHub のイベント発火と workflow run 生成は別物**: イベントが Events API に記録されていても、workflow run が生成されるとは限らない。特にGitHub の内部ワークフロー（Copilot、Dependabot 等）が関与するケースでは、自分で制御できない抑制が入る可能性がある
+
+2. **外部サービスの挙動に依存しない設計を優先する**: 「イベントが発火するはず」ではなく「API で状態を直接確認する」方式の方が堅牢。コストとのトレードオフがあるが、schedule ポーリングのコストは対象 PR がなければほぼゼロ
+
+3. **間欠的な問題には再現条件の特定より代替方式の検討**: 「なぜ動かないのか」の完全な解明に固執するより、「動かない状況でも動く方式」への切り替えが実用的。原因の仮説は記録しておき、将来 GitHub が仕様を公開した際に答え合わせする
+
+4. **過去の経験値はパイプライン設計で確実に効く**: #357 → #360 → #365 と、GitHub Actions のイベント・トークン・ワークフロー連鎖の知識が積み上がり、各回の調査・設計が加速した。この領域の知識は繰り返し使われるため、レトロに詳しく記録しておく価値がある
+
 ## 参考
 
 - 仕様書: [docs/specs/auto-progress.md](../specs/auto-progress.md)
-- 関連Issue: #253（仕様策定）, #256（Phase 0 実装）, #257（Phase 1 実装）, #266（品質チェックスキル）, #288（Phase 1 残課題対応）, #310（Phase 2: post-merge.yml）, #313（既存スクリプト shellcheck 修正）, #357（ワークフロー修正）, #360（レースコンディション設計見直し）
+- 関連Issue: #253（仕様策定）, #256（Phase 0 実装）, #257（Phase 1 実装）, #266（品質チェックスキル）, #288（Phase 1 残課題対応）, #310（Phase 2: post-merge.yml）, #313（既存スクリプト shellcheck 修正）, #357（ワークフロー修正）, #360（レースコンディション設計見直し）, #365（copilot-auto-fix.yml トリガー問題）
