@@ -45,12 +45,13 @@ PRKit（prt-silent-failure-hunter）の正答率が17%（CRITICAL 判定の正�
 ```mermaid
 flowchart TD
     A[PR作成] --> B[Copilot 自動レビュー<br/>GitHub ネイティブ]
-    B --> C[pull_request_review<br/>submitted イベント]
-    C --> D[copilot-auto-fix.yml 起動]
-    D --> E{reviewer == Copilot?}
-    E -->|No| Z[スキップ]
-    E -->|Yes| F{auto/ ブランチ<br/>プレフィックス?}
-    F -->|No| Z
+    B --> B2[copilot-review-poll.yml<br/>schedule 5分おき]
+    B2 --> B3{Copilot レビュー<br/>完了検知?}
+    B3 -->|No| B2
+    B3 -->|Yes| C[auto:copilot-reviewed<br/>ラベル付与]
+    C --> D[copilot-auto-fix.yml 起動<br/>pull_request labeled]
+    D --> F{auto/ ブランチ<br/>プレフィックス?}
+    F -->|No| Z[スキップ]
     F -->|Yes| G{auto:failed<br/>ラベルなし?}
     G -->|No| Z
     G -->|Yes| G2{PR が OPEN?}
@@ -78,32 +79,44 @@ flowchart TD
 
 ## トリガー条件
 
-- **イベント**: `pull_request_review` の `submitted` タイプ
+- **イベント**: `pull_request` の `labeled` タイプ（`auto:copilot-reviewed` ラベル付与時）
 - **発火条件（if）**:
-  1. reviewer が `"Copilot"` または `"copilot-pull-request-reviewer[bot]"`
+  1. 付与されたラベルが `auto:copilot-reviewed`
   2. PR の head リポジトリが同一リポジトリ（フォーク PR を除外）
   3. ブランチ名が `auto/` プレフィックスで始まる（自動パイプライン由来の PR のみ対象。Actions 分数節約）
 - **同時実行制御**: PR番号ごとの concurrency グループ（cancel-in-progress: false — 進行中の修正ジョブをキャンセルするとコミットが不完全な状態になるリスクがあるため）
 
+### トリガー方式の経緯（Issue #365）
+
+当初は `pull_request_review[submitted]` イベントで直接トリガーしていたが、Copilot の内部 `dynamic` ワークフロー実行中にレビューが投稿されると workflow run が生成されない問題が判明した（Issue #365）。
+
+**解決策**: schedule ポーリング + ラベルトリガー方式に変更。
+
+1. `copilot-review-poll.yml`（schedule: 5分おき）が `auto/` ブランチの open PR を監視
+2. Copilot レビュー完了を REST API で検知したら `auto:copilot-reviewed` ラベルを `REPO_OWNER_PAT` で付与
+3. ラベル付与により `copilot-auto-fix.yml`（`pull_request[labeled]`）がトリガーされる
+
+**PAT が必要な理由**: `GITHUB_TOKEN` で付与したラベルでは `pull_request[labeled]` イベントが発火しない（GitHub の無限ループ防止仕様）。`REPO_OWNER_PAT` を使用することでワークフロー連鎖が成立する。
+
 ### Copilot レビューが来ない場合
 
-Copilot のレビューは guaranteed delivery ではない。サービス障害やリポジトリ設定の変更でレビューが実行されない場合、`pull_request_review[submitted]` イベントが発火せず PR が「レビュー待ち」のまま滞留する。
+Copilot のレビューは guaranteed delivery ではない。サービス障害やリポジトリ設定の変更でレビューが実行されない場合、`copilot-review-poll.yml` がレビューを検知できず PR が「レビュー待ち」のまま滞留する。
 
-**運用方針**: タイムアウト用の scheduled workflow は設けない（コスト・複雑性のトレードオフ）。管理者が GitHub 通知（PR作成）で PR の存在を認識しており、Copilot レビューが長時間来ない場合は手動で `/review-pr` を実行するか、`auto:failed` を付与して手動対応に切り替える。
+**運用方針**: `copilot-review-poll.yml` は 5 分おきに実行されるため、Copilot レビュー完了後は最大約 5 分（+ GitHub schedule の遅延）で検知される。Copilot レビュー自体が長時間来ない場合は、管理者が手動で `/review-pr` を実行するか、`auto:failed` を付与して手動対応に切り替える。
 
 ### reviewer 名の注意点（PR #352 検証結果）
 
+`copilot-review-poll.yml` は REST API でレビューを取得するため、`copilot-pull-request-reviewer[bot]` で判定する。
+
 | 取得元 | reviewer login |
 |--------|---------------|
-| `pull_request_review[submitted]` イベントペイロード | `"Copilot"` |
-| REST API (`/pulls/{PR}/reviews`) | `"copilot-pull-request-reviewer[bot]"` |
-
-ワークフローの if 条件では**両方の名前を OR で判定**する:
+| `pull_request_review[submitted]` イベントペイロード | `"Copilot"`（参考情報: 現在は未使用） |
+| REST API (`/pulls/{PR}/reviews`) | `"copilot-pull-request-reviewer[bot]"`（**schedule ワークフローで使用**） |
 
 ```yaml
+# copilot-auto-fix.yml の if 条件（labeled イベント）
 if: >-
-  (github.event.review.user.login == 'Copilot'
-   || github.event.review.user.login == 'copilot-pull-request-reviewer[bot]')
+  github.event.label.name == 'auto:copilot-reviewed'
   && github.event.pull_request.head.repo.full_name == github.repository
   && startsWith(github.event.pull_request.head.ref, 'auto/')
 ```
@@ -164,7 +177,7 @@ if: >-
 | シークレット | 用途 |
 |-------------|------|
 | `CLAUDE_CODE_OAUTH_TOKEN` | claude-code-action の認証（unresolved > 0 の場合のみ使用） |
-| `REPO_OWNER_PAT` | 自動マージ実行 |
+| `REPO_OWNER_PAT` | 自動マージ実行。`copilot-review-poll.yml` でのラベル付与（ワークフロー連鎖に必要） |
 | `GITHUB_TOKEN` | その他のGitHub API操作（ラベル付与、PRチェック、GraphQL クエリ等） |
 
 ## 流用する既存スクリプト
@@ -200,7 +213,7 @@ if: >-
 | レビューコスト | 〜$1/回 | $0（サブスク込み） |
 | 修正ワークフロー | auto-fix.yml | copilot-auto-fix.yml |
 | 修正コスト | 〜$3/回（平均1.5ラウンド） | 〜$2/回（1ラウンドのみ） |
-| トリガー | `pull_request[labeled]`（auto:fix-requested） | `pull_request_review[submitted]` |
+| トリガー | `pull_request[labeled]`（auto:fix-requested） | `pull_request[labeled]`（auto:copilot-reviewed） |
 | 再レビューループ | あり（最大3回） | **なし**（単方向フロー） |
 | レビュー精度 | 正答率17%（silent-failure-hunter） | 高（PR #350 実績） |
 | 収束性 | 収束しない | 収束する（ループなし） |
@@ -209,8 +222,8 @@ if: >-
 
 ## 受け入れ条件
 
-- [ ] AC1: Copilot のレビュー完了（`pull_request_review[submitted]`）で copilot-auto-fix.yml が起動する
-- [ ] AC2: Copilot 以外の reviewer のレビューではスキップされる
+- [ ] AC1: `auto:copilot-reviewed` ラベル付与（`pull_request[labeled]`）で copilot-auto-fix.yml が起動する
+- [ ] AC2: `auto:copilot-reviewed` 以外のラベル付与ではスキップされる
 - [ ] AC3: `auto/` ブランチプレフィックスのない PR ではスキップされる（ジョブレベル `if` で判定）
 - [ ] AC4: `auto:failed` ラベルのある PR ではスキップされる
 - [ ] AC5: マージ済み・クローズ済みの PR ではスキップされる
@@ -223,13 +236,19 @@ if: >-
 - [ ] AC12: 禁止パターン検出時に `auto:failed` が付与される
 - [ ] AC13: `auto-fix.yml` が無効化されている（トリガーが `workflow_dispatch` のみに変更）。`pr-review.yml` は通常PR向けに稼働継続し、`auto/` ブランチプレフィックス付きPRのみスキップする — auto-progress.md AC19 と対応
 - [ ] AC14: `handle-errors.sh` のエラーメッセージが Copilot 方式の再開手順に更新されている
+- [ ] AC15: `copilot-review-poll.yml` が 5 分おきの schedule で実行され、`auto/` ブランチの open PR の Copilot レビュー完了を検知する
+- [ ] AC16: Copilot レビュー完了検知時に `auto:copilot-reviewed` ラベルが `REPO_OWNER_PAT` で付与される
+- [ ] AC17: `auto:copilot-reviewed` / `auto:failed` ラベル付きの PR はポーリング対象外としてスキップされる
 
 ## テスト方針
 
 copilot-auto-fix.yml 固有のテストケース（auto-progress.md のテスト方針を補完）:
 
-- Copilot 以外の reviewer（人間、他の Bot）の review では起動しないことを確認
+- `auto:copilot-reviewed` 以外のラベル付与では起動しないことを確認
 - `auto/` ブランチプレフィックスなし PR で起動しないことを確認
+- `copilot-review-poll.yml` が `auto/` ブランチの open PR のみを対象にすることを確認
+- Copilot レビュー完了検知時に `auto:copilot-reviewed` ラベルが付与されることを確認
+- `auto:copilot-reviewed` / `auto:failed` ラベル付きの PR がポーリング対象外であることを確認
 - マージ済み PR に対する Copilot レビューでスキップされることを確認
 - unresolved == 0 のとき、CI 完了待機をスキップしてマージ判定に進むことを確認
 - 修正後の unresolved 再カウントで残存指摘がある場合に `auto:failed` が付与されることを確認
@@ -240,7 +259,8 @@ copilot-auto-fix.yml 固有のテストケース（auto-progress.md のテスト
 
 | ファイル | 役割 |
 |---------|------|
-| `.github/workflows/copilot-auto-fix.yml` | 本ワークフロー（新規作成） |
+| `.github/workflows/copilot-auto-fix.yml` | 本ワークフロー |
+| `.github/workflows/copilot-review-poll.yml` | Copilot レビュー検知 schedule ワークフロー（`auto:copilot-reviewed` ラベル付与） |
 | `.github/workflows/pr-review.yml` | PRKit ベースの自動レビュー（通常PR向けに稼働、`auto/` ブランチプレフィックス付き PR はスキップ） |
 | `.github/workflows/auto-fix.yml` | PRKit ベースの自動修正（**無効化対象**） |
 | `.github/scripts/auto-fix/` | 共通スクリプト群（流用、一部変更あり） |
@@ -252,5 +272,6 @@ copilot-auto-fix.yml 固有のテストケース（auto-progress.md のテスト
 
 - Issue #351: auto-fix パイプラインのレビュー収束問題の解決
 - Issue #353: Copilot ベースの auto-fix ワークフロー実装
+- Issue #365: copilot-auto-fix.yml トリガー問題（`pull_request_review[submitted]` が発火しない問題）
 - PR #352: Copilot レビューイベント検証（検証用、マージなし）
 - [GitHub Copilot code review](https://docs.github.com/en/copilot/using-github-copilot/code-review/using-copilot-code-review)
