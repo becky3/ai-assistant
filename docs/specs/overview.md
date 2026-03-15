@@ -114,7 +114,7 @@ GitHub Actions ワークフローの仕様書（auto-progress, copilot-auto-fix,
 
 ### 仕様書テンプレート
 
-共通テンプレートは dotfiles（`~/.claude/docs/templates/`）で管理。一覧は `~/.claude/docs/overview.md` を参照。
+共通テンプレートは agent-commons（`~/.claude/docs/templates/`）で管理。一覧は `~/.claude/docs/overview.md` を参照。
 
 ### Git運用（git-flow）
 
