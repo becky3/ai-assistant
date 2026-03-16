@@ -4,7 +4,7 @@
 
 Model Context Protocol（MCP）を活用して、チャットボットが外部ツールを動的に発見・呼び出しできる基盤。MCP サーバーを追加するだけでボットの対応範囲を拡張できる。
 
-サンプル実装として天気予報 MCP サーバーを含む。
+現在は外部リポジトリ（rag-knowledge）の RAG サーバーに HTTP で接続している。
 
 ## 背景
 
@@ -13,14 +13,6 @@ Model Context Protocol（MCP）を活用して、チャットボットが外部�
 - MCP により、LLM がツールを動的に発見・呼び出しでき、エージェント的な振る舞いが可能になる
 
 ## 制約
-
-### リポジトリ分離方針
-
-MCP サーバーは独立プロセスとして動作するため、ホストアプリとのコード結合を避ける。
-
-- MCP サーバーはトップレベルの `mcp_servers/` に配置する（`src/` の外）
-- MCP サーバーのコードは `src/` 配下のモジュールを一切 import しない
-- MCP サーバーとホストアプリは MCP プロトコルのみで通信する（直接の Python import 禁止）
 
 ### 機能制御
 
@@ -118,15 +110,13 @@ flowchart TB
         LLM[LLM プロバイダー]
     end
 
-    subgraph Servers["MCP サーバー群"]
-        S1["天気予報サーバー"]
-        S2["将来の拡張サーバー"]
+    subgraph Servers["MCP サーバー（外部）"]
+        S1["RAG ナレッジサーバー"]
     end
 
     CS --> CM
     CS --> LLM
-    CM -->|stdio / http| S1
-    CM -->|stdio / http| S2
+    CM -->|http| S1
     LLM -->|ツール定義| CS
 ```
 
@@ -141,8 +131,7 @@ flowchart TB
 
 | 連携先 | プロトコル | 用途 |
 | --- | --- | --- |
-| MCP サーバー | MCP（stdio / http） | ツール発見・実行 |
-| 気象庁 API（非公式） | HTTP | 天気予報データ取得（天気予報サーバーが使用） |
+| RAG ナレッジサーバー | MCP（http） | ナレッジベース検索・管理 |
 
 ## エッジケース
 

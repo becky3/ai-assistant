@@ -32,6 +32,7 @@ Thumbs.db
 # Claude Code
 .claude/settings.local.json
 .claude/worktrees/**/settings.local.json
+.claude/scheduled_tasks.lock
 
 # Process guard
 bot.pid

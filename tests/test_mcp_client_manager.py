@@ -17,15 +17,15 @@ from src.mcp_bridge.client_manager import (
 )
 
 
-def _make_mock_tool(name: str = "get_weather", description: str = "天気予報を取得する") -> MagicMock:
+def _make_mock_tool(name: str = "sample_tool", description: str = "サンプルツール") -> MagicMock:
     """モックツールオブジェクトを作成する."""
     tool = MagicMock()
     tool.name = name
     tool.description = description
     tool.inputSchema = {
         "type": "object",
-        "properties": {"location": {"type": "string"}},
-        "required": ["location"],
+        "properties": {"query": {"type": "string"}},
+        "required": ["query"],
     }
     return tool
 
@@ -41,7 +41,7 @@ def _make_mock_session(tools: list[MagicMock] | None = None) -> AsyncMock:
 
     call_result = MagicMock()
     text_content = MagicMock()
-    text_content.text = "晴れ 15°C"
+    text_content.text = "Sample result"
     call_result.content = [text_content]
     session.call_tool = AsyncMock(return_value=call_result)
 
@@ -70,18 +70,18 @@ async def test_client_manager_connects_and_lists_tools() -> None:
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
         config = MCPServerConfig(
-            name="weather",
+            name="test_server",
             transport="stdio",
             command="python",
-            args=["mcp_servers/weather/server.py"],
+            args=["dummy_server.py"],
         )
         await manager.initialize([config])
 
     tools = await manager.get_available_tools()
     assert len(tools) == 1
     assert isinstance(tools[0], ToolDefinition)
-    assert tools[0].name == "get_weather"
-    assert tools[0].description == "天気予報を取得する"
+    assert tools[0].name == "sample_tool"
+    assert tools[0].description == "サンプルツール"
 
     await manager.cleanup()
 
@@ -106,18 +106,17 @@ async def test_client_manager_calls_tool() -> None:
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
         config = MCPServerConfig(
-            name="weather",
+            name="test_server",
             transport="stdio",
             command="python",
-            args=["mcp_servers/weather/server.py"],
+            args=["dummy_server.py"],
         )
         await manager.initialize([config])
 
-    result = await manager.call_tool("get_weather", {"location": "東京"})
-    assert "晴れ" in result
-    assert "15°C" in result
+    result = await manager.call_tool("sample_tool", {"query": "test"})
+    assert "Sample" in result
 
-    mock_session.call_tool.assert_called_once_with("get_weather", {"location": "東京"})
+    mock_session.call_tool.assert_called_once_with("sample_tool", {"query": "test"})
 
     await manager.cleanup()
 
@@ -137,10 +136,10 @@ async def test_client_manager_handles_multiple_servers() -> None:
     manager = MCPClientManager()
 
     # 2つの異なるサーバーのモックセッション
-    weather_tool = _make_mock_tool("get_weather", "天気予報")
+    tool_a = _make_mock_tool("sample_tool", "サンプルツール")
     calc_tool = _make_mock_tool("calculate", "計算する")
 
-    mock_session_1 = _make_mock_session([weather_tool])
+    mock_session_1 = _make_mock_session([tool_a])
     mock_session_2 = _make_mock_session([calc_tool])
 
     sessions = [mock_session_1, mock_session_2]
@@ -166,14 +165,14 @@ async def test_client_manager_handles_multiple_servers() -> None:
             s.__aexit__ = AsyncMock(return_value=False)
 
         configs = [
-            MCPServerConfig(name="weather", command="python", args=["weather.py"]),
+            MCPServerConfig(name="server_a", command="python", args=["server_a.py"]),
             MCPServerConfig(name="calc", command="python", args=["calc.py"]),
         ]
         await manager.initialize(configs)
 
     tools = await manager.get_available_tools()
     tool_names = [t.name for t in tools]
-    assert "get_weather" in tool_names
+    assert "sample_tool" in tool_names
     assert "calculate" in tool_names
     assert len(tools) == 2
 
@@ -243,8 +242,8 @@ async def test_http_transport_connects_and_lists_tools() -> None:
 
     tools = await manager.get_available_tools()
     assert len(tools) == 1
-    assert tools[0].name == "get_weather"
-    assert manager._tool_to_server["get_weather"] == "test_http_server"
+    assert tools[0].name == "sample_tool"
+    assert manager._tool_to_server["sample_tool"] == "test_http_server"
 
     mock_http.assert_called_once_with("http://127.0.0.1:8081/mcp")
 

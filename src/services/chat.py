@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # ツール呼び出しループの安全弁
 # 10回: 通常のマルチステップ推論で十分な回数。無限ループ防止の上限。
 TOOL_LOOP_MAX_ITERATIONS = 10
-# 30秒: 外部API呼び出し（天気予報等）の遅延を許容しつつ、応答全体をブロックしない値。
+# 30秒: 外部API呼び出し（MCP ツール等）の遅延を許容しつつ、応答全体をブロックしない値。
 TOOL_CALL_TIMEOUT_SEC = 30
 
 # rag_search ツール結果からスコア情報を抽出するパターン
