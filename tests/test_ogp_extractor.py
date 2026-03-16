@@ -3,11 +3,32 @@
 from __future__ import annotations
 
 import logging
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
 from src.services.ogp_extractor import OgpExtractor
+
+
+def _mock_constrained_client(resp: httpx.Response) -> AsyncMock:
+    """ConstrainedClient の async context manager モックを生成する."""
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=resp)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    return mock_client
+
+
+def _make_response(status_code: int, text: str = "", headers: dict[str, str] | None = None) -> httpx.Response:
+    """テスト用の httpx.Response を生成する."""
+    resp = httpx.Response(
+        status_code=status_code,
+        text=text,
+        headers=headers or {},
+        request=httpx.Request("GET", "https://example.com"),
+    )
+    return resp
 
 
 async def test_extract_image_url_from_og_image_meta_tag() -> None:
@@ -18,19 +39,10 @@ async def test_extract_image_url_from_og_image_meta_tag() -> None:
     </head><body></body></html>
     """
     extractor = OgpExtractor()
+    resp = _make_response(200, html)
+    mock_client = _mock_constrained_client(resp)
 
-    mock_resp = AsyncMock()
-    mock_resp.status = 200
-    mock_resp.text = AsyncMock(return_value=html)
-    mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
-    mock_resp.__aexit__ = AsyncMock(return_value=False)
-
-    mock_session = AsyncMock()
-    mock_session.get = MagicMock(return_value=mock_resp)
-    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-    mock_session.__aexit__ = AsyncMock(return_value=False)
-
-    with patch("src.services.ogp_extractor.aiohttp.ClientSession", return_value=mock_session):
+    with patch("src.services.ogp_extractor.ConstrainedClient", return_value=mock_client):
         result = await extractor.extract_image_url("https://example.com/article")
 
     assert result == "https://example.com/img.png"
@@ -40,19 +52,10 @@ async def test_extract_image_url_from_og_image_with_reversed_attributes() -> Non
     """content属性がproperty属性の前にあるケースでも取得できる."""
     html = '<html><head><meta content="https://img.com/a.jpg" property="og:image"></head></html>'
     extractor = OgpExtractor()
+    resp = _make_response(200, html)
+    mock_client = _mock_constrained_client(resp)
 
-    mock_resp = AsyncMock()
-    mock_resp.status = 200
-    mock_resp.text = AsyncMock(return_value=html)
-    mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
-    mock_resp.__aexit__ = AsyncMock(return_value=False)
-
-    mock_session = AsyncMock()
-    mock_session.get = MagicMock(return_value=mock_resp)
-    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-    mock_session.__aexit__ = AsyncMock(return_value=False)
-
-    with patch("src.services.ogp_extractor.aiohttp.ClientSession", return_value=mock_session):
+    with patch("src.services.ogp_extractor.ConstrainedClient", return_value=mock_client):
         result = await extractor.extract_image_url("https://example.com/article")
 
     assert result == "https://img.com/a.jpg"
@@ -102,7 +105,7 @@ async def test_extract_image_url_returns_none_on_exception() -> None:
     """取得失敗時はNoneを返す."""
     extractor = OgpExtractor()
 
-    with patch("src.services.ogp_extractor.aiohttp.ClientSession", side_effect=Exception("timeout")):
+    with patch("src.services.ogp_extractor.ConstrainedClient", side_effect=Exception("timeout")):
         result = await extractor.extract_image_url("https://example.com/article")
 
     assert result is None
@@ -111,18 +114,10 @@ async def test_extract_image_url_returns_none_on_exception() -> None:
 async def test_extract_image_url_returns_none_on_non_200_status() -> None:
     """HTTP 200以外の場合はNoneを返す."""
     extractor = OgpExtractor()
+    resp = _make_response(404)
+    mock_client = _mock_constrained_client(resp)
 
-    mock_resp = AsyncMock()
-    mock_resp.status = 404
-    mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
-    mock_resp.__aexit__ = AsyncMock(return_value=False)
-
-    mock_session = AsyncMock()
-    mock_session.get = MagicMock(return_value=mock_resp)
-    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-    mock_session.__aexit__ = AsyncMock(return_value=False)
-
-    with patch("src.services.ogp_extractor.aiohttp.ClientSession", return_value=mock_session):
+    with patch("src.services.ogp_extractor.ConstrainedClient", return_value=mock_client):
         result = await extractor.extract_image_url("https://example.com/article")
 
     assert result is None
@@ -134,28 +129,14 @@ async def test_extract_image_url_returns_none_on_redirect_for_ssrf_protection(
 ) -> None:
     """リダイレクト応答時はSSRF対策としてNoneを返しwarningログを出す."""
     extractor = OgpExtractor()
-
-    mock_resp = AsyncMock()
-    mock_resp.status = status_code
-    mock_resp.headers = {"Location": "http://internal-server/secret"}
-    mock_resp.__aenter__ = AsyncMock(return_value=mock_resp)
-    mock_resp.__aexit__ = AsyncMock(return_value=False)
-
-    mock_session = AsyncMock()
-    mock_session.get = MagicMock(return_value=mock_resp)
-    mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-    mock_session.__aexit__ = AsyncMock(return_value=False)
+    resp = _make_response(status_code, headers={"location": "http://internal-server/secret"})
+    mock_client = _mock_constrained_client(resp)
 
     with (
-        patch(
-            "src.services.ogp_extractor.aiohttp.ClientSession",
-            return_value=mock_session,
-        ),
+        patch("src.services.ogp_extractor.ConstrainedClient", return_value=mock_client),
         caplog.at_level(logging.WARNING),
     ):
-        result = await extractor.extract_image_url(
-            "https://example.com/article"
-        )
+        result = await extractor.extract_image_url("https://example.com/article")
 
     assert result is None
     assert "Redirect detected (SSRF protection)" in caplog.text

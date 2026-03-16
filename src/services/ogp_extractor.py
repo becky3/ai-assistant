@@ -10,7 +10,7 @@ import re
 from html import unescape
 from typing import Any
 
-import aiohttp
+from py_common_lib.httpx import ConstrainedClient
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class OgpExtractor:
     """
 
     def __init__(self, timeout: float = 5.0) -> None:
-        self._timeout = aiohttp.ClientTimeout(total=timeout)
+        self._timeout = timeout
 
     async def extract_image_url(
         self, url: str, entry: dict[str, Any] | None = None
@@ -101,18 +101,18 @@ class OgpExtractor:
 
     async def _fetch_og_image(self, url: str) -> str | None:
         """記事URLにアクセスしてog:imageメタタグを抽出する."""
-        async with aiohttp.ClientSession(timeout=self._timeout) as session:
-            async with session.get(url, allow_redirects=False) as resp:
-                if resp.status in (301, 302, 303, 307, 308):
-                    logger.warning(
-                        "Redirect detected (SSRF protection): %s -> %s",
-                        url,
-                        resp.headers.get("Location", "unknown"),
-                    )
-                    return None
-                if resp.status != 200:
-                    return None
-                html = await resp.text(errors="replace")
+        async with ConstrainedClient(request_timeout=self._timeout) as client:
+            resp = await client.get(url)
+            if resp.status_code in (301, 302, 303, 307, 308):
+                logger.warning(
+                    "Redirect detected (SSRF protection): %s -> %s",
+                    url,
+                    resp.headers.get("location", "unknown"),
+                )
+                return None
+            if resp.status_code != 200:
+                return None
+            html = resp.text
 
         # <head> 部分のみ検索（パフォーマンス最適化）
         head_end = html.lower().find("</head>")

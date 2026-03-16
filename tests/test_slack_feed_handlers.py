@@ -331,7 +331,7 @@ async def test_handle_feed_import_success(monkeypatch: pytest.MonkeyPatch) -> No
 
     csv_content = "url,name,category\nhttps://example.com/rss,Example Feed,Tech"
 
-    # httpx.AsyncClient をモック
+    # ConstrainedClient をモック
     mock_response = MagicMock()
     mock_response.text = csv_content
     mock_response.raise_for_status = MagicMock()
@@ -344,8 +344,9 @@ async def test_handle_feed_import_success(monkeypatch: pytest.MonkeyPatch) -> No
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
 
-    import httpx
-    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: mock_client)
+    monkeypatch.setattr(
+        "src.messaging.router.ConstrainedClient", lambda **kwargs: mock_client
+    )
 
     files = [{"name": "feeds.csv", "mimetype": "text/csv", "url_private": "https://files.slack.com/feeds.csv"}]
     result = await _handle_feed_import(collector, files, "xoxb-token")
@@ -378,8 +379,9 @@ async def test_handle_feed_import_default_category(monkeypatch: pytest.MonkeyPat
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
 
-    import httpx
-    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: mock_client)
+    monkeypatch.setattr(
+        "src.messaging.router.ConstrainedClient", lambda **kwargs: mock_client
+    )
 
     files = [{"name": "feeds.csv", "mimetype": "text/csv", "url_private": "https://files.slack.com/feeds.csv"}]
     result = await _handle_feed_import(collector, files, "xoxb-token")
@@ -408,8 +410,9 @@ async def test_handle_feed_import_duplicate_skipped(monkeypatch: pytest.MonkeyPa
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
 
-    import httpx
-    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: mock_client)
+    monkeypatch.setattr(
+        "src.messaging.router.ConstrainedClient", lambda **kwargs: mock_client
+    )
 
     files = [{"name": "feeds.csv", "mimetype": "text/csv", "url_private": "https://files.slack.com/feeds.csv"}]
     result = await _handle_feed_import(collector, files, "xoxb-token")
@@ -439,8 +442,9 @@ async def test_handle_feed_import_invalid_header(monkeypatch: pytest.MonkeyPatch
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
 
-    import httpx
-    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: mock_client)
+    monkeypatch.setattr(
+        "src.messaging.router.ConstrainedClient", lambda **kwargs: mock_client
+    )
 
     files = [{"name": "feeds.csv", "mimetype": "text/csv", "url_private": "https://files.slack.com/feeds.csv"}]
     result = await _handle_feed_import(collector, files, "xoxb-token")
@@ -472,8 +476,9 @@ async def test_handle_feed_import_summary(monkeypatch: pytest.MonkeyPatch) -> No
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
 
-    import httpx
-    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: mock_client)
+    monkeypatch.setattr(
+        "src.messaging.router.ConstrainedClient", lambda **kwargs: mock_client
+    )
 
     files = [{"name": "feeds.csv", "mimetype": "text/csv", "url_private": "https://files.slack.com/feeds.csv"}]
     result = await _handle_feed_import(collector, files, "xoxb-token")
@@ -548,8 +553,9 @@ async def test_handle_feed_replace_success(monkeypatch: pytest.MonkeyPatch) -> N
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
 
-    import httpx
-    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: mock_client)
+    monkeypatch.setattr(
+        "src.messaging.router.ConstrainedClient", lambda **kwargs: mock_client
+    )
 
     files: list[dict[str, object]] = [{"name": "feeds.csv", "mimetype": "text/csv", "url_private": "https://files.slack.com/feeds.csv"}]
     result = await _handle_feed_replace(collector, files, "xoxb-token")
@@ -585,8 +591,9 @@ async def test_handle_feed_replace_summary(monkeypatch: pytest.MonkeyPatch) -> N
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
 
-    import httpx
-    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: mock_client)
+    monkeypatch.setattr(
+        "src.messaging.router.ConstrainedClient", lambda **kwargs: mock_client
+    )
 
     files: list[dict[str, object]] = [{"name": "feeds.csv", "mimetype": "text/csv", "url_private": "https://files.slack.com/feeds.csv"}]
     result = await _handle_feed_replace(collector, files, "xoxb-token")
@@ -621,8 +628,9 @@ async def test_handle_feed_replace_import_partial_failure(monkeypatch: pytest.Mo
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
 
-    import httpx
-    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: mock_client)
+    monkeypatch.setattr(
+        "src.messaging.router.ConstrainedClient", lambda **kwargs: mock_client
+    )
 
     files: list[dict[str, object]] = [{"name": "feeds.csv", "mimetype": "text/csv", "url_private": "https://files.slack.com/feeds.csv"}]
     result = await _handle_feed_replace(collector, files, "xoxb-token")
