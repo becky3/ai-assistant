@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
@@ -126,8 +127,6 @@ class MCPClientManager:
                 f"MCPサーバー '{config.name}': HTTP トランスポートには url の設定が必要です。"
             )
 
-        import contextlib
-
         temp_stack = AsyncExitStack()
         try:
             http_transport = await temp_stack.enter_async_context(
@@ -140,7 +139,7 @@ class MCPClientManager:
             await self._initialize_session(config, session)
         except BaseException:
             # 接続失敗 — 一時スタックをクリーンアップして cancel scope の漏洩を防ぐ
-            with contextlib.suppress(BaseException):
+            with contextlib.suppress(BaseException):  # noqa: SIM117
                 await temp_stack.aclose()
             raise
 
