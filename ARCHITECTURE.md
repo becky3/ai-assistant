@@ -7,7 +7,6 @@
 | ディレクトリ | 説明 |
 |---|---|
 | `src/` | アプリケーション本体 |
-| `mcp_servers/` | MCP サーバー群（独立プロセスとして動作） |
 | `config/` | アシスタント設定・MCP サーバー接続設定 |
 | `docs/` | 仕様書・テンプレート |
 | `tests/` | テストコード・フィクスチャ |
@@ -40,16 +39,6 @@
 | `src/process_guard.py` | Bot 重複起動防止・PID ファイル管理 |
 | `src/compat.py` | プラットフォーム互換ユーティリティ |
 
-## mcp_servers/ モジュール構成
-
-MCP サーバーは独立プロセスとして動作し、MCP プロトコル経由で `src/` と通信する。`src/` のモジュールを直接 import しないこと。
-
-| ディレクトリ | 責務 |
-|---|---|
-| `mcp_servers/weather/` | 天気予報サーバー（気象庁 API） |
-
-RAG ナレッジサーバーは rag-knowledge リポジトリに移行済み。`config/mcp_servers.json` で外部リポの RAG サーバーに HTTP で接続する。
-
 ## 補助ディレクトリ
 
 | ディレクトリ | 説明 |
@@ -81,7 +70,7 @@ RAG ナレッジサーバーは rag-knowledge リポジトリに移行済み。`
 
 | 仕様書 | 実装モジュール |
 |---|---|
-| `infrastructure/mcp-integration.md` | `src/mcp_bridge/`, `mcp_servers/` |
+| `infrastructure/mcp-integration.md` | `src/mcp_bridge/` |
 | `infrastructure/rag-knowledge.md` | 外部リポジトリ（rag-knowledge） |
 | `infrastructure/bot-process-guard.md` | `src/process_guard.py`, `src/bot_manager.py` |
 

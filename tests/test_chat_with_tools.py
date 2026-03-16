@@ -72,7 +72,7 @@ def _make_mock_llm(
 
 def _make_mock_mcp_manager(
     tools: list[ToolDefinition] | None = None,
-    call_result: str = "晴れ 15°C",
+    call_result: str = "Sample result",
 ) -> AsyncMock:
     """モックMCPClientManagerを作成する."""
     mock_manager = AsyncMock()
@@ -80,11 +80,11 @@ def _make_mock_mcp_manager(
     if tools is None:
         tools = [
             ToolDefinition(
-                name="get_weather",
-                description="天気予報を取得する",
+                name="sample_tool",
+                description="サンプルツール",
                 input_schema={
                     "type": "object",
-                    "properties": {"location": {"type": "string"}},
+                    "properties": {"query": {"type": "string"}},
                 },
             )
         ]
@@ -101,18 +101,18 @@ def _make_mock_mcp_manager(
 
 
 @pytest.mark.asyncio
-async def test_chat_responds_with_weather_data(
+async def test_chat_responds_with_tool_data(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    """ユーザーが天気について質問すると、LLMがツールを呼び出して実データで回答すること."""
+    """ユーザーが質問すると、LLMがツールを呼び出して実データで回答すること."""
     tool_calls = [
-        ToolCall(id="call_1", name="get_weather", arguments={"location": "東京"}),
+        ToolCall(id="call_1", name="sample_tool", arguments={"query": "test"}),
     ]
     mock_llm = _make_mock_llm(
-        text_response="東京は今日、晴れで最高気温15°Cです。",
+        text_response="ツールの結果に基づく応答です。",
         tool_calls=tool_calls,
     )
-    mock_mcp = _make_mock_mcp_manager(call_result="東京: 晴れ 最高15°C 最低5°C")
+    mock_mcp = _make_mock_mcp_manager(call_result="Sample tool result data")
 
     service = ChatService(
         llm=mock_llm,
@@ -120,13 +120,13 @@ async def test_chat_responds_with_weather_data(
         mcp_manager=mock_mcp,
     )
 
-    result = await service.respond("U001", "東京の天気を教えて", "ts_001")
+    result = await service.respond("U001", "テスト質問", "ts_001")
 
-    assert result == "東京は今日、晴れで最高気温15°Cです。"
+    assert result == "ツールの結果に基づく応答です。"
     # complete_with_tools が呼ばれること
     assert mock_llm.complete_with_tools.call_count == 2
     # MCPツールが呼び出されること
-    mock_mcp.call_tool.assert_called_once_with("get_weather", {"location": "東京"})
+    mock_mcp.call_tool.assert_called_once_with("sample_tool", {"query": "test"})
 
 
 @pytest.mark.asyncio
@@ -155,10 +155,10 @@ async def test_tool_error_handled_gracefully(
 ) -> None:
     """ツール実行中にエラーが発生した場合、エラー内容をLLMに伝え、適切な応答を生成すること."""
     tool_calls = [
-        ToolCall(id="call_1", name="get_weather", arguments={"location": "火星"}),
+        ToolCall(id="call_1", name="sample_tool", arguments={"query": "invalid"}),
     ]
     mock_llm = _make_mock_llm(
-        text_response="申し訳ありませんが、天気情報を取得できませんでした。",
+        text_response="申し訳ありませんが、情報を取得できませんでした。",
         tool_calls=tool_calls,
     )
     mock_mcp = _make_mock_mcp_manager()
@@ -171,10 +171,10 @@ async def test_tool_error_handled_gracefully(
         mcp_manager=mock_mcp,
     )
 
-    result = await service.respond("U001", "火星の天気は？", "ts_003")
+    result = await service.respond("U001", "テスト質問", "ts_003")
 
     # エラーでもクラッシュせず応答が返ること
-    assert result == "申し訳ありませんが、天気情報を取得できませんでした。"
+    assert result == "申し訳ありませんが、情報を取得できませんでした。"
 
 
 @pytest.mark.asyncio
@@ -208,16 +208,16 @@ async def test_mcp_server_config_changes() -> None:
     # テスト用の設定ファイルを作成
     config_data = {
         "mcpServers": {
-            "weather": {
+            "server_a": {
                 "transport": "stdio",
                 "command": "python",
-                "args": ["weather_server.py"],
+                "args": ["server_a.py"],
                 "env": {"API_KEY": "test"},
             },
-            "calculator": {
+            "server_b": {
                 "transport": "stdio",
                 "command": "python",
-                "args": ["calc_server.py"],
+                "args": ["server_b.py"],
             },
         }
     }
@@ -230,14 +230,14 @@ async def test_mcp_server_config_changes() -> None:
         configs = _load_mcp_server_configs(temp_path)
         assert len(configs) == 2
 
-        weather_config = next(c for c in configs if c.name == "weather")
-        assert weather_config.transport == "stdio"
-        assert weather_config.command == "python"
-        assert weather_config.args == ["weather_server.py"]
-        assert weather_config.env == {"API_KEY": "test"}
+        config_a = next(c for c in configs if c.name == "server_a")
+        assert config_a.transport == "stdio"
+        assert config_a.command == "python"
+        assert config_a.args == ["server_a.py"]
+        assert config_a.env == {"API_KEY": "test"}
 
-        calc_config = next(c for c in configs if c.name == "calculator")
-        assert calc_config.command == "python"
+        config_b = next(c for c in configs if c.name == "server_b")
+        assert config_b.command == "python"
     finally:
         Path(temp_path).unlink()
 
@@ -280,7 +280,7 @@ async def test_tool_loop_max_iterations(
     always_tool_response = LLMResponse(
         content="",
         model="test-model",
-        tool_calls=[ToolCall(id="call_x", name="get_weather", arguments={"location": "東京"})],
+        tool_calls=[ToolCall(id="call_x", name="sample_tool", arguments={"query": "test"})],
         stop_reason="tool_use",
     )
 
@@ -299,7 +299,7 @@ async def test_tool_loop_max_iterations(
         mcp_manager=mock_mcp,
     )
 
-    result = await service.respond("U001", "東京の天気", "ts_005")
+    result = await service.respond("U001", "テスト質問", "ts_005")
 
     # 最大反復回数分 complete_with_tools が呼ばれること
     assert mock_llm.complete_with_tools.call_count == TOOL_LOOP_MAX_ITERATIONS
@@ -318,10 +318,10 @@ async def test_chat_with_tools_saves_only_final_response(
     from src.db.models import Conversation
 
     tool_calls = [
-        ToolCall(id="call_1", name="get_weather", arguments={"location": "東京"}),
+        ToolCall(id="call_1", name="sample_tool", arguments={"query": "test"}),
     ]
     mock_llm = _make_mock_llm(
-        text_response="今日の東京は晴れです。",
+        text_response="ツールの結果に基づく応答です。",
         tool_calls=tool_calls,
     )
     mock_mcp = _make_mock_mcp_manager()
@@ -332,7 +332,7 @@ async def test_chat_with_tools_saves_only_final_response(
         mcp_manager=mock_mcp,
     )
 
-    await service.respond("U001", "東京の天気", "ts_006")
+    await service.respond("U001", "テスト質問", "ts_006")
 
     # DBに保存されたメッセージを確認
     async with session_factory() as session:
@@ -346,9 +346,9 @@ async def test_chat_with_tools_saves_only_final_response(
     # user + assistant の2件のみ（tool 中間ステップは含まない）
     assert len(rows) == 2
     assert rows[0].role == "user"
-    assert rows[0].content == "東京の天気"
+    assert rows[0].content == "テスト質問"
     assert rows[1].role == "assistant"
-    assert rows[1].content == "今日の東京は晴れです。"
+    assert rows[1].content == "ツールの結果に基づく応答です。"
 
 
 @pytest.mark.asyncio

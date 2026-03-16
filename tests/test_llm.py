@@ -153,18 +153,18 @@ def test_complete_with_tools_method_exists_and_tool_definition_is_constructable(
 
     # ToolDefinition が正しく構築できること
     td = ToolDefinition(
-        name="get_weather",
-        description="天気予報を取得する",
+        name="sample_tool",
+        description="サンプルツール",
         input_schema={
             "type": "object",
             "properties": {
-                "location": {"type": "string", "description": "地域名"},
+                "query": {"type": "string", "description": "検索クエリ"},
             },
-            "required": ["location"],
+            "required": ["query"],
         },
     )
-    assert td.name == "get_weather"
-    assert td.description == "天気予報を取得する"
+    assert td.name == "sample_tool"
+    assert td.description == "サンプルツール"
     assert "properties" in td.input_schema
 
 
@@ -175,15 +175,15 @@ def test_openai_converts_tool_definition_and_tool_messages_to_openai_format() ->
 
     # ToolDefinition → OpenAI形式変換
     td = ToolDefinition(
-        name="get_weather",
-        description="天気予報を取得する",
-        input_schema={"type": "object", "properties": {"location": {"type": "string"}}},
+        name="sample_tool",
+        description="サンプルツール",
+        input_schema={"type": "object", "properties": {"query": {"type": "string"}}},
     )
     result = _tool_def_to_openai(td)
     assert result["type"] == "function"
     func = result["function"]
-    assert func["name"] == "get_weather"
-    assert func["description"] == "天気予報を取得する"
+    assert func["name"] == "sample_tool"
+    assert func["description"] == "サンプルツール"
     assert func["parameters"] == td.input_schema
 
     # role="tool" メッセージの変換
@@ -197,7 +197,7 @@ def test_openai_converts_tool_definition_and_tool_messages_to_openai_format() ->
     assistant_msg = Message(
         role="assistant",
         content="",
-        tool_calls=[ToolCall(id="call_456", name="get_weather", arguments={"location": "東京"})],
+        tool_calls=[ToolCall(id="call_456", name="sample_tool", arguments={"query": "test"})],
     )
     openai_assistant = _to_openai_message(assistant_msg)
     assert openai_assistant["role"] == "assistant"
@@ -211,20 +211,20 @@ def test_anthropic_converts_tool_definition_and_tool_result_to_anthropic_format(
 
     # ToolDefinition → Anthropic形式変換
     td = ToolDefinition(
-        name="get_weather",
-        description="天気予報を取得する",
-        input_schema={"type": "object", "properties": {"location": {"type": "string"}}},
+        name="sample_tool",
+        description="サンプルツール",
+        input_schema={"type": "object", "properties": {"query": {"type": "string"}}},
     )
     result = _tool_def_to_anthropic(td)
-    assert result["name"] == "get_weather"
-    assert result["description"] == "天気予報を取得する"
+    assert result["name"] == "sample_tool"
+    assert result["description"] == "サンプルツール"
 
     # role="tool" → role="user" + tool_result 変換
     messages = [
         Message(
             role="assistant",
             content="",
-            tool_calls=[ToolCall(id="toolu_01", name="get_weather", arguments={"location": "東京"})],
+            tool_calls=[ToolCall(id="toolu_01", name="sample_tool", arguments={"query": "test"})],
         ),
         Message(role="tool", content="晴れ 15°C", tool_call_id="toolu_01"),
     ]
@@ -253,7 +253,7 @@ async def test_lmstudio_complete_with_tools_returns_tool_call_response() -> None
     mock_tool_call = MagicMock()
     mock_tool_call.id = "call_1"
     mock_tool_call.function = MagicMock()
-    mock_tool_call.function.name = "get_weather"
+    mock_tool_call.function.name = "sample_tool"
     mock_tool_call.function.arguments = json.dumps({"location": "東京"})
 
     mock_choice = MagicMock()
@@ -271,16 +271,16 @@ async def test_lmstudio_complete_with_tools_returns_tool_call_response() -> None
 
     tools = [
         ToolDefinition(
-            name="get_weather",
-            description="天気予報",
-            input_schema={"type": "object", "properties": {"location": {"type": "string"}}},
+            name="sample_tool",
+            description="サンプルツール",
+            input_schema={"type": "object", "properties": {"query": {"type": "string"}}},
         ),
     ]
-    messages = [Message(role="user", content="東京の天気は？")]
+    messages = [Message(role="user", content="テスト質問")]
 
     result = await provider.complete_with_tools(messages, tools)
     assert len(result.tool_calls) == 1
-    assert result.tool_calls[0].name == "get_weather"
+    assert result.tool_calls[0].name == "sample_tool"
     assert result.tool_calls[0].arguments == {"location": "東京"}
     assert result.stop_reason == "tool_use"
 
@@ -311,8 +311,8 @@ async def test_lmstudio_complete_with_tools_returns_text_when_no_tool_call() -> 
 
     tools = [
         ToolDefinition(
-            name="get_weather",
-            description="天気予報",
+            name="sample_tool",
+            description="サンプルツール",
             input_schema={"type": "object", "properties": {}},
         ),
     ]
