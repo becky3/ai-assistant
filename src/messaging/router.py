@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 import httpx
+from py_common_lib.httpx import ConstrainedClient
 
 from src.mcp_bridge.client_manager import MCPToolNotFoundError
 from src.messaging.port import IncomingMessage, MessagingPort
@@ -272,12 +273,11 @@ async def _download_and_parse_csv(
         download_url = url_private
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(
-                download_url,
-                headers={"Authorization": f"Bearer {bot_token}"},
-                follow_redirects=False,
-            )
+        async with ConstrainedClient(
+            request_timeout=30.0,
+            headers={"Authorization": f"Bearer {bot_token}"},
+        ) as client:
+            response = await client.get(download_url)
             if response.status_code == 302:
                 logger.error("File download redirected - auth may have failed")
                 return ([], "エラー: ファイルのダウンロードに失敗しました（認証エラー）。Bot権限を確認してください。")
