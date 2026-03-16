@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 
 from src.config.settings import DEFAULT_LMSTUDIO_BASE_URL, Settings
@@ -46,20 +48,20 @@ def test_lmstudio_base_url_with_v1_suffix_no_duplication() -> None:
     assert provider._client.base_url.path == "/v1/"
 
 
-def test_factory_creates_openai_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_factory_creates_openai_provider() -> None:
     """ファクトリで設定値からOpenAIプロバイダーを生成できる."""
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     settings = Settings(**{**TEST_SETTINGS_DEFAULTS, "online_llm_provider": "openai"})
-    provider = create_online_provider(settings)
+    with patch("src.llm.factory.get_secret", return_value="sk-test"):
+        provider = create_online_provider(settings)
     from src.llm.openai_provider import OpenAIProvider
     assert isinstance(provider, OpenAIProvider)
 
 
-def test_factory_creates_anthropic_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_factory_creates_anthropic_provider() -> None:
     """ファクトリで設定値からAnthropicプロバイダーを生成できる."""
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     settings = Settings(**{**TEST_SETTINGS_DEFAULTS, "online_llm_provider": "anthropic"})
-    provider = create_online_provider(settings)
+    with patch("src.llm.factory.get_secret", return_value="sk-ant-test"):
+        provider = create_online_provider(settings)
     from src.llm.anthropic_provider import AnthropicProvider
     assert isinstance(provider, AnthropicProvider)
 
@@ -78,13 +80,11 @@ def test_get_provider_for_service_returns_local_by_default() -> None:
     assert isinstance(provider, LMStudioProvider)
 
 
-def test_get_provider_for_service_returns_online_when_configured(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_get_provider_for_service_returns_online_when_configured() -> None:
     """サービスLLM設定が'online'の場合、オンラインプロバイダーを返す."""
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
     settings = Settings(**{**TEST_SETTINGS_DEFAULTS, "online_llm_provider": "openai"})
-    provider = get_provider_for_service(settings, "online")
+    with patch("src.llm.factory.get_secret", return_value="sk-test"):
+        provider = get_provider_for_service(settings, "online")
     from src.llm.openai_provider import OpenAIProvider
     assert isinstance(provider, OpenAIProvider)
 
