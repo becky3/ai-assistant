@@ -1,4 +1,3 @@
-[llm]
 online_llm_provider = "openai"
 chat_llm_provider = "local"
 profiler_llm_provider = "local"
@@ -7,18 +6,10 @@ summarizer_llm_provider = "local"
 openai_model = "gpt-4o-mini"
 anthropic_model = "claude-3-5-sonnet-20241022"
 lmstudio_model = "qwen/qwen3-next-80b"
-
-[app]
 timezone = "Asia/Tokyo"
-
-[feed]
-articles_per_feed = 50
-card_layout = "horizontal"
-summarize_timeout = 180
-collect_days = 7
-
-[thread]
-history_limit = 20
-
-[rag]
-show_sources = true
+feed_articles_per_feed = 50
+feed_card_layout = "horizontal"
+feed_summarize_timeout = 180
+feed_collect_days = 7
+thread_history_limit = 20
+rag_show_sources = true

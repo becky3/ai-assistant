@@ -19,7 +19,9 @@ from datetime import datetime, timezone
 
 from slack_sdk.web.async_client import AsyncWebClient
 
-from src.config.settings import get_settings, resolve_secret
+from py_common_lib.secrets import SecretNotFoundError, get_secret
+
+from src.config.settings import SERVICE_NAME, get_settings
 from src.db.models import Article, Feed
 from src.db.session import get_session_factory, init_db
 from src.scheduler.jobs import format_daily_digest, post_article_to_thread
@@ -91,9 +93,13 @@ DUMMY_ARTICLES = [
 async def main() -> None:
     settings = get_settings()
 
-    bot_token = resolve_secret("SLACK_BOT_TOKEN")
-    if not bot_token or not settings.slack_news_channel_id:
-        print("エラー: SLACK_BOT_TOKEN と SLACK_NEWS_CHANNEL_ID を設定してください")
+    try:
+        bot_token = get_secret(key="SLACK_BOT_TOKEN", service=SERVICE_NAME)
+    except SecretNotFoundError:
+        print("エラー: SLACK_BOT_TOKEN が keyring に未設定です")
+        return
+    if not settings.slack_news_channel_id:
+        print("エラー: SLACK_NEWS_CHANNEL_ID を .env に設定してください")
         return
 
     # 引数があればそれを使う、なければ .env の設定

@@ -6,7 +6,9 @@ from __future__ import annotations
 
 from typing import Literal
 
-from src.config.settings import Settings, resolve_secret
+from py_common_lib.secrets import get_secret
+
+from src.config.settings import SERVICE_NAME, Settings
 from src.llm.anthropic_provider import AnthropicProvider
 from src.llm.base import LLMProvider
 from src.llm.lmstudio_provider import LMStudioProvider
@@ -17,11 +19,11 @@ def create_online_provider(settings: Settings) -> LLMProvider:
     """設定に応じたオンラインLLMプロバイダーを生成する."""
     if settings.online_llm_provider == "anthropic":
         return AnthropicProvider(
-            api_key=resolve_secret("ANTHROPIC_API_KEY"),
+            api_key=get_secret(key="ANTHROPIC_API_KEY", service=SERVICE_NAME),
             model=settings.anthropic_model,
         )
     return OpenAIProvider(
-        api_key=resolve_secret("OPENAI_API_KEY"),
+        api_key=get_secret(key="OPENAI_API_KEY", service=SERVICE_NAME),
         model=settings.openai_model,
     )
 

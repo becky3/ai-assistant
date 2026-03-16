@@ -41,7 +41,7 @@ AI Assistantは、Slack上で動作するAIアシスタントである。
 ## 4. LLM使い分けルール
 
 全サービスでローカルLLM（LM Studio）をデフォルトで使用する。
-各サービスごとに `config/config.toml` の `[llm]` セクションで使用するLLMを変更可能。
+各サービスごとに `config/config.toml` で使用するLLMを変更可能。
 
 ### サービスごとのLLM設定
 
@@ -58,7 +58,6 @@ AI Assistantは、Slack上で動作するAIアシスタントである。
 ### 設定例
 
 ```toml
-[llm]
 # 全てローカル（デフォルト）
 chat_llm_provider = "local"
 profiler_llm_provider = "local"

@@ -13,7 +13,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
-from src.config.settings import get_settings, load_assistant_config, resolve_secret
+from py_common_lib.secrets import SecretNotFoundError, get_secret
+
+from src.config.settings import SERVICE_NAME, get_settings, load_assistant_config
 from src.process_guard import (
     BOT_READY_SIGNAL,
     check_already_running,
@@ -85,12 +87,14 @@ async def main() -> None:
     from src.slack.handlers import register_handlers
 
     # 必須シークレットの起動時バリデーション（仕様: config-management.md エッジケース）
-    _required_secrets = ["SLACK_BOT_TOKEN", "SLACK_APP_TOKEN"]
+    _required_secrets = ["SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_SIGNING_SECRET"]
     for _key in _required_secrets:
-        if not resolve_secret(_key):
+        try:
+            get_secret(key=_key, service=SERVICE_NAME)
+        except SecretNotFoundError:
             raise SystemExit(
                 f"必須シークレット {_key} が未設定です。"
-                f"keyring または環境変数で設定してください。"
+                f"keyring で設定してください。"
             )
 
     mcp_manager: MCPClientManager | None = None
@@ -196,7 +200,7 @@ async def main() -> None:
             channel_id=settings.slack_news_channel_id,
             max_articles_per_feed=settings.feed_articles_per_feed,
             feed_card_layout=settings.feed_card_layout,
-            bot_token=resolve_secret("SLACK_BOT_TOKEN"),
+            bot_token=get_secret(key="SLACK_BOT_TOKEN", service=SERVICE_NAME),
             timezone=settings.timezone,
             env_name=settings.env_name,
             mcp_manager=mcp_manager,

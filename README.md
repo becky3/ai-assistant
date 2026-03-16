@@ -44,7 +44,6 @@ cp .env.example .env  # 環境依存値を編集
 ```
 
 API キー・トークンは OS セキュアストレージ（keyring）で管理する（サービス名: `ai-assistant`）。
-環境変数・`.env` でも設定可能（keyring より優先）。
 登録方法は [py-common-lib の仕様書](https://github.com/becky3/py-common-lib/blob/main/docs/specs/infrastructure/secret-store.md) を参照。
 
 ## 設定管理
