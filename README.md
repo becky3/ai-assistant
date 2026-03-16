@@ -134,6 +134,7 @@ uv run mypy src
 - [MCP統合](docs/specs/infrastructure/mcp-integration.md)
 - [RAGナレッジ](docs/specs/infrastructure/rag-knowledge.md)
 - [Bot プロセスガード](docs/specs/infrastructure/bot-process-guard.md)
+- [設定管理](docs/specs/infrastructure/config-management.md)
 
 ### ワークフロー（workflows）
 
