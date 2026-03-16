@@ -253,12 +253,14 @@ async def test_missing_config_file() -> None:
 
 def test_mcp_enabled_env_control(monkeypatch: pytest.MonkeyPatch) -> None:
     """MCP_ENABLED 環境変数でMCP機能のON/OFFを制御できること."""
+    from pydantic import ValidationError
+
     from src.config.settings import Settings
 
-    # デフォルト: 無効 (_env_file=Noneで.envファイルの影響を排除)
+    # 未設定: ValidationError（デフォルト値なし）
     monkeypatch.delenv("MCP_ENABLED", raising=False)
-    settings = Settings(_env_file=None)
-    assert settings.mcp_enabled is False
+    with pytest.raises(ValidationError):
+        Settings(_env_file=None)
 
     # 有効化
     monkeypatch.setenv("MCP_ENABLED", "true")

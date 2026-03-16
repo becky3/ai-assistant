@@ -65,9 +65,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Slack
-    slack_news_channel_id: str = ""
-    slack_auto_reply_channels: str = ""
+    # Slack（環境依存値: .env で設定）
+    slack_news_channel_id: str
+    slack_auto_reply_channels: str
 
     def get_auto_reply_channels(self) -> list[str]:
         """自動返信チャンネルのリストを返す（カンマ区切りを解析）."""
@@ -91,7 +91,7 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-3-5-sonnet-20241022"
 
     # LM Studio (ローカルLLM)
-    lmstudio_base_url: str = DEFAULT_LMSTUDIO_BASE_URL
+    lmstudio_base_url: str
     lmstudio_model: str = "local-model"
 
     # Timezone
@@ -103,28 +103,28 @@ class Settings(BaseSettings):
     feed_summarize_timeout: int = Field(default=180, ge=0)  # 要約タイムアウト（秒、0=無制限）
     feed_collect_days: int = Field(default=7, ge=1)  # 収集対象の日数（これより古い記事はスキップ）
 
-    # Database
-    database_url: str = "sqlite+aiosqlite:///./ai_assistant.db"
+    # Database（環境依存値: .env で設定）
+    database_url: str
 
-    # Environment
-    env_name: str = ""
+    # Environment（環境依存値: .env で設定）
+    env_name: str
 
-    # MCP
-    mcp_enabled: bool = False
-    mcp_servers_config: str = "config/mcp_servers.json"
+    # MCP（環境依存値: .env で設定）
+    mcp_enabled: bool
+    mcp_servers_config: str
     rag_show_sources: bool = False  # RAG参照元URL表示（デバッグ用）
 
     # Thread History
     thread_history_limit: int = Field(default=20, ge=1, le=100)
 
-    # Logging
-    log_level: str = "INFO"
+    # Logging（環境依存値: .env で設定）
+    log_level: str
 
 
 @functools.lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """キャッシュ付きでSettingsインスタンスを返す."""
-    return Settings()
+    return Settings()  # type: ignore[call-arg]  # pydantic-settings が .env/環境変数から読み込み
 
 
 def load_assistant_config(path: str | Path = "config/assistant.yaml") -> dict[str, Any]:
