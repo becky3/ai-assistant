@@ -6,13 +6,13 @@ topic_llm_provider = "local"
 summarizer_llm_provider = "local"
 openai_model = "gpt-4o-mini"
 anthropic_model = "claude-3-5-sonnet-20241022"
-lmstudio_model = "local-model"
+lmstudio_model = "qwen/qwen3-next-80b"
 
 [app]
 timezone = "Asia/Tokyo"
 
 [feed]
-articles_per_feed = 10
+articles_per_feed = 50
 card_layout = "horizontal"
 summarize_timeout = 180
 collect_days = 7
@@ -21,4 +21,4 @@ collect_days = 7
 history_limit = 20
 
 [rag]
-show_sources = false
+show_sources = true
