@@ -254,7 +254,7 @@ async def test_lmstudio_complete_with_tools_returns_tool_call_response() -> None
     mock_tool_call.id = "call_1"
     mock_tool_call.function = MagicMock()
     mock_tool_call.function.name = "sample_tool"
-    mock_tool_call.function.arguments = json.dumps({"location": "東京"})
+    mock_tool_call.function.arguments = json.dumps({"query": "test"})
 
     mock_choice = MagicMock()
     mock_choice.message.content = ""
@@ -281,7 +281,7 @@ async def test_lmstudio_complete_with_tools_returns_tool_call_response() -> None
     result = await provider.complete_with_tools(messages, tools)
     assert len(result.tool_calls) == 1
     assert result.tool_calls[0].name == "sample_tool"
-    assert result.tool_calls[0].arguments == {"location": "東京"}
+    assert result.tool_calls[0].arguments == {"query": "test"}
     assert result.stop_reason == "tool_use"
 
 

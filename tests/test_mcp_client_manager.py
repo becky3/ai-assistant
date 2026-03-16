@@ -24,8 +24,8 @@ def _make_mock_tool(name: str = "sample_tool", description: str = "サンプル�
     tool.description = description
     tool.inputSchema = {
         "type": "object",
-        "properties": {"location": {"type": "string"}},
-        "required": ["location"],
+        "properties": {"query": {"type": "string"}},
+        "required": ["query"],
     }
     return tool
 
