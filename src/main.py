@@ -87,7 +87,7 @@ async def main() -> None:
     from src.slack.handlers import register_handlers
 
     # 必須シークレットの起動時バリデーション（仕様: config-management.md エッジケース）
-    _required_secrets = ["SLACK_BOT_TOKEN", "SLACK_APP_TOKEN"]
+    _required_secrets = ["SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_SIGNING_SECRET"]
     for _key in _required_secrets:
         try:
             get_secret(key=_key, service=SERVICE_NAME)

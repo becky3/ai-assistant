@@ -166,7 +166,7 @@ flowchart TD
 | `config/config.toml` に未知のキーが含まれる | `ValueError` で起動中止 |
 | `config/config.toml` のバリデーションエラー | 起動時にエラーメッセージを出力して中止 |
 | keyring 未設定（キー未登録） | `SecretNotFoundError` を送出（フォールバックなし） |
-| Slack 必須シークレットが未設定 | 起動時にエラーメッセージを出力して中止する。必須項目: `SLACK_BOT_TOKEN`、`SLACK_APP_TOKEN` |
+| Slack 必須シークレットが未設定 | 起動時にエラーメッセージを出力して中止する。必須項目: `SLACK_BOT_TOKEN`、`SLACK_APP_TOKEN`、`SLACK_SIGNING_SECRET` |
 | 任意シークレットが未設定（`OPENAI_API_KEY` 等） | 該当機能使用時に `SecretNotFoundError` |
 
 ## 関連ドキュメント
