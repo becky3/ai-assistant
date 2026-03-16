@@ -32,7 +32,7 @@ RSS記事の自動収集・要約配信、チャットでの質問応答、ユ�
 
 ## 技術スタック
 
-Python 3.11+ / uv / slack-bolt / OpenAI SDK / Anthropic SDK / SQLite + SQLAlchemy / feedparser / MCP SDK
+Python 3.11+ / uv / slack-bolt / OpenAI SDK / Anthropic SDK / SQLite + SQLAlchemy / feedparser / MCP SDK / py-common-lib (keyring, ConstrainedClient)
 
 詳細は [全体仕様概要](docs/specs/overview.md) を参照。
 
@@ -46,7 +46,17 @@ cp .env.example .env  # 環境依存値を編集
 API キー・トークンは py-common-lib の `get_secret` で OS セキュアストレージから取得する（サービス名: `ai-assistant`）。
 登録方法は [py-common-lib の仕様書](https://github.com/becky3/py-common-lib/blob/main/docs/specs/infrastructure/secret-store.md) を参照。
 
-詳細は `.env.example` および [設定管理仕様](docs/specs/infrastructure/config-management.md) を参照。
+## 設定管理
+
+設定値はセキュリティレベルに応じて3層に分離する。
+
+| 層 | 保管先 | git管理 | 分類基準 |
+|---|--------|---------|---------|
+| シークレット | OS セキュアストレージ (keyring) | 管理外 | 漏洩時に直接被害が発生する値（API キー、トークン） |
+| 環境依存値 | `.env` | 管理外 | デプロイ先・マシンごとに異なる値（接続先 URL、チャンネル ID） |
+| 共通設定値 | `config/config.toml` | **管理する** | プロジェクトとして統一管理する値（LLM 選択、チューニングパラメータ） |
+
+新しい設定値を追加する際は、上記の判断基準に従って適切な層に配置すること。詳細は [設定管理仕様](docs/specs/infrastructure/config-management.md) を参照。
 
 ## 起動
 

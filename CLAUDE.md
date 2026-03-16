@@ -5,13 +5,21 @@
 @README.md
 @docs/specs/overview.md
 
+## 設定管理（3層分離）
+
+設定値は3層に分離して管理する。詳細は `docs/specs/infrastructure/config-management.md` を参照。
+
+- **シークレット**: keyring（`resolve_secret()` で取得、サービス名: `ai-assistant`）
+- **環境依存値**: `.env`（`_EnvLoader` で読み込み）
+- **共通設定値**: `config/config.toml`（git 管理、`_load_toml_config()` で読み込み）
+- 新しい設定値は分類基準に従い適切な層に配置すること
+- 外部 HTTP リクエストは py-common-lib の `ConstrainedClient` 経由で実行すること
+
 ## LLM使い分けルール
 
 - **デフォルト**: 全サービスでローカルLLM（LM Studio）を使用
-- **設定変更**: `.env` で各サービスごとにLLMを変更可能
-  - `CHAT_LLM_PROVIDER` / `PROFILER_LLM_PROVIDER` / `TOPIC_LLM_PROVIDER` / `SUMMARIZER_LLM_PROVIDER`
-  - 各設定は `"local"` または `"online"` を指定（デフォルト: `"local"`）
-- `MCP_ENABLED` — MCP機能の有効/無効（デフォルト: `false`）
+- **設定変更**: `config/config.toml` の `[llm]` セクションで各サービスごとにLLMを変更可能
+- `MCP_ENABLED` — MCP機能の有効/無効（`.env` で設定、デフォルト: `false`）
 - RAG機能は rag-knowledge リポジトリに移行済み。MCP サーバーとして `config/mcp_servers.json` で接続設定する
 
 ## 自動進行ルール（auto-progress）

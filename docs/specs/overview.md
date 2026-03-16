@@ -36,6 +36,7 @@ AI Assistantは、Slack上で動作するAIアシスタントである。
 | スケジューラ | APScheduler |
 | RSS | feedparser |
 | 設定管理 | pydantic-settings (.env / config.toml / keyring) + YAML (アシスタント性格) |
+| 共通ライブラリ | py-common-lib (keyring シークレット取得, 制約付き HTTP クライアント) |
 
 ## 4. LLM使い分けルール
 
