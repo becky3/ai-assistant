@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 
 from slack_sdk.web.async_client import AsyncWebClient
 
-from src.config.settings import get_settings
+from src.config.settings import get_settings, resolve_secret
 from src.db.models import Article, Feed
 from src.db.session import get_session_factory, init_db
 from src.scheduler.jobs import format_daily_digest, post_article_to_thread
@@ -91,8 +91,9 @@ DUMMY_ARTICLES = [
 async def main() -> None:
     settings = get_settings()
 
-    if not settings.slack_bot_token or not settings.slack_news_channel_id:
-        print("エラー: .env に SLACK_BOT_TOKEN と SLACK_NEWS_CHANNEL_ID を設定してください")
+    bot_token = resolve_secret("SLACK_BOT_TOKEN")
+    if not bot_token or not settings.slack_news_channel_id:
+        print("エラー: SLACK_BOT_TOKEN と SLACK_NEWS_CHANNEL_ID を設定してください")
         return
 
     # 引数があればそれを使う、なければ .env の設定
@@ -166,7 +167,7 @@ async def main() -> None:
         print("配信する記事がありません")
         return
 
-    client = AsyncWebClient(token=settings.slack_bot_token)
+    client = AsyncWebClient(token=bot_token)
     channel = settings.slack_news_channel_id
 
     # ヘッダー

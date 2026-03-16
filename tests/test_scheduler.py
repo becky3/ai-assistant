@@ -467,11 +467,7 @@ def test_settings_feed_card_layout_defaults_to_horizontal() -> None:
     """AC12.1: Settings に feed_card_layout フィールドがあり、デフォルトは 'horizontal'."""
     from src.config.settings import Settings
 
-    s = Settings(
-        slack_bot_token="x",
-        slack_signing_secret="x",
-        slack_app_token="x",
-    )
+    s = Settings()
     assert s.feed_card_layout == "horizontal"
 
 
@@ -613,9 +609,6 @@ def test_settings_rejects_invalid_feed_card_layout() -> None:
 
     with pytest.raises(ValidationError):
         Settings(
-            slack_bot_token="x",
-            slack_signing_secret="x",
-            slack_app_token="x",
             feed_card_layout="invalid",  # type: ignore[arg-type]
         )
 

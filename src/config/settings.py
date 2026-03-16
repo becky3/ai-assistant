@@ -1,19 +1,59 @@
 """アプリケーション設定管理
-仕様: docs/specs/overview.md
+仕様: docs/specs/infrastructure/config-management.md
 """
 
 from __future__ import annotations
 
 import functools
+import logging
+import os
 from pathlib import Path
 from typing import Any, Literal
 
 import yaml
+from dotenv import dotenv_values
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from py_common_lib.secrets import SecretNotFoundError, SecretStoreError, get_secret
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_LMSTUDIO_BASE_URL = "http://localhost:1234"
+
+_SERVICE_NAME = "ai-assistant"
+
+
+def resolve_secret(key: str) -> str:
+    """環境変数 → .env → keyring の優先順位でシークレットを取得する.
+
+    仕様: docs/specs/infrastructure/config-management.md（設定値の解決優先順位）
+
+    os.environ を汚染しないよう、.env は dotenv_values() で直接読み取る。
+
+    Args:
+        key: 環境変数名と同一のキー名（例: "SLACK_BOT_TOKEN"）
+
+    Returns:
+        取得したシークレット値。未設定の場合は空文字列。
+    """
+    # 1. シェル環境変数
+    value = os.environ.get(key, "")
+    if value:
+        return value
+    # 2. .env ファイル（os.environ を変更せず直接読み取り）
+    env_values = dotenv_values()
+    value = env_values.get(key) or ""
+    if value:
+        return value
+    # 3. keyring
+    try:
+        return get_secret(key=key, service=_SERVICE_NAME)
+    except SecretNotFoundError:
+        return ""
+    except SecretStoreError:
+        logger.warning("keyring アクセスに失敗しました: key=%s", key, exc_info=True)
+        return ""
 
 
 class Settings(BaseSettings):
@@ -26,9 +66,6 @@ class Settings(BaseSettings):
     )
 
     # Slack
-    slack_bot_token: str = ""
-    slack_signing_secret: str = ""
-    slack_app_token: str = ""
     slack_news_channel_id: str = ""
     slack_auto_reply_channels: str = ""
 
@@ -48,11 +85,9 @@ class Settings(BaseSettings):
     summarizer_llm_provider: Literal["local", "online"] = "local"
 
     # OpenAI
-    openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
 
     # Anthropic
-    anthropic_api_key: str = ""
     anthropic_model: str = "claude-3-5-sonnet-20241022"
 
     # LM Studio (ローカルLLM)

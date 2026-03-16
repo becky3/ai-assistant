@@ -40,21 +40,13 @@ Python 3.11+ / uv / slack-bolt / OpenAI SDK / Anthropic SDK / SQLite + SQLAlchem
 
 ```bash
 uv sync
-cp .env.example .env  # 各種トークン・APIキーを設定
+cp .env.example .env  # 環境依存値を編集
 ```
 
-### 主な環境変数
+API キー・トークンは py-common-lib の `get_secret` で OS セキュアストレージから取得する（サービス名: `ai-assistant`）。
+登録方法は [py-common-lib の仕様書](https://github.com/becky3/py-common-lib/blob/main/docs/specs/infrastructure/secret-store.md) を参照。
 
-| 変数名 | 説明 |
-|--------|------|
-| `SLACK_BOT_TOKEN` | Slack Bot トークン |
-| `SLACK_APP_TOKEN` | Slack App トークン（Socket Mode用） |
-| `SLACK_NEWS_CHANNEL_ID` | フィード配信先チャンネルID |
-| `SLACK_AUTO_REPLY_CHANNELS` | 自動返信を有効にするチャンネルID（カンマ区切り） |
-| `CHAT_LLM_PROVIDER` | チャット応答のLLMプロバイダー（`local` / `online`） |
-| `MCP_ENABLED` | MCP機能の有効/無効（`true` / `false`、デフォルト: `false`） |
-
-詳細は `.env.example` を参照してください。
+詳細は `.env.example` および [設定管理仕様](docs/specs/infrastructure/config-management.md) を参照。
 
 ## 起動
 
