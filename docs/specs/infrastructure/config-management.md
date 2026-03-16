@@ -32,10 +32,11 @@
 同一の設定項目が複数の層に存在する場合、以下の優先順位で解決する:
 
 1. 環境変数（`.env` / シェル環境変数）
-2. `config/config.toml`
-3. コード上のデフォルト値
+2. keyring（シークレット層の設定項目のみ）
+3. `config/config.toml`
+4. コード上のデフォルト値
 
-環境変数による上書きは、デバッグ・一時的な変更・CI 環境での挙動変更に使用する。
+シークレット層の設定項目は、まず環境変数を確認し、未設定の場合に keyring から取得する。環境変数による上書きは、デバッグ・一時的な変更・CI 環境での挙動変更に使用する。
 
 ### 設定値の取得
 
@@ -51,20 +52,14 @@ keyring からの取得に失敗した場合（keyring 未インストール・�
 
 ```toml
 [llm]
-online_provider = "openai"
-chat_provider = "local"
-profiler_provider = "local"
-topic_provider = "local"
-summarizer_provider = "local"
-
-[llm.openai]
-model = "gpt-4o-mini"
-
-[llm.anthropic]
-model = "claude-3-5-sonnet-20241022"
-
-[llm.lmstudio]
-model = "local-model"
+online_llm_provider = "openai"
+chat_llm_provider = "local"
+profiler_llm_provider = "local"
+topic_llm_provider = "local"
+summarizer_llm_provider = "local"
+openai_model = "gpt-4o-mini"
+anthropic_model = "claude-3-5-sonnet-20241022"
+lmstudio_model = "local-model"
 
 [app]
 timezone = "Asia/Tokyo"
@@ -81,6 +76,8 @@ history_limit = 20
 [rag]
 show_sources = false
 ```
+
+TOML のキー名は Settings クラスの属性名からプレフィックス（セクション名に対応する部分）を除いた形とする。例: `feed_articles_per_feed` → `[feed]` セクションの `articles_per_feed`。`[llm]` セクションのキーは Settings 属性名と同一（`online_llm_provider` 等）とし、サブテーブルは使用しない。
 
 ### 全設定値の3層分類
 
@@ -145,6 +142,7 @@ show_sources = false
 | `ENV_NAME` | 環境依存値 | 環境識別子はデプロイ先ごとに異なる |
 | `MCP_ENABLED` | 環境依存値 | MCP サーバーの有無はデプロイ環境に依存 |
 | `LOG_LEVEL` | 環境依存値 | 本番・開発でログレベルを変えるため |
+| `TIMEZONE` | 共通設定値 | Issue #779 では環境依存値としていたが、タイムゾーンはプロジェクト共通の運用方針であり環境ごとに変える必要がないため再分類。環境ごとに変えたい場合は環境変数で上書き可能 |
 | LLM プロバイダー選択 | 共通設定値 | プロジェクトとしてどの LLM を使うかの方針。環境ごとに変えたい場合は環境変数で上書き |
 | モデル名 | 共通設定値 | プロジェクトとして使用するモデルの統一管理 |
 | Feed パラメータ | 共通設定値 | チューニングパラメータ。プロジェクト共通の値を git 管理する |
@@ -156,7 +154,7 @@ show_sources = false
 flowchart TD
     A["アプリケーション起動"] --> B["keyring からシークレット取得"]
     A --> C[".env から環境依存値読み込み"]
-    A --> D["config.toml から共通設定値読み込み"]
+    A --> D["config/config.toml から共通設定値読み込み"]
     B --> E["Settings オブジェクト構築"]
     C --> E
     D --> E
@@ -176,11 +174,12 @@ flowchart TD
 
 | ケース | 振る舞い |
 |---|---|
-| `config.toml` が存在しない | デフォルト値で動作する（`config.toml` は任意） |
+| `config/config.toml` が存在しない | デフォルト値で動作する（`config/config.toml` は任意） |
 | keyring 未インストール・取得失敗 | 環境変数にフォールバック |
-| 環境変数と `config.toml` の両方に同一キーが存在 | 環境変数を優先 |
-| `config.toml` のバリデーションエラー | 起動時にエラーメッセージを出力して中止 |
-| シークレットが未設定（keyring にも環境変数にもない） | 空文字列のまま（該当機能使用時にエラー） |
+| 環境変数と `config/config.toml` の両方に同一キーが存在 | 環境変数を優先 |
+| `config/config.toml` のバリデーションエラー | 起動時にエラーメッセージを出力して中止 |
+| Slack 必須シークレットが未設定（keyring にも環境変数にもない） | 起動時にエラーメッセージを出力して中止する。必須項目: `SLACK_BOT_TOKEN`、`SLACK_APP_TOKEN` |
+| 任意シークレットが未設定（`OPENAI_API_KEY` 等） | 空文字列のまま（該当機能使用時にエラー） |
 
 ## 関連ドキュメント
 
