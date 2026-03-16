@@ -9,6 +9,8 @@ from src.llm.base import LLMProvider
 from src.llm.factory import create_local_provider, create_online_provider, get_provider_for_service
 from src.llm.lmstudio_provider import LMStudioProvider
 
+from .settings_defaults import TEST_SETTINGS_DEFAULTS
+
 
 def test_llm_provider_abc_has_complete() -> None:
     """LLMProvider ABCに async complete(messages) -> LLMResponse を定義."""
@@ -46,9 +48,8 @@ def test_lmstudio_base_url_with_v1_suffix_no_duplication() -> None:
 
 def test_factory_creates_openai_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     """ファクトリで設定値からOpenAIプロバイダーを生成できる."""
-    monkeypatch.setenv("ONLINE_LLM_PROVIDER", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-    settings = Settings()
+    settings = Settings(**{**TEST_SETTINGS_DEFAULTS, "online_llm_provider": "openai"})
     provider = create_online_provider(settings)
     from src.llm.openai_provider import OpenAIProvider
     assert isinstance(provider, OpenAIProvider)
@@ -56,9 +57,8 @@ def test_factory_creates_openai_provider(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_factory_creates_anthropic_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     """ファクトリで設定値からAnthropicプロバイダーを生成できる."""
-    monkeypatch.setenv("ONLINE_LLM_PROVIDER", "anthropic")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
-    settings = Settings()
+    settings = Settings(**{**TEST_SETTINGS_DEFAULTS, "online_llm_provider": "anthropic"})
     provider = create_online_provider(settings)
     from src.llm.anthropic_provider import AnthropicProvider
     assert isinstance(provider, AnthropicProvider)
@@ -66,14 +66,14 @@ def test_factory_creates_anthropic_provider(monkeypatch: pytest.MonkeyPatch) -> 
 
 def test_factory_creates_local_provider() -> None:
     """ファクトリでローカルプロバイダーを生成できる."""
-    settings = Settings()
+    settings = Settings(**TEST_SETTINGS_DEFAULTS)
     provider = create_local_provider(settings)
     assert isinstance(provider, LMStudioProvider)
 
 
 def test_get_provider_for_service_returns_local_by_default() -> None:
     """サービスLLM設定が'local'の場合、ローカルプロバイダーを返す."""
-    settings = Settings()
+    settings = Settings(**TEST_SETTINGS_DEFAULTS)
     provider = get_provider_for_service(settings, "local")
     assert isinstance(provider, LMStudioProvider)
 
@@ -82,35 +82,31 @@ def test_get_provider_for_service_returns_online_when_configured(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """サービスLLM設定が'online'の場合、オンラインプロバイダーを返す."""
-    monkeypatch.setenv("ONLINE_LLM_PROVIDER", "openai")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-    settings = Settings()
+    settings = Settings(**{**TEST_SETTINGS_DEFAULTS, "online_llm_provider": "openai"})
     provider = get_provider_for_service(settings, "online")
     from src.llm.openai_provider import OpenAIProvider
     assert isinstance(provider, OpenAIProvider)
 
 
-def test_service_llm_settings_default_to_local(monkeypatch: pytest.MonkeyPatch) -> None:
-    """各サービスのLLM設定はデフォルトで'local'."""
-    # 環境変数をクリア (_env_file=Noneで.envファイルの影響を排除)
-    monkeypatch.delenv("CHAT_LLM_PROVIDER", raising=False)
-    monkeypatch.delenv("PROFILER_LLM_PROVIDER", raising=False)
-    monkeypatch.delenv("TOPIC_LLM_PROVIDER", raising=False)
-    monkeypatch.delenv("SUMMARIZER_LLM_PROVIDER", raising=False)
-    settings = Settings(_env_file=None)
+def test_service_llm_settings_default_to_local() -> None:
+    """config.toml のデフォルト値で各サービスのLLM設定が'local'."""
+    settings = Settings(**TEST_SETTINGS_DEFAULTS)
     assert settings.chat_llm_provider == "local"
     assert settings.profiler_llm_provider == "local"
     assert settings.topic_llm_provider == "local"
     assert settings.summarizer_llm_provider == "local"
 
 
-def test_service_llm_settings_can_be_configured(monkeypatch: pytest.MonkeyPatch) -> None:
-    """各サービスのLLM設定は環境変数で変更可能."""
-    monkeypatch.setenv("CHAT_LLM_PROVIDER", "online")
-    monkeypatch.setenv("PROFILER_LLM_PROVIDER", "online")
-    monkeypatch.setenv("TOPIC_LLM_PROVIDER", "local")
-    monkeypatch.setenv("SUMMARIZER_LLM_PROVIDER", "online")
-    settings = Settings()
+def test_service_llm_settings_can_be_configured() -> None:
+    """各サービスのLLM設定は変更可能."""
+    settings = Settings(**{
+        **TEST_SETTINGS_DEFAULTS,
+        "chat_llm_provider": "online",
+        "profiler_llm_provider": "online",
+        "topic_llm_provider": "local",
+        "summarizer_llm_provider": "online",
+    })
     assert settings.chat_llm_provider == "online"
     assert settings.profiler_llm_provider == "online"
     assert settings.topic_llm_provider == "local"

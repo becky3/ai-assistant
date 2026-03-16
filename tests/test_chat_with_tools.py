@@ -251,23 +251,22 @@ async def test_missing_config_file() -> None:
     assert configs == []
 
 
-def test_mcp_enabled_env_control(monkeypatch: pytest.MonkeyPatch) -> None:
-    """MCP_ENABLED 環境変数でMCP機能のON/OFFを制御できること."""
+def test_mcp_enabled_env_control() -> None:
+    """MCP_ENABLED 設定でMCP機能のON/OFFを制御できること."""
     from src.config.settings import Settings
 
-    # デフォルト: 無効 (_env_file=Noneで.envファイルの影響を排除)
-    monkeypatch.delenv("MCP_ENABLED", raising=False)
-    settings = Settings(_env_file=None)
+    from .settings_defaults import TEST_SETTINGS_DEFAULTS
+
+    # デフォルト: 無効
+    settings = Settings(**TEST_SETTINGS_DEFAULTS)
     assert settings.mcp_enabled is False
 
     # 有効化
-    monkeypatch.setenv("MCP_ENABLED", "true")
-    settings = Settings(_env_file=None)
+    settings = Settings(**{**TEST_SETTINGS_DEFAULTS, "mcp_enabled": True})
     assert settings.mcp_enabled is True
 
     # 無効化
-    monkeypatch.setenv("MCP_ENABLED", "false")
-    settings = Settings(_env_file=None)
+    settings = Settings(**{**TEST_SETTINGS_DEFAULTS, "mcp_enabled": False})
     assert settings.mcp_enabled is False
 
 

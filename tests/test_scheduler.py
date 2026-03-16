@@ -464,10 +464,12 @@ async def test_newly_collected_articles_delivered_in_next_run(db_factory) -> Non
 
 
 def test_settings_feed_card_layout_defaults_to_horizontal() -> None:
-    """AC12.1: Settings に feed_card_layout フィールドがあり、デフォルトは 'horizontal'."""
+    """AC12.1: config.toml のデフォルト値で feed_card_layout は 'horizontal'."""
     from src.config.settings import Settings
 
-    s = Settings()
+    from .settings_defaults import TEST_SETTINGS_DEFAULTS
+
+    s = Settings(**TEST_SETTINGS_DEFAULTS)
     assert s.feed_card_layout == "horizontal"
 
 
@@ -607,10 +609,10 @@ def test_settings_rejects_invalid_feed_card_layout() -> None:
 
     from src.config.settings import Settings
 
+    from .settings_defaults import TEST_SETTINGS_DEFAULTS
+
     with pytest.raises(ValidationError):
-        Settings(
-            feed_card_layout="invalid",  # type: ignore[arg-type]
-        )
+        Settings(**{**TEST_SETTINGS_DEFAULTS, "feed_card_layout": "invalid"})
 
 
 # --- AC15: feed test コマンド ---

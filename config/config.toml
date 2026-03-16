@@ -1,0 +1,24 @@
+[llm]
+online_llm_provider = "openai"
+chat_llm_provider = "local"
+profiler_llm_provider = "local"
+topic_llm_provider = "local"
+summarizer_llm_provider = "local"
+openai_model = "gpt-4o-mini"
+anthropic_model = "claude-3-5-sonnet-20241022"
+lmstudio_model = "local-model"
+
+[app]
+timezone = "Asia/Tokyo"
+
+[feed]
+articles_per_feed = 10
+card_layout = "horizontal"
+summarize_timeout = 180
+collect_days = 7
+
+[thread]
+history_limit = 20
+
+[rag]
+show_sources = false
