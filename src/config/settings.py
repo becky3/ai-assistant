@@ -127,32 +127,32 @@ class Settings(BaseModel):
             return []
         return [ch.strip() for ch in self.slack_auto_reply_channels.split(",") if ch.strip()]
 
-    # --- config.toml から取得（共通設定値） ---
+    # --- config.toml から取得（共通設定値、config.toml 不存在時はデフォルトで動作） ---
 
     # LLM
-    online_llm_provider: Literal["openai", "anthropic"]
-    chat_llm_provider: Literal["local", "online"]
-    profiler_llm_provider: Literal["local", "online"]
-    topic_llm_provider: Literal["local", "online"]
-    summarizer_llm_provider: Literal["local", "online"]
-    openai_model: str
-    anthropic_model: str
-    lmstudio_model: str
+    online_llm_provider: Literal["openai", "anthropic"] = "openai"
+    chat_llm_provider: Literal["local", "online"] = "local"
+    profiler_llm_provider: Literal["local", "online"] = "local"
+    topic_llm_provider: Literal["local", "online"] = "local"
+    summarizer_llm_provider: Literal["local", "online"] = "local"
+    openai_model: str = "gpt-4o-mini"
+    anthropic_model: str = "claude-3-5-sonnet-20241022"
+    lmstudio_model: str = "local-model"
 
     # App
-    timezone: str
+    timezone: str = "Asia/Tokyo"
 
     # Feed
-    feed_articles_per_feed: int = Field(ge=1)
-    feed_card_layout: Literal["vertical", "horizontal"]
-    feed_summarize_timeout: int = Field(ge=0)
-    feed_collect_days: int = Field(ge=1)
+    feed_articles_per_feed: int = Field(default=10, ge=1)
+    feed_card_layout: Literal["vertical", "horizontal"] = "horizontal"
+    feed_summarize_timeout: int = Field(default=180, ge=0)
+    feed_collect_days: int = Field(default=7, ge=1)
 
     # Thread
-    thread_history_limit: int = Field(ge=1, le=100)
+    thread_history_limit: int = Field(default=20, ge=1, le=100)
 
     # RAG
-    rag_show_sources: bool
+    rag_show_sources: bool = False
 
 
 # TOML セクション → Settings フィールド名のマッピング
@@ -186,10 +186,12 @@ _TOML_KEY_MAP: dict[str, dict[str, str]] = {
 
 
 def _load_toml_config() -> dict[str, Any]:
-    """config.toml を読み込み、Settings フィールド名にフラット化する."""
+    """config.toml を読み込み、Settings フィールド名にフラット化する.
+
+    仕様: config.toml が存在しない場合は空 dict を返す（デフォルト値で動作）。
+    """
     if not _TOML_FILE.exists():
-        msg = f"config.toml が見つかりません: {_TOML_FILE}"
-        raise FileNotFoundError(msg)
+        return {}
     with open(_TOML_FILE, "rb") as f:
         data: dict[str, Any] = tomllib.load(f)
 
@@ -223,9 +225,18 @@ def get_settings() -> Settings:
     .env から環境依存値、config/config.toml から共通設定値を取得し、
     統合した Settings を返す。
     """
-    env_loader = _EnvLoader()  # type: ignore[call-arg]  # pydantic-settings が .env/環境変数から読み込み
     toml_data = _load_toml_config()
-    return Settings(**env_loader.model_dump(), **toml_data)
+    env_loader = _EnvLoader()  # type: ignore[call-arg]  # pydantic-settings が .env/環境変数から読み込み
+    # 優先順位: 環境変数(.env) > config.toml > デフォルト値
+    # 共通設定値も環境変数で上書き可能（デバッグ・CI用）
+    merged = {**toml_data, **env_loader.model_dump()}
+    # 環境変数に共通設定値のキーがあれば上書き
+    for field_name in Settings.model_fields:
+        env_key = field_name.upper()
+        env_val = os.environ.get(env_key)
+        if env_val is not None and field_name not in _ENV_FIELD_NAMES:
+            merged[field_name] = env_val
+    return Settings(**merged)
 
 
 def load_assistant_config(path: str | Path = "config/assistant.yaml") -> dict[str, Any]:
