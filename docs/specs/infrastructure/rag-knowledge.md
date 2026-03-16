@@ -12,7 +12,7 @@ RAG 機能は独立リポジトリ（rag-knowledge）で実装・運用してお
 
 ## 制約
 
-- RAG の実装・設定・テストは rag-knowledge リポジトリで管理する。ツールの詳細仕様は rag-knowledge 側の仕様書を参照
+- RAG の実装・設定・テストは [rag-knowledge リポジトリ](https://github.com/becky3/rag-knowledge)で管理する。ツールの詳細仕様は [rag-knowledge 仕様書](https://github.com/becky3/rag-knowledge/blob/main/docs/specs/rag-knowledge.md)を参照
 - ai-assistant からは MCP サーバー設定（`config/mcp_servers.json`）で RAG サーバーに HTTP 接続する
 - RAG サーバーは別プロセスとして事前に起動しておく必要がある
 - RAG の利用可否は MCP 基盤の有効化（`MCP_ENABLED`）と MCP サーバー設定への登録で決まる
@@ -24,7 +24,7 @@ RAG 機能は独立リポジトリ（rag-knowledge）で実装・運用してお
 LLM がツールループ内で `rag_search` を呼ぶかどうかを自律的に判断する。
 MCP サーバー設定の `system_instruction` / `response_instruction` により、ナレッジベース関連の質問時に検索を促す。
 
-MCP ツールの定義・振る舞いは rag-knowledge リポジトリ側の仕様書で管理する。
+MCP ツールの定義・振る舞いは [rag-knowledge 仕様書](https://github.com/becky3/rag-knowledge/blob/main/docs/specs/rag-knowledge.md)で管理する。
 
 ## コンポーネント構成
 
