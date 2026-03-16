@@ -5,20 +5,19 @@
 from __future__ import annotations
 
 import functools
+import logging
 import os
 from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from py_common_lib.secrets import SecretNotFoundError, SecretStoreError, get_secret
 
-# .env を os.environ に読み込む。pydantic-settings は独自に .env を読むが、
-# resolve_secret() は os.environ.get() で環境変数を参照するため別途必要。
-load_dotenv()
+logger = logging.getLogger(__name__)
 
 DEFAULT_LMSTUDIO_BASE_URL = "http://localhost:1234"
 
@@ -26,12 +25,11 @@ _SERVICE_NAME = "ai-assistant"
 
 
 def resolve_secret(key: str) -> str:
-    """環境変数 → keyring の優先順位でシークレットを取得する.
+    """環境変数 → .env → keyring の優先順位でシークレットを取得する.
 
     仕様: docs/specs/infrastructure/config-management.md（設定値の解決優先順位）
 
-    環境変数には .env の値も含まれる（load_dotenv() で os.environ に展開済み）。
-    環境変数が空文字列または未設定の場合は keyring にフォールバックする。
+    os.environ を汚染しないよう、.env は dotenv_values() で直接読み取る。
 
     Args:
         key: 環境変数名と同一のキー名（例: "SLACK_BOT_TOKEN"）
@@ -39,12 +37,22 @@ def resolve_secret(key: str) -> str:
     Returns:
         取得したシークレット値。未設定の場合は空文字列。
     """
+    # 1. シェル環境変数
     value = os.environ.get(key, "")
     if value:
         return value
+    # 2. .env ファイル（os.environ を変更せず直接読み取り）
+    env_values = dotenv_values()
+    value = env_values.get(key) or ""
+    if value:
+        return value
+    # 3. keyring
     try:
-        return get_secret(key, service=_SERVICE_NAME)
-    except (SecretNotFoundError, SecretStoreError):
+        return get_secret(key=key, service=_SERVICE_NAME)
+    except SecretNotFoundError:
+        return ""
+    except SecretStoreError:
+        logger.warning("keyring アクセスに失敗しました: key=%s", key, exc_info=True)
         return ""
 
 
