@@ -86,10 +86,16 @@ class MCPClientManager:
                 if config.auto_context_tool:
                     self._auto_context_tools.append(config.auto_context_tool)
                 logger.info("MCPサーバー '%s' に接続しました。", config.name)
-            except Exception:
-                logger.exception(
-                    "MCPサーバー '%s' への接続に失敗しました。スキップします。",
+            except BaseException as exc:
+                # KeyboardInterrupt / SystemExit は再送出（シャットダウン用）
+                if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                    raise
+                # CancelledError / ExceptionGroup 等を含む接続エラーをキャッチし、
+                # MCP 機能を無効化して起動を継続する
+                logger.warning(
+                    "MCPサーバー '%s' への接続に失敗しました。スキップします: %s",
                     config.name,
+                    exc,
                 )
 
     async def _connect_stdio_server(self, config: MCPServerConfig) -> None:
@@ -110,20 +116,36 @@ class MCPClientManager:
         await self._initialize_session(config, session)
 
     async def _connect_http_server(self, config: MCPServerConfig) -> None:
-        """HTTP（streamable-http）トランスポートでMCPサーバーに接続する."""
+        """HTTP（streamable-http）トランスポートでMCPサーバーに接続する.
+
+        接続試行中の anyio cancel scope がイベントループに残ることを防ぐため、
+        一時的な AsyncExitStack で隔離し、成功時のみメインの exit stack に移管する。
+        """
         if not config.url:
             raise ValueError(
                 f"MCPサーバー '{config.name}': HTTP トランスポートには url の設定が必要です。"
             )
 
-        http_transport = await self._exit_stack.enter_async_context(
-            streamable_http_client(config.url)
-        )
-        read_stream, write_stream, _ = http_transport
-        session = await self._exit_stack.enter_async_context(
-            ClientSession(read_stream, write_stream)
-        )
-        await self._initialize_session(config, session)
+        import contextlib
+
+        temp_stack = AsyncExitStack()
+        try:
+            http_transport = await temp_stack.enter_async_context(
+                streamable_http_client(config.url)
+            )
+            read_stream, write_stream, _ = http_transport
+            session = await temp_stack.enter_async_context(
+                ClientSession(read_stream, write_stream)
+            )
+            await self._initialize_session(config, session)
+        except BaseException:
+            # 接続失敗 — 一時スタックをクリーンアップして cancel scope の漏洩を防ぐ
+            with contextlib.suppress(BaseException):
+                await temp_stack.aclose()
+            raise
+
+        # 接続成功 — メインの exit stack に移管
+        self._exit_stack.push_async_callback(temp_stack.aclose)
 
     async def _initialize_session(
         self, config: MCPServerConfig, session: ClientSession

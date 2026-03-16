@@ -200,9 +200,9 @@ async def test_graceful_degradation_on_connection_failure() -> None:
         # 例外が発生しないこと（グレースフルデグラデーション）
         await manager.initialize([config])
 
-    # エラーログが出力されること
-    mock_logger.exception.assert_called_once()
-    assert "broken_server" in str(mock_logger.exception.call_args)
+    # 警告ログが出力されること
+    mock_logger.warning.assert_called_once()
+    assert "broken_server" in str(mock_logger.warning.call_args)
 
     # ツールは空のまま
     tools = await manager.get_available_tools()
@@ -262,8 +262,8 @@ async def test_http_transport_missing_url_logs_error() -> None:
         )
         await manager.initialize([config])
 
-    mock_logger.exception.assert_called_once()
-    assert "no_url_server" in str(mock_logger.exception.call_args)
+    mock_logger.warning.assert_called_once()
+    assert "no_url_server" in str(mock_logger.warning.call_args)
 
     tools = await manager.get_available_tools()
     assert tools == []
