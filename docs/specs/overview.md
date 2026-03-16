@@ -21,6 +21,7 @@ AI Assistantは、Slack上で動作するAIアシスタントである。
 | 10 | Slack mrkdwn形式対応 | LLM返信をSlack mrkdwn形式で出力 | [slack-formatting.md](features/slack-formatting.md) |
 | 11 | CLIアダプター | Slack非依存でCLIからボット動作を確認するPort/Adapterパターン | [cli-adapter.md](features/cli-adapter.md) |
 | 12 | Botプロセスガード | PIDファイルによるプロセス管理で多重起動防止・管理コマンドを提供 | [bot-process-guard.md](infrastructure/bot-process-guard.md) |
+| 13 | 設定管理 | アプリケーション設定の3層分離（シークレット・環境依存値・共通設定値） | [config-management.md](infrastructure/config-management.md) |
 
 ## 3. 技術スタック
 
@@ -34,7 +35,7 @@ AI Assistantは、Slack上で動作するAIアシスタントである。
 | DB | SQLite + SQLAlchemy (ORM経由で将来DB切替可能) |
 | スケジューラ | APScheduler |
 | RSS | feedparser |
-| 設定管理 | pydantic-settings (.env) + YAML (アシスタント性格) |
+| 設定管理 | pydantic-settings (.env / config.toml / keyring) + YAML (アシスタント性格) |
 
 ## 4. LLM使い分けルール
 
