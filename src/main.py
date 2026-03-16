@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
-from src.config.settings import get_settings, load_assistant_config
+from src.config.settings import get_settings, load_assistant_config, resolve_secret
 from src.process_guard import (
     BOT_READY_SIGNAL,
     check_already_running,
@@ -84,6 +84,15 @@ async def main() -> None:
     from src.slack.app import create_app, socket_mode_handler
     from src.slack.handlers import register_handlers
 
+    # 必須シークレットの起動時バリデーション（仕様: config-management.md エッジケース）
+    _required_secrets = ["SLACK_BOT_TOKEN", "SLACK_APP_TOKEN"]
+    for _key in _required_secrets:
+        if not resolve_secret(_key):
+            raise SystemExit(
+                f"必須シークレット {_key} が未設定です。"
+                f"keyring または環境変数で設定してください。"
+            )
+
     mcp_manager: MCPClientManager | None = None
     try:
         # 起動時刻を記録 (F7)
@@ -114,7 +123,7 @@ async def main() -> None:
             logger.info("MCP無効: ツール呼び出し機能はオフです")
 
         # Slack アプリ（ThreadHistoryService に必要なため先に作成）
-        app = create_app(settings)
+        app = create_app()
         slack_client = app.client
 
         # Bot User ID を取得（スレッド履歴でボットの発言を識別するため）
@@ -187,7 +196,7 @@ async def main() -> None:
             channel_id=settings.slack_news_channel_id,
             max_articles_per_feed=settings.feed_articles_per_feed,
             feed_card_layout=settings.feed_card_layout,
-            bot_token=settings.slack_bot_token,
+            bot_token=resolve_secret("SLACK_BOT_TOKEN"),
             timezone=settings.timezone,
             env_name=settings.env_name,
             mcp_manager=mcp_manager,
@@ -201,7 +210,7 @@ async def main() -> None:
         )
 
         # Socket Mode で起動（グレースフルシャットダウン対応）
-        async with socket_mode_handler(app, settings) as handler:
+        async with socket_mode_handler(app) as handler:
             print(BOT_READY_SIGNAL, flush=True)
             try:
                 await handler.start_async()  # type: ignore[no-untyped-call]

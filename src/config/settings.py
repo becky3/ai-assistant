@@ -1,19 +1,51 @@
 """アプリケーション設定管理
-仕様: docs/specs/overview.md
+仕様: docs/specs/infrastructure/config-management.md
 """
 
 from __future__ import annotations
 
 import functools
+import os
 from pathlib import Path
 from typing import Any, Literal
 
 import yaml
+from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from py_common_lib.secrets import SecretNotFoundError, SecretStoreError, get_secret
+
+# .env を os.environ に読み込む。pydantic-settings は独自に .env を読むが、
+# resolve_secret() は os.environ.get() で環境変数を参照するため別途必要。
+load_dotenv()
 
 DEFAULT_LMSTUDIO_BASE_URL = "http://localhost:1234"
+
+_SERVICE_NAME = "ai-assistant"
+
+
+def resolve_secret(key: str) -> str:
+    """環境変数 → keyring の優先順位でシークレットを取得する.
+
+    仕様: docs/specs/infrastructure/config-management.md（設定値の解決優先順位）
+
+    環境変数には .env の値も含まれる（load_dotenv() で os.environ に展開済み）。
+    環境変数が空文字列または未設定の場合は keyring にフォールバックする。
+
+    Args:
+        key: 環境変数名と同一のキー名（例: "SLACK_BOT_TOKEN"）
+
+    Returns:
+        取得したシークレット値。未設定の場合は空文字列。
+    """
+    value = os.environ.get(key, "")
+    if value:
+        return value
+    try:
+        return get_secret(key, service=_SERVICE_NAME)
+    except (SecretNotFoundError, SecretStoreError):
+        return ""
 
 
 class Settings(BaseSettings):
@@ -26,9 +58,6 @@ class Settings(BaseSettings):
     )
 
     # Slack
-    slack_bot_token: str = ""
-    slack_signing_secret: str = ""
-    slack_app_token: str = ""
     slack_news_channel_id: str = ""
     slack_auto_reply_channels: str = ""
 
@@ -48,11 +77,9 @@ class Settings(BaseSettings):
     summarizer_llm_provider: Literal["local", "online"] = "local"
 
     # OpenAI
-    openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
 
     # Anthropic
-    anthropic_api_key: str = ""
     anthropic_model: str = "claude-3-5-sonnet-20241022"
 
     # LM Studio (ローカルLLM)
