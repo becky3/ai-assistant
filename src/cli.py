@@ -180,7 +180,7 @@ async def _setup(
         topic_recommender=topic_recommender,
         collector=feed_collector,
         session_factory=session_factory,
-        channel_id=settings.slack_news_channel_id or "cli",
+        channel_id="cli",
         max_articles_per_feed=settings.feed_articles_per_feed,
         feed_card_layout=settings.feed_card_layout,
         bot_token=None,
