@@ -1,5 +1,5 @@
 online_llm_provider = "openai"
-chat_llm_provider = "local"
+chat_llm_provider = "claude"
 profiler_llm_provider = "local"
 topic_llm_provider = "local"
 summarizer_llm_provider = "local"
@@ -13,5 +13,5 @@ feed_summarize_timeout = 180
 feed_collect_days = 7
 thread_history_limit = 20
 rag_show_sources = true
-claude_allowed_tools = "mcp__rag-knowledge-production__*"
+claude_allowed_tools = "mcp__rag-knowledge-production__*,WebSearch"
 claude_timeout = 120
