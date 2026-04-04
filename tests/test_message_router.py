@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import Literal
 from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
 
 from src.llm.base import Message
 from src.mcp_bridge.client_manager import MCPToolNotFoundError
 from src.messaging.port import IncomingMessage, MessagingPort
+
 from src.messaging.router import (
     MessageRouter,
     _build_status_message,
@@ -70,6 +72,10 @@ def _make_router(
     bot_start_time: datetime | None = None,
     rag_bluesky_handle: str = "",
     rag_zenn_username: str = "",
+    max_articles_per_feed: int = 10,
+    feed_card_layout: Literal["vertical", "horizontal"] = "horizontal",
+    bot_token: str | None = None,
+    slack_client: AsyncMock | None = None,
 ) -> tuple[MockAdapter, MessageRouter]:
     if adapter is None:
         adapter = MockAdapter()
@@ -85,10 +91,14 @@ def _make_router(
         collector=collector,
         session_factory=session_factory,
         channel_id="C_TEST",
+        max_articles_per_feed=max_articles_per_feed,
+        feed_card_layout=feed_card_layout,
+        bot_token=bot_token,
         timezone="Asia/Tokyo",
         env_name="test",
         mcp_manager=mcp_manager,
         bot_start_time=bot_start_time,
+        slack_client=slack_client,
         rag_bluesky_handle=rag_bluesky_handle,
         rag_zenn_username=rag_zenn_username,
         rag_bluesky_max_posts=100,
