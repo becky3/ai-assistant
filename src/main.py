@@ -222,6 +222,8 @@ async def main() -> None:
             mcp_manager=mcp_manager,
             bot_start_time=bot_start_time,
             slack_client=slack_client,
+            rag_bluesky_handle=settings.rag_bluesky_handle,
+            rag_zenn_username=settings.rag_zenn_username,
         )
 
         register_handlers(

@@ -499,6 +499,8 @@ class MessageRouter:
         mcp_manager: MCPClientManager | None = None,
         bot_start_time: datetime | None = None,
         slack_client: AsyncWebClient | None = None,
+        rag_bluesky_handle: str = "",
+        rag_zenn_username: str = "",
     ) -> None:
         self._messaging = messaging
         self._chat_service = chat_service
@@ -515,6 +517,8 @@ class MessageRouter:
         self._mcp_manager = mcp_manager
         self._bot_start_time = bot_start_time
         self._slack_client = slack_client
+        self._rag_bluesky_handle = rag_bluesky_handle
+        self._rag_zenn_username = rag_zenn_username
 
     async def process_message(self, msg: IncomingMessage) -> None:
         """受信メッセージをキーワードルーティングし、適切なサービスに委譲する."""
@@ -827,13 +831,23 @@ class MessageRouter:
                 "rag_delete", url, raw_url_token,
                 usage_hint="例: `@bot rag delete https://example.com/page`",
             )
+        elif subcommand == "update":
+            await self._handle_rag_update(thread_id, channel)
+            return
+        elif subcommand == "rebuild":
+            tokens = cleaned_text.split()
+            mode = tokens[2] if len(tokens) >= 3 else "index"
+            await self._handle_rag_rebuild(mode, thread_id, channel)
+            return
         else:
             response_text = (
                 "使用方法:\n"
                 "• `@bot rag crawl <URL> [パターン]` — リンク集ページからクロール＆取り込み\n"
                 "• `@bot rag add <URL>` — 単一ページ取り込み\n"
                 "• `@bot rag status` — ナレッジベース統計表示\n"
-                "• `@bot rag delete <URL>` — ソースURL指定で削除"
+                "• `@bot rag delete <URL>` — ソースURL指定で削除\n"
+                "• `@bot rag update` — BlueSky・Zenn の定期更新\n"
+                "• `@bot rag rebuild [mode]` — インデックス再構築（mode: full/convert/index/incremental、デフォルト: index）"
             )
 
         if response_text:
@@ -899,4 +913,79 @@ class MessageRouter:
         except Exception:
             logger.exception("Failed to call %s tool", tool_name)
             return f"エラー: ツール '{tool_name}' の実行中にエラーが発生しました。"
+
+    async def _handle_rag_update(
+        self, thread_id: str, channel: str,
+    ) -> None:
+        """BlueSky・Zenn の定期更新を一括実行する."""
+        assert self._mcp_manager is not None
+
+        if not self._rag_bluesky_handle and not self._rag_zenn_username:
+            await self._messaging.send_message(
+                "エラー: RAG_BLUESKY_HANDLE / RAG_ZENN_USERNAME が .env に設定されていません。",
+                thread_id, channel,
+            )
+            return
+
+        targets: list[tuple[str, str, dict[str, object]]] = []
+        if self._rag_bluesky_handle:
+            targets.append(("BlueSky", "rag_crawl_bluesky", {
+                "handle": self._rag_bluesky_handle, "max_posts": 100,
+            }))
+        if self._rag_zenn_username:
+            targets.append(("Zenn", "rag_crawl_zenn", {
+                "username": self._rag_zenn_username, "max_articles": 10,
+            }))
+
+        await self._messaging.send_message(
+            "RAG更新を開始します...", thread_id, channel,
+        )
+
+        results: list[str] = []
+        for label, tool, args in targets:
+            try:
+                result = await self._mcp_manager.call_tool(tool, args)
+                results.append(f"*{label}*: {result}")
+            except MCPToolNotFoundError:
+                results.append(f"*{label}*: エラー — ツール '{tool}' が利用できません")
+            except Exception:
+                logger.exception("Failed to call %s tool", tool)
+                results.append(f"*{label}*: エラー — 実行中にエラーが発生しました")
+
+        await self._messaging.send_message(
+            "\n".join(results), thread_id, channel,
+        )
+
+    _VALID_REBUILD_MODES = frozenset({"full", "convert", "index", "incremental"})
+
+    async def _handle_rag_rebuild(
+        self, mode: str, thread_id: str, channel: str,
+    ) -> None:
+        """RAG インデックスの再構築を実行する."""
+        assert self._mcp_manager is not None
+
+        if mode not in self._VALID_REBUILD_MODES:
+            await self._messaging.send_message(
+                f"エラー: 無効なモードです: {mode}\n"
+                f"有効な mode: {', '.join(sorted(self._VALID_REBUILD_MODES))}",
+                thread_id, channel,
+            )
+            return
+
+        await self._messaging.send_message(
+            f"RAGリビルドを開始します（mode: {mode}）...", thread_id, channel,
+        )
+
+        try:
+            result = await self._mcp_manager.call_tool(
+                "rag_rebuild", {"mode": mode},
+            )
+            response_text = result
+        except MCPToolNotFoundError:
+            response_text = "エラー: RAGリビルドツールが利用できません。"
+        except Exception:
+            logger.exception("Failed to call rag_rebuild tool")
+            response_text = "エラー: リビルド中にエラーが発生しました。"
+
+        await self._messaging.send_message(response_text, thread_id, channel)
 
