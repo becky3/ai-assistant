@@ -25,6 +25,7 @@ from src.process_guard import (
 )
 
 if TYPE_CHECKING:
+    from src.llm.base import LLMProvider
     from src.mcp_bridge.client_manager import MCPServerConfig
 
 logger = logging.getLogger(__name__)
@@ -111,7 +112,19 @@ async def main() -> None:
         slack_format = assistant.get("format_instruction", "")
 
         # サービスごとのLLMプロバイダー（設定に基づいて選択）
-        chat_llm = get_provider_for_service(settings, settings.chat_llm_provider)
+        # claude モード時は LLM プロバイダーを生成しない（Claude CLI が直接処理する）
+        is_claude_mode = settings.chat_llm_provider == "claude"
+        if is_claude_mode:
+            import shutil
+            if not shutil.which("claude"):
+                raise SystemExit(
+                    "chat_llm_provider='claude' ですが、claude コマンドが見つかりません。"
+                    "Claude CLI をインストールしてください。"
+                )
+        chat_llm: LLMProvider | None = None
+        if not is_claude_mode:
+            # mypy は != "claude" で Literal["local", "online"] への絞り込みを行えないため type: ignore
+            chat_llm = get_provider_for_service(settings, settings.chat_llm_provider)  # type: ignore[arg-type]
         profiler_llm = get_provider_for_service(settings, settings.profiler_llm_provider)
         topic_llm = get_provider_for_service(settings, settings.topic_llm_provider)
         summarizer_llm = get_provider_for_service(settings, settings.summarizer_llm_provider)
@@ -161,9 +174,12 @@ async def main() -> None:
             llm=chat_llm,
             session_factory=session_factory,
             system_prompt=system_prompt,
-            mcp_manager=mcp_manager,
+            mcp_manager=None if is_claude_mode else mcp_manager,
             thread_history_fetcher=slack_adapter.fetch_thread_history,
             format_instruction=slack_adapter.get_format_instruction(),
+            claude_mode=is_claude_mode,
+            claude_allowed_tools=settings.claude_allowed_tools,
+            claude_timeout=settings.claude_timeout,
         )
 
         # ユーザー情報抽出サービス
