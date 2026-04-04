@@ -23,6 +23,7 @@ Model Context Protocol（MCP）を活用して、チャットボットが外部�
 
 - ツール呼び出しループに最大反復回数を設ける。上限到達時はループを打ち切り、テキスト応答を強制する
 - 個々のツール実行にタイムアウトを設ける。超過時はタイムアウトエラーとして処理し、エラー内容を LLM に返す
+- `claude` モードでは上記の安全弁は Claude CLI 側の設定に委ねる（ai-assistant 側では `claude_timeout` によるプロセス全体のタイムアウトのみ制御する）
 
 ### ライフサイクル
 
@@ -82,7 +83,9 @@ JSON ファイルでサーバーの接続情報を管理する。
 | `response_instruction` | ツール実行後にシステムプロンプトへ追加する指示 |
 | `auto_context_tool` | ユーザークエリで自動呼び出しし結果をコンテキスト注入するツール名 |
 
-### ツール呼び出しフロー
+### ツール呼び出しフロー（local/online モード）
+
+`chat_llm_provider` が `local` または `online` の場合に使用する方式。ai-assistant の MCP ブリッジがツール連携を管理する。
 
 1. ユーザーが質問する
 2. チャットサービスが会話履歴 + 利用可能ツール情報を LLM に送信する
@@ -92,7 +95,7 @@ JSON ファイルでサーバーの接続情報を管理する。
    - テキスト応答が得られるまで繰り返す（最大反復回数まで）
 4. LLM がテキスト応答を返す場合、そのまま応答として返す
 
-### 指示の適用タイミング
+### 指示の適用タイミング（local/online モード）
 
 ```mermaid
 flowchart LR
@@ -100,7 +103,20 @@ flowchart LR
     B --> C["3. ツールループ内<br/>response_instruction<br/>（重複防止）"]
 ```
 
+### Claude CLI モードでの MCP 連携
+
+`chat_llm_provider` が `claude` の場合、ai-assistant の MCP ブリッジ（MCP クライアント管理・ツールループ・指示注入）は使用しない。Claude CLI（`claude -p`）が MCP ツールの発見・呼び出しを直接行う。
+
+- Claude CLI は自身の MCP 設定に基づいて MCP サーバーに接続する
+- `--allowedTools` フラグで許可するツールパターンを指定する（`claude_allowed_tools` 設定値）
+- ツールの発見・呼び出し判断・ツールループは全て Claude CLI 内部で処理される
+- rag-knowledge 側で新しい MCP ツールが追加された場合、ai-assistant 側の変更は不要（Claude CLI が自動的に発見する）
+
+この方式により、MCP ツール連携のオーケストレーション（MCP クライアント管理・LLM プロバイダー拡張・指示の注入タイミング制御）を ai-assistant から Claude CLI に委譲する。
+
 ## コンポーネント構成
+
+### local/online モード
 
 ```mermaid
 flowchart TB
@@ -120,11 +136,29 @@ flowchart TB
     LLM -->|ツール定義| CS
 ```
 
+### claude モード
+
+```mermaid
+flowchart TB
+    subgraph Host["AI Assistant"]
+        CS2[チャットサービス]
+        CLI["Claude CLI（claude -p）"]
+    end
+
+    subgraph Servers["MCP サーバー（外部）"]
+        S2["RAG ナレッジサーバー"]
+    end
+
+    CS2 -->|stdin/stdout| CLI
+    CLI -->|MCP 直接通信| S2
+```
+
 | コンポーネント | 役割 |
 | --- | --- |
-| チャットサービス | ツール呼び出しループの実行、指示の注入 |
-| MCP クライアント管理 | MCP サーバーへの接続管理、ツール一覧統合、ツール実行 |
-| LLM プロバイダー | ツール定義の API 形式変換、ツール呼び出し判断 |
+| チャットサービス | 履歴取得・モード分岐・DB 保存のオーケストレーション |
+| MCP クライアント管理 | （local/online）MCP サーバーへの接続管理、ツール一覧統合、ツール実行 |
+| LLM プロバイダー | （local/online）ツール定義の API 形式変換、ツール呼び出し判断 |
+| Claude CLI | （claude）ワンショット実行で応答生成。MCP ツール連携を内包 |
 | MCP サーバー | 外部ツール・リソースの提供（MCP プロトコルで通信） |
 
 ## 外部連携
@@ -143,6 +177,7 @@ flowchart TB
 | ツール実行タイムアウト | タイムアウトエラーとして処理し、エラー内容を LLM に返す |
 | MCP 無効時 | 従来どおりの動作（ツールなしで応答） |
 | 設定ファイル不在 | MCP 機能を無効として続行 |
+| Claude CLI モードでの MCP 接続失敗 | Claude CLI が内部で処理する（ai-assistant 側での制御は不要） |
 
 ## 関連ドキュメント
 

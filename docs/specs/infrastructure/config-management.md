@@ -66,6 +66,8 @@ feed_summarize_timeout = 180
 feed_collect_days = 7
 thread_history_limit = 20
 rag_show_sources = false
+claude_allowed_tools = "mcp__rag-knowledge-production__*"
+claude_timeout = 120
 ```
 
 TOML はフラット構造（セクションなし）とし、キー名は `Settings` クラスのフィールド名と一致させる。
@@ -106,7 +108,7 @@ TOML はフラット構造（セクションなし）とし、キー名は `Sett
 | 設定項目 | config.toml キー名 | 許容範囲 | 説明 |
 |---|---|---|---|
 | `online_llm_provider` | `online_llm_provider` | `openai` / `anthropic` | オンライン LLM プロバイダー |
-| `chat_llm_provider` | `chat_llm_provider` | `local` / `online` | チャット応答の LLM 選択 |
+| `chat_llm_provider` | `chat_llm_provider` | `local` / `online` / `claude` | チャット応答の LLM 選択 |
 | `profiler_llm_provider` | `profiler_llm_provider` | `local` / `online` | ユーザー情報抽出の LLM 選択 |
 | `topic_llm_provider` | `topic_llm_provider` | `local` / `online` | トピック提案の LLM 選択 |
 | `summarizer_llm_provider` | `summarizer_llm_provider` | `local` / `online` | 記事要約の LLM 選択 |
@@ -120,6 +122,8 @@ TOML はフラット構造（セクションなし）とし、キー名は `Sett
 | `feed_collect_days` | `feed_collect_days` | 1 以上の整数 | 収集対象の日数 |
 | `thread_history_limit` | `thread_history_limit` | 1〜100 | スレッド履歴取得の最大件数 |
 | `rag_show_sources` | `rag_show_sources` | `true` / `false` | RAG 参照元 URL 表示（デバッグ用） |
+| `claude_allowed_tools` | `claude_allowed_tools` | MCP ツールパターン文字列 | `claude` モード時に許可する MCP ツール（`--allowedTools` に渡す値） |
+| `claude_timeout` | `claude_timeout` | 1 以上の整数（秒） | `claude` モード時の Claude CLI プロセスタイムアウト |
 
 #### 分類判断の根拠
 
@@ -138,6 +142,7 @@ TOML はフラット構造（セクションなし）とし、キー名は `Sett
 | モデル名 | 共通設定値 | プロジェクトとして使用するモデルの統一管理 |
 | Feed パラメータ | 共通設定値 | チューニングパラメータ。プロジェクト共通の値を git 管理する |
 | `THREAD_HISTORY_LIMIT` | 共通設定値 | アプリケーション動作パラメータ。プロジェクト共通 |
+| Claude CLI 設定 | 共通設定値 | Claude CLI モードの動作パラメータ。プロジェクト共通 |
 
 ## コンポーネント構成
 
@@ -168,9 +173,11 @@ flowchart TD
 | keyring 未設定（キー未登録） | `SecretNotFoundError` を送出（フォールバックなし） |
 | Slack 必須シークレットが未設定 | 起動時にエラーメッセージを出力して中止する。必須項目: `SLACK_BOT_TOKEN`、`SLACK_APP_TOKEN`、`SLACK_SIGNING_SECRET` |
 | 任意シークレットが未設定（`OPENAI_API_KEY` 等） | 該当機能使用時に `SecretNotFoundError` |
+| `claude_allowed_tools` が空文字列 | Claude CLI にツール許可を渡さない（ツールなしで応答） |
 
 ## 関連ドキュメント
 
 - [全体仕様概要](../overview.md) — LLM 使い分けルール・設定一覧
 - [MCP 統合](mcp-integration.md) — MCP 関連設定（`mcp_enabled`、`mcp_servers_config`）
+- [チャット応答](../features/chat-response.md) — Claude CLI モード（`claude_allowed_tools`、`claude_timeout`）
 - [RAG ナレッジ](rag-knowledge.md) — RAG 関連設定（`rag_show_sources`）
