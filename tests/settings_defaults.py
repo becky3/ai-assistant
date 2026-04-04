@@ -19,12 +19,12 @@ TEST_SETTINGS_DEFAULTS: dict[str, object] = {
     "log_level": "INFO",
     "rag_bluesky_handle": "",
     "rag_zenn_username": "",
-    # config.toml フィールド
     "online_llm_provider": "openai",
     "chat_llm_provider": "local",
     "profiler_llm_provider": "local",
     "topic_llm_provider": "local",
     "summarizer_llm_provider": "local",
+    # config.toml フィールド
     "openai_model": "gpt-4o-mini",
     "anthropic_model": "claude-3-5-sonnet-20241022",
     "lmstudio_model": "local-model",

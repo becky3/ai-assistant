@@ -18,7 +18,7 @@
 ## LLM使い分けルール
 
 - **デフォルト**: 全サービスでローカルLLM（LM Studio）を使用
-- **設定変更**: `config/config.toml` で各サービスのLLMプロバイダーを変更可能（`local` / `online`、チャット応答のみ `claude` も選択可能）
+- **設定変更**: `.env` で各サービスのLLMプロバイダーを変更可能（`local` / `online`、チャット応答のみ `claude` も選択可能）。モデル名は `config/config.toml` で管理
 - RAG機能は rag-knowledge リポジトリに移行済み。MCP サーバーとして `config/mcp_servers.json` で接続設定する
 
 ## 自動進行ルール（auto-progress）

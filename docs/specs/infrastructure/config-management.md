@@ -51,11 +51,6 @@ keyring からの取得に失敗した場合（keyring 未インストール・�
 ### config.toml の構造
 
 ```toml
-online_llm_provider = "openai"
-chat_llm_provider = "local"
-profiler_llm_provider = "local"
-topic_llm_provider = "local"
-summarizer_llm_provider = "local"
 openai_model = "gpt-4o-mini"
 anthropic_model = "claude-3-5-sonnet-20241022"
 lmstudio_model = "local-model"
@@ -102,6 +97,11 @@ TOML はフラット構造（セクションなし）とし、キー名は `Sett
 | `log_level` | `LOG_LEVEL` | `INFO` | ログ出力レベル |
 | `rag_bluesky_handle` | `RAG_BLUESKY_HANDLE` | `""`（空文字列） | RAG 定期更新対象の BlueSky ハンドル |
 | `rag_zenn_username` | `RAG_ZENN_USERNAME` | `""`（空文字列） | RAG 定期更新対象の Zenn ユーザー名 |
+| `online_llm_provider` | `ONLINE_LLM_PROVIDER` | — | オンライン LLM プロバイダー（`openai` / `anthropic`） |
+| `chat_llm_provider` | `CHAT_LLM_PROVIDER` | — | チャット応答の LLM 選択（`local` / `online` / `claude`） |
+| `profiler_llm_provider` | `PROFILER_LLM_PROVIDER` | — | ユーザー情報抽出の LLM 選択（`local` / `online`） |
+| `topic_llm_provider` | `TOPIC_LLM_PROVIDER` | — | トピック提案の LLM 選択（`local` / `online`） |
+| `summarizer_llm_provider` | `SUMMARIZER_LLM_PROVIDER` | — | 記事要約の LLM 選択（`local` / `online`） |
 
 #### 共通設定値層（config.toml）
 
@@ -109,11 +109,6 @@ TOML はフラット構造（セクションなし）とし、キー名は `Sett
 
 | 設定項目 | config.toml キー名 | 許容範囲 | 説明 |
 |---|---|---|---|
-| `online_llm_provider` | `online_llm_provider` | `openai` / `anthropic` | オンライン LLM プロバイダー |
-| `chat_llm_provider` | `chat_llm_provider` | `local` / `online` / `claude` | チャット応答の LLM 選択 |
-| `profiler_llm_provider` | `profiler_llm_provider` | `local` / `online` | ユーザー情報抽出の LLM 選択 |
-| `topic_llm_provider` | `topic_llm_provider` | `local` / `online` | トピック提案の LLM 選択 |
-| `summarizer_llm_provider` | `summarizer_llm_provider` | `local` / `online` | 記事要約の LLM 選択 |
 | `openai_model` | `openai_model` | — | OpenAI モデル名 |
 | `anthropic_model` | `anthropic_model` | — | Anthropic モデル名 |
 | `lmstudio_model` | `lmstudio_model` | — | LM Studio モデル名 |
@@ -143,8 +138,8 @@ TOML はフラット構造（セクションなし）とし、キー名は `Sett
 | `LOG_LEVEL` | 環境依存値 | 本番・開発でログレベルを変えるため |
 | `RAG_BLUESKY_HANDLE` | 環境依存値 | 取得対象アカウントはデプロイ環境ごとに異なりうる |
 | `RAG_ZENN_USERNAME` | 環境依存値 | 取得対象アカウントはデプロイ環境ごとに異なりうる |
+| LLM プロバイダー選択 | 環境依存値 | ローカル LLM（LM Studio）の有無はマシンごとに異なる |
 | `TIMEZONE` | 共通設定値 | タイムゾーンはプロジェクト共通の運用方針であり環境ごとに変える必要がない |
-| LLM プロバイダー選択 | 共通設定値 | プロジェクトとしてどの LLM を使うかの方針 |
 | モデル名 | 共通設定値 | プロジェクトとして使用するモデルの統一管理 |
 | Feed パラメータ | 共通設定値 | チューニングパラメータ。プロジェクト共通の値を git 管理する |
 | `THREAD_HISTORY_LIMIT` | 共通設定値 | アプリケーション動作パラメータ。プロジェクト共通 |
