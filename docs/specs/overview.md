@@ -60,6 +60,7 @@ AI Assistantは、Slack上で動作するAIアシスタントである。
 
 ```bash
 # 全てローカル（デフォルト）
+ONLINE_LLM_PROVIDER=openai
 CHAT_LLM_PROVIDER=local
 PROFILER_LLM_PROVIDER=local
 TOPIC_LLM_PROVIDER=local
