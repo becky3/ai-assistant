@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import logging
 import uuid
 from datetime import datetime
@@ -28,7 +27,7 @@ from src.config.settings import get_settings, load_assistant_config
 from src.db.session import get_session_factory, init_db
 from src.llm.base import LLMProvider
 from src.llm.factory import get_provider_for_service
-from src.mcp_bridge.client_manager import MCPClientManager, MCPServerConfig
+from src.mcp_bridge.client_manager import MCPClientManager, build_mcp_server_configs
 from src.messaging.cli_adapter import CliAdapter
 from src.messaging.port import IncomingMessage
 from src.messaging.router import MessageRouter
@@ -42,32 +41,6 @@ from src.services.user_profiler import UserProfiler
 logger = logging.getLogger(__name__)
 
 
-def _load_mcp_server_configs(config_path: str) -> list[MCPServerConfig]:
-    """MCPサーバー設定ファイルを読み込む."""
-    path = Path(config_path)
-    if not path.exists():
-        return []
-
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-    except json.JSONDecodeError:
-        return []
-
-    configs: list[MCPServerConfig] = []
-    for name, server_def in data.get("mcpServers", {}).items():
-        configs.append(MCPServerConfig(
-            name=name,
-            transport=server_def.get("transport", "stdio"),
-            command=server_def.get("command", ""),
-            args=server_def.get("args", []),
-            env=server_def.get("env", {}),
-            url=server_def.get("url", ""),
-            system_instruction=server_def.get("system_instruction", ""),
-            response_instruction=server_def.get("response_instruction", ""),
-            auto_context_tool=server_def.get("auto_context_tool", ""),
-        ))
-    return configs
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -133,7 +106,7 @@ async def _setup(
     mcp_manager: MCPClientManager | None = None
     if settings.mcp_enabled:
         mcp_manager = MCPClientManager()
-        server_configs = _load_mcp_server_configs(settings.mcp_servers_config)
+        server_configs = build_mcp_server_configs(settings, assistant)
         await mcp_manager.initialize(server_configs)
 
     cli_adapter = CliAdapter(user_id=user_id)

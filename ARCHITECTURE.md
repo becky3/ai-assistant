@@ -43,7 +43,7 @@
 
 | ディレクトリ | 説明 |
 |---|---|
-| `config/` | `assistant.yaml`（アシスタント性格設定）、`mcp_servers.json`（MCP 接続設定） |
+| `config/` | `assistant.yaml`（アシスタント性格設定・MCP プロンプト）、`config.toml`（共通設定値） |
 | `docs/specs/` | 機能仕様書・基盤仕様書・エージェント定義（実装の根拠） |
 | `tests/` | pytest テストコード・フィクスチャ |
 | `scripts/` | 運用・開発用シェルスクリプト |

@@ -13,7 +13,7 @@
 ## 制約
 
 - 既存の `pydantic-settings` ベースの `Settings` クラスを拡張する形で実装する（フレームワーク変更は行わない）
-- `config/assistant.yaml`（アシスタント性格設定）および `config/mcp_servers.json`（MCP サーバー設定）は本仕様の対象外とする。それぞれ独自の形式で適切に管理されている
+- `config/assistant.yaml`（アシスタント性格設定・MCP プロンプト）は本仕様の対象外とする。YAML 形式で適切に管理されている
 - keyring のバックエンドは OS に依存する（Windows: Credential Manager、macOS: Keychain、Linux: Secret Service）。バックエンド固有の挙動差異は keyring ライブラリが吸収する
 
 ## インターフェース
@@ -95,7 +95,8 @@ TOML はフラット構造（セクションなし）とし、キー名は `Sett
 | `slack_auto_reply_channels` | 環境依存値 | 自動返信対象チャンネルはワークスペースごとに異なる |
 | `env_name` | 環境依存値 | ステータス表示用の環境識別子はデプロイ先ごとに異なる |
 | `mcp_enabled` | 環境依存値 | MCP サーバーの有無はデプロイ環境に依存する |
-| `mcp_servers_config` | 環境依存値 | MCP サーバー設定ファイルの配置パスはデプロイ先ごとに異なりうる |
+| `mcp_rag_transport` | 環境依存値 | MCP サーバーの接続方式はデプロイ環境に依存する |
+| `mcp_rag_url` | 環境依存値 | MCP サーバーのエンドポイント URL はデプロイ先ごとに異なる |
 | `log_level` | 環境依存値 | 本番・開発でログ出力レベルを変える必要がある |
 | `rag_bluesky_handle` | 環境依存値 | RAG 定期更新の対象 BlueSky アカウントはデプロイ環境ごとに異なりうる |
 | `rag_zenn_username` | 環境依存値 | RAG 定期更新の対象 Zenn アカウントはデプロイ環境ごとに異なりうる |
@@ -162,6 +163,6 @@ flowchart TD
 ## 関連ドキュメント
 
 - [全体仕様概要](../overview.md) — LLM 使い分けルール・設定一覧
-- [MCP 統合](mcp-integration.md) — MCP 関連設定（`mcp_enabled`、`mcp_servers_config`）
+- [MCP 統合](mcp-integration.md) — MCP 関連設定（`mcp_enabled`、`mcp_rag_transport`、`mcp_rag_url`）
 - [チャット応答](../features/chat-response.md) — Claude CLI モード（`claude_allowed_tools`、`claude_timeout`）
 - [RAG ナレッジ](rag-knowledge.md) — RAG 関連設定（`rag_show_sources`、`rag_bluesky_handle`、`rag_zenn_username`）

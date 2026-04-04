@@ -13,7 +13,7 @@ RAG 機能は独立リポジトリ（rag-knowledge）で実装・運用してお
 ## 制約
 
 - RAG の実装・設定・テストは [rag-knowledge リポジトリ](https://github.com/becky3/rag-knowledge)で管理する。ツールの詳細仕様は [rag-knowledge 仕様書](https://github.com/becky3/rag-knowledge/blob/main/docs/specs/rag-knowledge.md)を参照
-- ai-assistant からは MCP サーバー設定（`config/mcp_servers.json`）で RAG サーバーに HTTP 接続する
+- ai-assistant からは `.env`（`MCP_RAG_TRANSPORT`, `MCP_RAG_URL`）の設定で RAG サーバーに HTTP 接続する
 - RAG サーバーは別プロセスとして事前に起動しておく必要がある
 - RAG の利用可否は MCP 基盤の有効化（`MCP_ENABLED`）と MCP サーバー設定への登録で決まる
 
@@ -30,12 +30,13 @@ MCP ツールの定義・振る舞いは [rag-knowledge 仕様書](https://githu
 
 | コマンド | 説明 |
 |---|---|
-| `rag crawl <URL> [パターン]` | リンク集ページからクロール＆取り込み |
-| `rag add <URL>` | 単一ページ取り込み |
 | `rag status` | ナレッジベース統計表示 |
 | `rag delete <URL>` | ソース URL 指定で削除 |
 | `rag update` | BlueSky・Zenn の定期更新（`.env` のアカウント設定を使用） |
 | `rag rebuild [mode]` | インデックス再構築（mode: `full` / `convert` / `index` / `incremental`、デフォルト: `index`）。各モードの詳細は [rag-knowledge 仕様書](https://github.com/becky3/rag-knowledge/blob/main/docs/specs/rag-knowledge.md)を参照 |
+| `rag help` | RAG MCP ツール一覧を動的に取得して表示 |
+
+コンテンツの取り込み（旧 `rag crawl` / `rag add`）は Slack コマンドとしては提供しない。rag-knowledge 側で専用インジェスター化（`rag_crawl_zenn`, `rag_add_youtube` 等）に移行済みのため、Claude に直接依頼すれば MCP 経由で適切なツールを選択・実行する。
 
 `rag update` は以下を順次実行する:
 

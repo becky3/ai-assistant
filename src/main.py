@@ -6,10 +6,8 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
@@ -26,41 +24,10 @@ from src.process_guard import (
 
 if TYPE_CHECKING:
     from src.llm.base import LLMProvider
-    from src.mcp_bridge.client_manager import MCPServerConfig
 
 logger = logging.getLogger(__name__)
 
 
-def _load_mcp_server_configs(config_path: str) -> list[MCPServerConfig]:
-    """MCPサーバー設定ファイルを読み込む."""
-    from src.mcp_bridge.client_manager import MCPServerConfig
-
-    path = Path(config_path)
-    if not path.exists():
-        logger.warning("MCP設定ファイル '%s' が見つかりません。", config_path)
-        return []
-
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-    except json.JSONDecodeError:
-        logger.exception("MCP設定ファイル '%s' のJSON解析に失敗しました。", config_path)
-        return []
-
-    configs: list[MCPServerConfig] = []
-    for name, server_def in data.get("mcpServers", {}).items():
-        configs.append(MCPServerConfig(
-            name=name,
-            transport=server_def.get("transport", "stdio"),
-            command=server_def.get("command", ""),
-            args=server_def.get("args", []),
-            env=server_def.get("env", {}),
-            url=server_def.get("url", ""),
-            system_instruction=server_def.get("system_instruction", ""),
-            response_instruction=server_def.get("response_instruction", ""),
-            auto_context_tool=server_def.get("auto_context_tool", ""),
-        ))
-    return configs
 
 
 async def main() -> None:
@@ -74,7 +41,7 @@ async def main() -> None:
 
     from src.db.session import get_session_factory, init_db
     from src.llm.factory import get_provider_for_service
-    from src.mcp_bridge.client_manager import MCPClientManager
+    from src.mcp_bridge.client_manager import MCPClientManager, build_mcp_server_configs
     from src.messaging.router import MessageRouter
     from src.messaging.slack_adapter import SlackAdapter
     from src.services.chat import ChatService
@@ -132,7 +99,7 @@ async def main() -> None:
         # MCP初期化（有効時のみ）
         if settings.mcp_enabled:
             mcp_manager = MCPClientManager()
-            server_configs = _load_mcp_server_configs(settings.mcp_servers_config)
+            server_configs = build_mcp_server_configs(settings, assistant)
             await mcp_manager.initialize(server_configs)
             tools = await mcp_manager.get_available_tools()
             logger.info("MCP有効: %d個のツールが利用可能", len(tools))

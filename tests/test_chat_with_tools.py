@@ -196,58 +196,45 @@ async def test_mcp_disabled_mode(
     mock_llm.complete.assert_called_once()
 
 
-@pytest.mark.asyncio
-async def test_mcp_server_config_changes() -> None:
-    """config/mcp_servers.json でMCPサーバーの追加・変更が可能であること."""
-    import json
-    import tempfile
-    from pathlib import Path
+def testbuild_mcp_server_configs_with_url() -> None:
+    """MCP_RAG_URL が設定されている場合、RAG サーバー設定が構築される."""
+    from src.config.settings import Settings
+    from src.mcp_bridge.client_manager import build_mcp_server_configs
 
-    from src.main import _load_mcp_server_configs
+    from .settings_defaults import TEST_SETTINGS_DEFAULTS
 
-    # テスト用の設定ファイルを作成
-    config_data = {
-        "mcpServers": {
-            "server_a": {
-                "transport": "stdio",
-                "command": "python",
-                "args": ["server_a.py"],
-                "env": {"API_KEY": "test"},
-            },
-            "server_b": {
-                "transport": "stdio",
-                "command": "python",
-                "args": ["server_b.py"],
-            },
-        }
+    settings = Settings(**{
+        **TEST_SETTINGS_DEFAULTS,
+        "mcp_rag_transport": "http",
+        "mcp_rag_url": "http://192.168.11.2:8081/mcp",
+    })
+    assistant_config: dict[str, object] = {
+        "mcp_system_instruction": "検索してください",
+        "mcp_response_instruction": "結果を使って回答",
     }
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, encoding="utf-8") as f:
-        json.dump(config_data, f)
-        temp_path = f.name
-
-    try:
-        configs = _load_mcp_server_configs(temp_path)
-        assert len(configs) == 2
-
-        config_a = next(c for c in configs if c.name == "server_a")
-        assert config_a.transport == "stdio"
-        assert config_a.command == "python"
-        assert config_a.args == ["server_a.py"]
-        assert config_a.env == {"API_KEY": "test"}
-
-        config_b = next(c for c in configs if c.name == "server_b")
-        assert config_b.command == "python"
-    finally:
-        Path(temp_path).unlink()
+    configs = build_mcp_server_configs(settings, assistant_config)
+    assert len(configs) == 1
+    assert configs[0].name == "rag"
+    assert configs[0].transport == "http"
+    assert configs[0].url == "http://192.168.11.2:8081/mcp"
+    assert configs[0].system_instruction == "検索してください"
+    assert configs[0].response_instruction == "結果を使って回答"
 
 
-@pytest.mark.asyncio
-async def test_missing_config_file() -> None:
-    """設定ファイルが存在しない場合、空のリストを返すこと."""
-    from src.main import _load_mcp_server_configs
+def testbuild_mcp_server_configs_without_url() -> None:
+    """MCP_RAG_URL が未設定の場合、空リストを返す."""
+    from src.config.settings import Settings
+    from src.mcp_bridge.client_manager import build_mcp_server_configs
 
-    configs = _load_mcp_server_configs("nonexistent_config.json")
+    from .settings_defaults import TEST_SETTINGS_DEFAULTS
+
+    settings = Settings(**{
+        **TEST_SETTINGS_DEFAULTS,
+        "mcp_rag_url": "",
+    })
+
+    configs = build_mcp_server_configs(settings, {})
     assert configs == []
 
 

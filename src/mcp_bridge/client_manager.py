@@ -44,6 +44,24 @@ class MCPServerConfig:
     auto_context_tool: str = ""  # ユーザークエリで自動呼び出しし結果をコンテキスト注入するツール名
 
 
+def build_mcp_server_configs(
+    settings: Any,
+    assistant_config: dict[str, Any],
+) -> list[MCPServerConfig]:
+    """settings と assistant.yaml から MCPServerConfig を構築する."""
+    if not settings.mcp_rag_url:
+        logger.warning("MCP_RAG_URL が未設定です。RAG MCP サーバーをスキップします。")
+        return []
+
+    return [MCPServerConfig(
+        name="rag",
+        transport=settings.mcp_rag_transport,
+        url=settings.mcp_rag_url,
+        system_instruction=str(assistant_config.get("mcp_system_instruction", "")),
+        response_instruction=str(assistant_config.get("mcp_response_instruction", "")),
+    )]
+
+
 class MCPClientManager:
     """MCPサーバーへの接続を管理し、ツール一覧を統合する.
 

@@ -43,15 +43,14 @@ _RAG_KEYWORDS = ("rag",)
 _STATUS_KEYWORDS = ("status", "info")
 
 
-def _parse_rag_command(text: str) -> tuple[str, str, str, str]:
+def _parse_rag_command(text: str) -> tuple[str, str, str]:
     """ragコマンドを解析する."""
     tokens = text.split()
     if len(tokens) < 2:
-        return ("", "", "", "")
+        return ("", "", "")
 
     subcommand = tokens[1].lower()
     url = ""
-    pattern = ""
     raw_url_token = ""
 
     if len(tokens) >= 3:
@@ -63,10 +62,7 @@ def _parse_rag_command(text: str) -> tuple[str, str, str, str]:
         if parsed_url.scheme in ("http", "https") and parsed_url.netloc:
             url = url_token
 
-    if len(tokens) >= 4:
-        pattern = " ".join(tokens[3:])
-
-    return (subcommand, url, pattern, raw_url_token)
+    return (subcommand, url, raw_url_token)
 
 
 def _parse_feed_command(text: str) -> tuple[str, list[str], str]:
@@ -811,19 +807,9 @@ class MessageRouter:
         thread_id = msg.thread_id
         channel = msg.channel
 
-        subcommand, url, pattern, raw_url_token = _parse_rag_command(cleaned_text)
+        subcommand, url, raw_url_token = _parse_rag_command(cleaned_text)
 
-        if subcommand == "crawl":
-            await self._handle_rag_crawl_mcp(
-                url, pattern, raw_url_token, thread_id, channel,
-            )
-            return
-        elif subcommand == "add":
-            response_text = await self._call_rag_url_tool(
-                "rag_add", url, raw_url_token,
-                usage_hint="例: `@bot rag add https://example.com/page`",
-            )
-        elif subcommand == "status":
+        if subcommand == "status":
             try:
                 response_text = await self._mcp_manager.call_tool("rag_stats", {})
             except MCPToolNotFoundError:
@@ -844,58 +830,21 @@ class MessageRouter:
             mode = tokens[2] if len(tokens) >= 3 else "index"
             await self._handle_rag_rebuild(mode, thread_id, channel)
             return
+        elif subcommand == "help":
+            await self._handle_rag_help(thread_id, channel)
+            return
         else:
             response_text = (
                 "使用方法:\n"
-                "• `@bot rag crawl <URL> [パターン]` — リンク集ページからクロール＆取り込み\n"
-                "• `@bot rag add <URL>` — 単一ページ取り込み\n"
                 "• `@bot rag status` — ナレッジベース統計表示\n"
                 "• `@bot rag delete <URL>` — ソースURL指定で削除\n"
                 "• `@bot rag update` — BlueSky・Zenn の定期更新\n"
-                "• `@bot rag rebuild [mode]` — インデックス再構築（mode: full/convert/index/incremental、デフォルト: index）"
+                "• `@bot rag rebuild [mode]` — インデックス再構築（mode: full/convert/index/incremental、デフォルト: index）\n"
+                "• `@bot rag help` — RAG MCPツール一覧を表示"
             )
 
         if response_text:
             await self._messaging.send_message(response_text, thread_id, channel)
-
-    async def _handle_rag_crawl_mcp(
-        self,
-        url: str,
-        pattern: str,
-        raw_url_token: str,
-        thread_id: str,
-        channel: str,
-    ) -> None:
-        """RAGクロール処理（MCP経由）."""
-        assert self._mcp_manager is not None
-        if not url:
-            if raw_url_token:
-                error = f"エラー: 無効なURLスキームです: {raw_url_token}\nhttp:// または https:// で始まるURLを指定してください。"
-            else:
-                error = "エラー: URLを指定してください。\n例: `@bot rag crawl https://example.com/docs [パターン]`"
-            await self._messaging.send_message(error, thread_id, channel)
-            return
-
-        try:
-            await self._messaging.send_message(
-                "クロールを開始しました... (リンク収集中)",
-                thread_id, channel,
-            )
-        except Exception:
-            logger.debug("Failed to post start message", exc_info=True)
-
-        try:
-            result = await self._mcp_manager.call_tool(
-                "rag_crawl", {"url": url, "pattern": pattern},
-            )
-            response_text = result if result.startswith("エラー:") else f"└─ {result}"
-        except MCPToolNotFoundError:
-            response_text = "エラー: RAGクロールツールが利用できません。"
-        except Exception:
-            logger.exception("Failed to call rag_crawl tool")
-            response_text = "エラー: クロール中にエラーが発生しました。"
-
-        await self._messaging.send_message(response_text, thread_id, channel)
 
     async def _call_rag_url_tool(
         self,
@@ -993,4 +942,39 @@ class MessageRouter:
             response_text = "エラー: リビルド中にエラーが発生しました。"
 
         await self._messaging.send_message(response_text, thread_id, channel)
+
+    async def _handle_rag_help(
+        self, thread_id: str, channel: str,
+    ) -> None:
+        """RAG MCPツール一覧を動的に取得して表示する."""
+        assert self._mcp_manager is not None
+
+        try:
+            tools = await self._mcp_manager.get_available_tools()
+        except Exception:
+            logger.exception("Failed to get available tools")
+            await self._messaging.send_message(
+                "エラー: RAG ツール一覧の取得に失敗しました。",
+                thread_id, channel,
+            )
+            return
+
+        rag_tools = [t for t in tools if t.name.startswith("rag_")]
+
+        if not rag_tools:
+            await self._messaging.send_message(
+                "RAG ツールが見つかりません。MCP サーバーが起動しているか確認してください。",
+                thread_id, channel,
+            )
+            return
+
+        lines = ["*RAG MCPツール一覧:*\n"]
+        for tool in sorted(rag_tools, key=lambda t: t.name):
+            first_line = tool.description.split("\n")[0] if tool.description else ""
+            # "[サーバー名] 英語概要 - 日本語説明" から日本語部分を抽出
+            desc = first_line.split(" - ", 1)[1] if " - " in first_line else first_line
+            desc = desc or "(説明なし)"
+            lines.append(f"• `{tool.name}` — {desc}")
+
+        await self._messaging.send_message("\n".join(lines), thread_id, channel)
 
