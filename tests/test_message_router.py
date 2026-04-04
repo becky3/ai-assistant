@@ -520,7 +520,7 @@ async def test_rag_help_shows_mcp_tool_list() -> None:
     """rag help で MCP ツール一覧が表示される."""
     mcp_manager = AsyncMock()
     mcp_manager.get_available_tools.return_value = [
-        ToolDefinition(name="rag_search", description="ナレッジベース検索", input_schema={}),
+        ToolDefinition(name="rag_search", description="[rag-knowledge] RAG search - ナレッジベース検索", input_schema={}),
         ToolDefinition(name="rag_stats", description="統計情報表示", input_schema={}),
         ToolDefinition(name="other_tool", description="別のツール", input_schema={}),
     ]
@@ -531,6 +531,8 @@ async def test_rag_help_shows_mcp_tool_list() -> None:
     assert len(adapter.sent_messages) == 1
     text = adapter.sent_messages[0][0]
     assert "rag_search" in text
+    assert "ナレッジベース検索" in text
+    assert "[rag-knowledge]" not in text
     assert "rag_stats" in text
     assert "other_tool" not in text
 

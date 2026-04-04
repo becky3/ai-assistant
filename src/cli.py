@@ -17,14 +17,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import logging
 import uuid
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 from zoneinfo import ZoneInfo
 
-from src.config.settings import get_settings, load_assistant_config
+from src.config.settings import Settings, get_settings, load_assistant_config
 from src.db.session import get_session_factory, init_db
 from src.llm.base import LLMProvider
 from src.llm.factory import get_provider_for_service
@@ -42,32 +42,21 @@ from src.services.user_profiler import UserProfiler
 logger = logging.getLogger(__name__)
 
 
-def _load_mcp_server_configs(config_path: str) -> list[MCPServerConfig]:
-    """MCPサーバー設定ファイルを読み込む."""
-    path = Path(config_path)
-    if not path.exists():
+def _build_mcp_server_configs(
+    settings: Settings,
+    assistant_config: dict[str, Any],
+) -> list[MCPServerConfig]:
+    """settings と assistant.yaml から MCPServerConfig を構築する."""
+    if not settings.mcp_rag_url:
         return []
 
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-    except json.JSONDecodeError:
-        return []
-
-    configs: list[MCPServerConfig] = []
-    for name, server_def in data.get("mcpServers", {}).items():
-        configs.append(MCPServerConfig(
-            name=name,
-            transport=server_def.get("transport", "stdio"),
-            command=server_def.get("command", ""),
-            args=server_def.get("args", []),
-            env=server_def.get("env", {}),
-            url=server_def.get("url", ""),
-            system_instruction=server_def.get("system_instruction", ""),
-            response_instruction=server_def.get("response_instruction", ""),
-            auto_context_tool=server_def.get("auto_context_tool", ""),
-        ))
-    return configs
+    return [MCPServerConfig(
+        name="rag",
+        transport=settings.mcp_rag_transport,
+        url=settings.mcp_rag_url,
+        system_instruction=str(assistant_config.get("mcp_system_instruction", "")),
+        response_instruction=str(assistant_config.get("mcp_response_instruction", "")),
+    )]
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -133,7 +122,7 @@ async def _setup(
     mcp_manager: MCPClientManager | None = None
     if settings.mcp_enabled:
         mcp_manager = MCPClientManager()
-        server_configs = _load_mcp_server_configs(settings.mcp_servers_config)
+        server_configs = _build_mcp_server_configs(settings, assistant)
         await mcp_manager.initialize(server_configs)
 
     cli_adapter = CliAdapter(user_id=user_id)

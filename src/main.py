@@ -6,16 +6,14 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
 from py_common_lib.secrets import SecretNotFoundError, get_secret
 
-from src.config.settings import SERVICE_NAME, get_settings, load_assistant_config
+from src.config.settings import SERVICE_NAME, Settings, get_settings, load_assistant_config
 from src.process_guard import (
     BOT_READY_SIGNAL,
     check_already_running,
@@ -31,36 +29,24 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _load_mcp_server_configs(config_path: str) -> list[MCPServerConfig]:
-    """MCPサーバー設定ファイルを読み込む."""
+def _build_mcp_server_configs(
+    settings: Settings,
+    assistant_config: dict[str, object],
+) -> list[MCPServerConfig]:
+    """settings と assistant.yaml から MCPServerConfig を構築する."""
     from src.mcp_bridge.client_manager import MCPServerConfig
 
-    path = Path(config_path)
-    if not path.exists():
-        logger.warning("MCP設定ファイル '%s' が見つかりません。", config_path)
+    if not settings.mcp_rag_url:
+        logger.warning("MCP_RAG_URL が未設定です。RAG MCP サーバーをスキップします。")
         return []
 
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-    except json.JSONDecodeError:
-        logger.exception("MCP設定ファイル '%s' のJSON解析に失敗しました。", config_path)
-        return []
-
-    configs: list[MCPServerConfig] = []
-    for name, server_def in data.get("mcpServers", {}).items():
-        configs.append(MCPServerConfig(
-            name=name,
-            transport=server_def.get("transport", "stdio"),
-            command=server_def.get("command", ""),
-            args=server_def.get("args", []),
-            env=server_def.get("env", {}),
-            url=server_def.get("url", ""),
-            system_instruction=server_def.get("system_instruction", ""),
-            response_instruction=server_def.get("response_instruction", ""),
-            auto_context_tool=server_def.get("auto_context_tool", ""),
-        ))
-    return configs
+    return [MCPServerConfig(
+        name="rag",
+        transport=settings.mcp_rag_transport,
+        url=settings.mcp_rag_url,
+        system_instruction=str(assistant_config.get("mcp_system_instruction", "")),
+        response_instruction=str(assistant_config.get("mcp_response_instruction", "")),
+    )]
 
 
 async def main() -> None:
@@ -132,7 +118,7 @@ async def main() -> None:
         # MCP初期化（有効時のみ）
         if settings.mcp_enabled:
             mcp_manager = MCPClientManager()
-            server_configs = _load_mcp_server_configs(settings.mcp_servers_config)
+            server_configs = _build_mcp_server_configs(settings, assistant)
             await mcp_manager.initialize(server_configs)
             tools = await mcp_manager.get_available_tools()
             logger.info("MCP有効: %d個のツールが利用可能", len(tools))

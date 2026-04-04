@@ -970,7 +970,10 @@ class MessageRouter:
 
         lines = ["*RAG MCPツール一覧:*\n"]
         for tool in sorted(rag_tools, key=lambda t: t.name):
-            desc = tool.description.split("\n")[0] if tool.description else "(説明なし)"
+            first_line = tool.description.split("\n")[0] if tool.description else ""
+            # "[サーバー名] 英語概要 - 日本語説明" から日本語部分を抽出
+            desc = first_line.split(" - ", 1)[1] if " - " in first_line else first_line
+            desc = desc or "(説明なし)"
             lines.append(f"• `{tool.name}` — {desc}")
 
         await self._messaging.send_message("\n".join(lines), thread_id, channel)

@@ -52,7 +52,8 @@ class _EnvLoader(BaseSettings):
 
     # MCP
     mcp_enabled: bool = False
-    mcp_servers_config: str = "config/mcp_servers.json"
+    mcp_rag_transport: str = "http"
+    mcp_rag_url: str = ""
 
     # Logging
     log_level: str = "INFO"
@@ -91,7 +92,8 @@ class Settings(BaseModel):
     database_url: str
     env_name: str
     mcp_enabled: bool
-    mcp_servers_config: str
+    mcp_rag_transport: str
+    mcp_rag_url: str
     log_level: str
     rag_bluesky_handle: str
     rag_zenn_username: str
