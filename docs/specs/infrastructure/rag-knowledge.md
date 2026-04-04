@@ -13,7 +13,7 @@ RAG 機能は独立リポジトリ（rag-knowledge）で実装・運用してお
 ## 制約
 
 - RAG の実装・設定・テストは [rag-knowledge リポジトリ](https://github.com/becky3/rag-knowledge)で管理する。ツールの詳細仕様は [rag-knowledge 仕様書](https://github.com/becky3/rag-knowledge/blob/main/docs/specs/rag-knowledge.md)を参照
-- ai-assistant からは MCP サーバー設定（`config/mcp_servers.json`）で RAG サーバーに HTTP 接続する
+- ai-assistant からは `.env`（`MCP_RAG_TRANSPORT`, `MCP_RAG_URL`）の設定で RAG サーバーに HTTP 接続する
 - RAG サーバーは別プロセスとして事前に起動しておく必要がある
 - RAG の利用可否は MCP 基盤の有効化（`MCP_ENABLED`）と MCP サーバー設定への登録で決まる
 

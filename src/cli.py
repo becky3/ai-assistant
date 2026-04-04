@@ -21,14 +21,13 @@ import logging
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 from zoneinfo import ZoneInfo
 
-from src.config.settings import Settings, get_settings, load_assistant_config
+from src.config.settings import get_settings, load_assistant_config
 from src.db.session import get_session_factory, init_db
 from src.llm.base import LLMProvider
 from src.llm.factory import get_provider_for_service
-from src.mcp_bridge.client_manager import MCPClientManager, MCPServerConfig
+from src.mcp_bridge.client_manager import MCPClientManager, build_mcp_server_configs
 from src.messaging.cli_adapter import CliAdapter
 from src.messaging.port import IncomingMessage
 from src.messaging.router import MessageRouter
@@ -42,21 +41,6 @@ from src.services.user_profiler import UserProfiler
 logger = logging.getLogger(__name__)
 
 
-def _build_mcp_server_configs(
-    settings: Settings,
-    assistant_config: dict[str, Any],
-) -> list[MCPServerConfig]:
-    """settings と assistant.yaml から MCPServerConfig を構築する."""
-    if not settings.mcp_rag_url:
-        return []
-
-    return [MCPServerConfig(
-        name="rag",
-        transport=settings.mcp_rag_transport,
-        url=settings.mcp_rag_url,
-        system_instruction=str(assistant_config.get("mcp_system_instruction", "")),
-        response_instruction=str(assistant_config.get("mcp_response_instruction", "")),
-    )]
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -122,7 +106,7 @@ async def _setup(
     mcp_manager: MCPClientManager | None = None
     if settings.mcp_enabled:
         mcp_manager = MCPClientManager()
-        server_configs = _build_mcp_server_configs(settings, assistant)
+        server_configs = build_mcp_server_configs(settings, assistant)
         await mcp_manager.initialize(server_configs)
 
     cli_adapter = CliAdapter(user_id=user_id)

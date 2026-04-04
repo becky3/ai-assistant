@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 from py_common_lib.secrets import SecretNotFoundError, get_secret
 
-from src.config.settings import SERVICE_NAME, Settings, get_settings, load_assistant_config
+from src.config.settings import SERVICE_NAME, get_settings, load_assistant_config
 from src.process_guard import (
     BOT_READY_SIGNAL,
     check_already_running,
@@ -24,29 +24,10 @@ from src.process_guard import (
 
 if TYPE_CHECKING:
     from src.llm.base import LLMProvider
-    from src.mcp_bridge.client_manager import MCPServerConfig
 
 logger = logging.getLogger(__name__)
 
 
-def _build_mcp_server_configs(
-    settings: Settings,
-    assistant_config: dict[str, object],
-) -> list[MCPServerConfig]:
-    """settings と assistant.yaml から MCPServerConfig を構築する."""
-    from src.mcp_bridge.client_manager import MCPServerConfig
-
-    if not settings.mcp_rag_url:
-        logger.warning("MCP_RAG_URL が未設定です。RAG MCP サーバーをスキップします。")
-        return []
-
-    return [MCPServerConfig(
-        name="rag",
-        transport=settings.mcp_rag_transport,
-        url=settings.mcp_rag_url,
-        system_instruction=str(assistant_config.get("mcp_system_instruction", "")),
-        response_instruction=str(assistant_config.get("mcp_response_instruction", "")),
-    )]
 
 
 async def main() -> None:
@@ -60,7 +41,7 @@ async def main() -> None:
 
     from src.db.session import get_session_factory, init_db
     from src.llm.factory import get_provider_for_service
-    from src.mcp_bridge.client_manager import MCPClientManager
+    from src.mcp_bridge.client_manager import MCPClientManager, build_mcp_server_configs
     from src.messaging.router import MessageRouter
     from src.messaging.slack_adapter import SlackAdapter
     from src.services.chat import ChatService
@@ -118,7 +99,7 @@ async def main() -> None:
         # MCP初期化（有効時のみ）
         if settings.mcp_enabled:
             mcp_manager = MCPClientManager()
-            server_configs = _build_mcp_server_configs(settings, assistant)
+            server_configs = build_mcp_server_configs(settings, assistant)
             await mcp_manager.initialize(server_configs)
             tools = await mcp_manager.get_available_tools()
             logger.info("MCP有効: %d個のツールが利用可能", len(tools))

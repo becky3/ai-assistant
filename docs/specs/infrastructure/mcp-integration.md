@@ -38,8 +38,8 @@ Model Context Protocol（MCP）を活用して、チャットボットが外部�
 ### トランスポート
 
 - stdio（ローカルプロセス）および http（Streamable HTTP）をサポートする
-- 設定ファイルの `transport` フィールドで接続方式を指定する
-- http の場合は `url` フィールドにエンドポイント URL を指定する
+- `.env` の `MCP_RAG_TRANSPORT` で接続方式を指定する
+- http の場合は `.env` の `MCP_RAG_URL` にエンドポイント URL を指定する
 
 ## インターフェース
 
@@ -70,18 +70,14 @@ Model Context Protocol（MCP）を活用して、チャットボットが外部�
 
 ### MCP サーバー設定
 
-JSON ファイルでサーバーの接続情報を管理する。
+MCP サーバーの接続情報は3層分離モデルに従い、各設定値を適切な層で管理する。
 
-| フィールド | 説明 |
-| --- | --- |
-| `transport` | トランスポート種別（`stdio` または `http`） |
-| `command` | 実行コマンド（stdio 時） |
-| `args` | コマンド引数（stdio 時） |
-| `env` | 環境変数（stdio 時） |
-| `url` | エンドポイント URL（http 時） |
-| `system_instruction` | システムプロンプトに常時追加する指示 |
-| `response_instruction` | ツール実行後にシステムプロンプトへ追加する指示 |
-| `auto_context_tool` | ユーザークエリで自動呼び出しし結果をコンテキスト注入するツール名 |
+| 設定値 | 配置先 | 説明 |
+| --- | --- | --- |
+| `mcp_rag_transport` | `.env` | トランスポート種別（`stdio` または `http`） |
+| `mcp_rag_url` | `.env` | エンドポイント URL（http 時） |
+| `mcp_system_instruction` | `config/assistant.yaml` | システムプロンプトに常時追加する指示 |
+| `mcp_response_instruction` | `config/assistant.yaml` | ツール実行後にシステムプロンプトへ追加する指示 |
 
 ### ツール呼び出しフロー（local/online モード）
 
@@ -176,7 +172,7 @@ flowchart TB
 | ツールループ上限到達 | ループを打ち切り、上限到達メッセージを LLM に渡してテキスト応答を強制 |
 | ツール実行タイムアウト | タイムアウトエラーとして処理し、エラー内容を LLM に返す |
 | MCP 無効時 | 従来どおりの動作（ツールなしで応答） |
-| 設定ファイル不在 | MCP 機能を無効として続行 |
+| `MCP_RAG_URL` 未設定 | RAG MCP サーバーをスキップし、ツールなしで続行 |
 | Claude CLI モードでの MCP 接続失敗 | MCP の再接続や詳細制御は Claude CLI 側に委ねるが、CLI の非0 exit や stderr などのプロセス失敗は ai-assistant 側で検知し、ユーザー向けエラー返却・ログ出力を行う |
 
 ## 関連ドキュメント
