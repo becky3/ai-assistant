@@ -52,7 +52,7 @@ AI Assistantは、Slack上で動作するAIアシスタントである。
 | `topic_llm_provider` | TopicRecommender | local | トピック提案 |
 | `summarizer_llm_provider` | Summarizer | local | 記事要約 |
 
-各設定には `"local"` または `"online"` を指定する。
+各設定には `"local"` または `"online"` を指定する。`chat_llm_provider` のみ `"claude"` も指定可能（Claude CLI ワンショット実行）。
 `"online"` の場合、`online_llm_provider` の設定（`"openai"` or `"anthropic"`）が使用される。
 
 ### 設定例
