@@ -68,6 +68,8 @@ def _make_router(
     session_factory: AsyncMock | None = None,
     mcp_manager: AsyncMock | None = None,
     bot_start_time: datetime | None = None,
+    rag_bluesky_handle: str = "",
+    rag_zenn_username: str = "",
 ) -> tuple[MockAdapter, MessageRouter]:
     if adapter is None:
         adapter = MockAdapter()
@@ -87,6 +89,8 @@ def _make_router(
         env_name="test",
         mcp_manager=mcp_manager,
         bot_start_time=bot_start_time,
+        rag_bluesky_handle=rag_bluesky_handle,
+        rag_zenn_username=rag_zenn_username,
     )
     return adapter, router
 
@@ -434,6 +438,118 @@ async def test_rag_add_missing_url_shows_error() -> None:
     assert len(adapter.sent_messages) == 1
     assert "エラー" in adapter.sent_messages[0][0]
     mcp_manager.call_tool.assert_not_called()
+
+
+async def test_rag_update_both_configured() -> None:
+    """rag update で BlueSky・Zenn 両方が設定済みなら両方呼ばれる."""
+    mcp_manager = AsyncMock()
+    mcp_manager.call_tool.return_value = "取り込み完了"
+    adapter, router = _make_router(
+        mcp_manager=mcp_manager,
+        rag_bluesky_handle="user.bsky.social",
+        rag_zenn_username="testuser",
+    )
+
+    await router.process_message(_make_msg("rag update"))
+
+    assert len(adapter.sent_messages) == 2  # start message + results
+    assert mcp_manager.call_tool.call_count == 2
+    calls = mcp_manager.call_tool.call_args_list
+    assert calls[0].args == ("rag_crawl_bluesky", {"handle": "user.bsky.social", "max_posts": 100})
+    assert calls[1].args == ("rag_crawl_zenn", {"username": "testuser", "max_articles": 10})
+
+
+async def test_rag_update_bluesky_only() -> None:
+    """rag update で BlueSky のみ設定なら BlueSky だけ呼ばれる."""
+    mcp_manager = AsyncMock()
+    mcp_manager.call_tool.return_value = "取り込み完了"
+    adapter, router = _make_router(
+        mcp_manager=mcp_manager,
+        rag_bluesky_handle="user.bsky.social",
+    )
+
+    await router.process_message(_make_msg("rag update"))
+
+    assert len(adapter.sent_messages) == 2
+    mcp_manager.call_tool.assert_called_once_with(
+        "rag_crawl_bluesky", {"handle": "user.bsky.social", "max_posts": 100}
+    )
+
+
+async def test_rag_update_none_configured() -> None:
+    """rag update で両方未設定ならエラーメッセージが返る."""
+    mcp_manager = AsyncMock()
+    adapter, router = _make_router(mcp_manager=mcp_manager)
+
+    await router.process_message(_make_msg("rag update"))
+
+    assert len(adapter.sent_messages) == 1
+    assert "エラー" in adapter.sent_messages[0][0]
+    mcp_manager.call_tool.assert_not_called()
+
+
+async def test_rag_update_tool_not_found() -> None:
+    """rag update でツールが見つからない場合のエラーハンドリング."""
+    mcp_manager = AsyncMock()
+    mcp_manager.call_tool.side_effect = MCPToolNotFoundError("rag_crawl_bluesky")
+    adapter, router = _make_router(
+        mcp_manager=mcp_manager,
+        rag_bluesky_handle="user.bsky.social",
+        rag_zenn_username="testuser",
+    )
+
+    await router.process_message(_make_msg("rag update"))
+
+    assert len(adapter.sent_messages) == 2
+    result_msg = adapter.sent_messages[1][0]
+    assert "利用できません" in result_msg
+
+
+async def test_rag_rebuild_default_mode() -> None:
+    """rag rebuild でモード省略時は index になる."""
+    mcp_manager = AsyncMock()
+    mcp_manager.call_tool.return_value = "リビルド完了"
+    adapter, router = _make_router(mcp_manager=mcp_manager)
+
+    await router.process_message(_make_msg("rag rebuild"))
+
+    assert len(adapter.sent_messages) == 2  # start message + result
+    mcp_manager.call_tool.assert_called_once_with("rag_rebuild", {"mode": "index"})
+
+
+async def test_rag_rebuild_explicit_mode() -> None:
+    """rag rebuild full で指定したモードが渡される."""
+    mcp_manager = AsyncMock()
+    mcp_manager.call_tool.return_value = "リビルド完了"
+    adapter, router = _make_router(mcp_manager=mcp_manager)
+
+    await router.process_message(_make_msg("rag rebuild full"))
+
+    mcp_manager.call_tool.assert_called_once_with("rag_rebuild", {"mode": "full"})
+
+
+async def test_rag_rebuild_invalid_mode() -> None:
+    """rag rebuild に無効なモードを指定するとエラーメッセージが返る."""
+    mcp_manager = AsyncMock()
+    adapter, router = _make_router(mcp_manager=mcp_manager)
+
+    await router.process_message(_make_msg("rag rebuild invalid"))
+
+    assert len(adapter.sent_messages) == 1
+    assert "無効なモード" in adapter.sent_messages[0][0]
+    mcp_manager.call_tool.assert_not_called()
+
+
+async def test_rag_rebuild_tool_not_found() -> None:
+    """rag rebuild でツールが見つからない場合のエラーハンドリング."""
+    mcp_manager = AsyncMock()
+    mcp_manager.call_tool.side_effect = MCPToolNotFoundError("rag_rebuild")
+    adapter, router = _make_router(mcp_manager=mcp_manager)
+
+    await router.process_message(_make_msg("rag rebuild index"))
+
+    assert len(adapter.sent_messages) == 2
+    assert "利用できません" in adapter.sent_messages[1][0]
 
 
 async def test_rag_without_mcp_falls_through_to_chat() -> None:
