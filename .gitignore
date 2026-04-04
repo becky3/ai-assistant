@@ -51,3 +51,4 @@ htmlcov/
 docs/zenn-drafts/
 .claude/scheduled_tasks.lock
 .pr-creation-authorized
+aidlc-archive/
