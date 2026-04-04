@@ -8,5 +8,7 @@ feed_summarize_timeout = 180
 feed_collect_days = 7
 thread_history_limit = 20
 rag_show_sources = true
+rag_bluesky_max_posts = 100
+rag_zenn_max_articles = 10
 claude_allowed_tools = "mcp__rag-knowledge-production__*,WebSearch,WebFetch"
 claude_timeout = 120

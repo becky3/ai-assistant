@@ -35,6 +35,8 @@ TEST_SETTINGS_DEFAULTS: dict[str, object] = {
     "feed_collect_days": 7,
     "thread_history_limit": 20,
     "rag_show_sources": False,
+    "rag_bluesky_max_posts": 100,
+    "rag_zenn_max_articles": 10,
     "claude_allowed_tools": "",
     "claude_timeout": 120,
 }

@@ -29,13 +29,13 @@ RSSフィードから学習関連記事を自動収集し、LLMで要約した�
 
 ### 設定値
 
-| 環境変数 | 説明 |
-| --- | --- |
-| `FEED_ARTICLES_PER_FEED` | フィードあたりの最大表示件数 |
-| `FEED_CARD_LAYOUT` | 配信カードの表示形式（`horizontal` / `vertical`） |
-| `FEED_SUMMARIZE_TIMEOUT` | 1記事あたりの要約タイムアウト秒数。超過時はそのフィードの収集を中止 |
-| `FEED_COLLECT_DAYS` | 収集対象の日数。`published_at` がこの日数より古い記事はスキップ。`published_at` が NULL の記事はスキップしない |
-| `SLACK_NEWS_CHANNEL_ID` | 配信先チャンネルID |
+| 項目名 | 層 | 設計意図 |
+|---|---|---|
+| `feed_articles_per_feed` | 共通設定値 | フィードごとの配信記事数を制限しチャンネルの可読性を維持する |
+| `feed_card_layout` | 共通設定値 | フィードカードの表示形式をプロジェクトとして統一する |
+| `feed_summarize_timeout` | 共通設定値 | 1記事あたりの要約タイムアウトを設けて無応答時の待機を防止する。超過時はそのフィードの収集を中止 |
+| `feed_collect_days` | 共通設定値 | 収集対象の日数を制限し処理量を抑制する。`published_at` がこの日数より古い記事はスキップ。`published_at` が NULL の記事はスキップしない |
+| `slack_news_channel_id` | 環境依存値 | フィード配信先チャンネル ID は Slack ワークスペースごとに異なる |
 
 ### 配信カードレイアウト
 
@@ -72,9 +72,9 @@ RSSフィードから学習関連記事を自動収集し、LLMで要約した�
 | URL重複 | 収集済みの URL はスキップ |
 | 要約生成 | description あり → 概要に基づいて要約。なし/不足 → タイトルから推測して要約 |
 | 要約の品質制約 | 「情報が不足」「把握できません」等の非要約応答は禁止 |
-| 要約タイムアウト | `FEED_SUMMARIZE_TIMEOUT` 超過時はそのフィードの収集を中止 |
+| 要約タイムアウト | `feed_summarize_timeout` 超過時はそのフィードの収集を中止 |
 | OGP画像 | 取得可能な場合のみ保存 |
-| 収集日数 | `published_at` が `FEED_COLLECT_DAYS` より古い記事はスキップ |
+| 収集日数 | `published_at` が `feed_collect_days` より古い記事はスキップ |
 
 ### 毎朝自動配信
 

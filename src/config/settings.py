@@ -128,6 +128,8 @@ class Settings(BaseModel):
 
     # RAG
     rag_show_sources: bool
+    rag_bluesky_max_posts: int = Field(ge=1)  # 定期更新でクロールする BlueSky 投稿数の上限
+    rag_zenn_max_articles: int = Field(ge=1)  # 定期更新でクロールする Zenn 記事数の上限
 
     # Claude CLI（chat_llm_provider="claude" の場合に使用。未指定時はデフォルト値を利用）
     claude_allowed_tools: str = ""

@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from src.config.settings import _EnvLoader
 from src.db.models import Article, Base, Conversation, Feed, UserProfile
 from src.db import session as session_mod
 
@@ -74,7 +75,12 @@ async def test_conversation(session: AsyncSession) -> None:
 
 async def test_init_db_and_get_session(monkeypatch: pytest.MonkeyPatch) -> None:
     """init_db/get_session 経由でテーブル作成とセッション取得ができる."""
+    # .env.example をベースに読み込み、DATABASE_URL のみテスト用にオーバーライド
     monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+    monkeypatch.setattr(
+        _EnvLoader, "model_config",
+        {**_EnvLoader.model_config, "env_file": ".env.example"},
+    )
 
     # グローバル状態をリセット
     session_mod._engine = None

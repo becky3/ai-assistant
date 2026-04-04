@@ -55,8 +55,12 @@ def test_get_settings_loads_from_env_and_toml() -> None:
     """get_settings() が .env と config.toml から統合して読み込める."""
     from src.config.settings import get_settings
 
-    settings = get_settings()
-    # .env から
+    # .env の代わりに git 管理されている .env.example を使用
+    get_settings.cache_clear()
+    with patch.object(_EnvLoader, "model_config", {**_EnvLoader.model_config, "env_file": ".env.example"}):
+        settings = get_settings()
+    get_settings.cache_clear()
+    # .env.example から
     assert settings.lmstudio_base_url
     assert settings.online_llm_provider in ("openai", "anthropic")
     # config.toml から

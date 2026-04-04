@@ -501,6 +501,8 @@ class MessageRouter:
         slack_client: AsyncWebClient | None = None,
         rag_bluesky_handle: str = "",
         rag_zenn_username: str = "",
+        rag_bluesky_max_posts: int = 100,
+        rag_zenn_max_articles: int = 10,
     ) -> None:
         self._messaging = messaging
         self._chat_service = chat_service
@@ -519,6 +521,8 @@ class MessageRouter:
         self._slack_client = slack_client
         self._rag_bluesky_handle = rag_bluesky_handle
         self._rag_zenn_username = rag_zenn_username
+        self._rag_bluesky_max_posts = rag_bluesky_max_posts
+        self._rag_zenn_max_articles = rag_zenn_max_articles
 
     async def process_message(self, msg: IncomingMessage) -> None:
         """受信メッセージをキーワードルーティングし、適切なサービスに委譲する."""
@@ -930,11 +934,11 @@ class MessageRouter:
         targets: list[tuple[str, str, dict[str, object]]] = []
         if self._rag_bluesky_handle:
             targets.append(("BlueSky", "rag_crawl_bluesky", {
-                "handle": self._rag_bluesky_handle, "max_posts": 100,
+                "handle": self._rag_bluesky_handle, "max_posts": self._rag_bluesky_max_posts,
             }))
         if self._rag_zenn_username:
             targets.append(("Zenn", "rag_crawl_zenn", {
-                "username": self._rag_zenn_username, "max_articles": 10,
+                "username": self._rag_zenn_username, "max_articles": self._rag_zenn_max_articles,
             }))
 
         await self._messaging.send_message(

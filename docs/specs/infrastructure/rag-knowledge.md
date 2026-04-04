@@ -39,8 +39,8 @@ MCP ツールの定義・振る舞いは [rag-knowledge 仕様書](https://githu
 
 `rag update` は以下を順次実行する:
 
-1. `rag_crawl_bluesky` — `.env` の `RAG_BLUESKY_HANDLE` を対象に最大 100 件取得
-2. `rag_crawl_zenn` — `.env` の `RAG_ZENN_USERNAME` を対象に最大 10 件取得
+1. `rag_crawl_bluesky` — `.env` の `RAG_BLUESKY_HANDLE` を対象に `rag_bluesky_max_posts`（`config.toml`）件取得
+2. `rag_crawl_zenn` — `.env` の `RAG_ZENN_USERNAME` を対象に `rag_zenn_max_articles`（`config.toml`）件取得
 
 定期実行は Slack のワークフロー/スケジュール機能から呼び出す想定。Bot 側は呼ばれたら実行するのみ。
 
