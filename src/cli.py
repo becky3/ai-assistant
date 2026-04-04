@@ -26,6 +26,7 @@ from zoneinfo import ZoneInfo
 
 from src.config.settings import get_settings, load_assistant_config
 from src.db.session import get_session_factory, init_db
+from src.llm.base import LLMProvider
 from src.llm.factory import get_provider_for_service
 from src.mcp_bridge.client_manager import MCPClientManager, MCPServerConfig
 from src.messaging.cli_adapter import CliAdapter
@@ -112,7 +113,18 @@ async def _setup(
     assistant = load_assistant_config()
     system_prompt = assistant.get("personality", "")
 
-    chat_llm = get_provider_for_service(settings, settings.chat_llm_provider)
+    is_claude_mode = settings.chat_llm_provider == "claude"
+    if is_claude_mode:
+        import shutil
+        if not shutil.which("claude"):
+            raise SystemExit(
+                "chat_llm_provider='claude' ですが、claude コマンドが見つかりません。"
+                "Claude CLI をインストールしてください。"
+            )
+    chat_llm: LLMProvider | None = None
+    if not is_claude_mode:
+        # mypy は != "claude" で Literal["local", "online"] への絞り込みを行えないため type: ignore
+        chat_llm = get_provider_for_service(settings, settings.chat_llm_provider)  # type: ignore[arg-type]
     profiler_llm = get_provider_for_service(settings, settings.profiler_llm_provider)
     topic_llm = get_provider_for_service(settings, settings.topic_llm_provider)
     summarizer_llm = get_provider_for_service(settings, settings.summarizer_llm_provider)
@@ -131,9 +143,12 @@ async def _setup(
         llm=chat_llm,
         session_factory=session_factory,
         system_prompt=system_prompt,
-        mcp_manager=mcp_manager,
+        mcp_manager=None if is_claude_mode else mcp_manager,
         thread_history_fetcher=cli_adapter.fetch_thread_history,
         format_instruction=cli_adapter.get_format_instruction(),
+        claude_mode=is_claude_mode,
+        claude_allowed_tools=settings.claude_allowed_tools,
+        claude_timeout=settings.claude_timeout,
     )
 
     user_profiler = UserProfiler(

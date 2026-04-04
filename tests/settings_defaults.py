@@ -33,4 +33,6 @@ TEST_SETTINGS_DEFAULTS: dict[str, object] = {
     "feed_collect_days": 7,
     "thread_history_limit": 20,
     "rag_show_sources": False,
+    "claude_allowed_tools": "",
+    "claude_timeout": 120,
 }

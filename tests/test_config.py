@@ -41,8 +41,11 @@ def test_settings_no_defaults_for_toml_fields() -> None:
     """共通設定値フィールドにデフォルト値がないこと."""
     from src.config.settings import _ENV_FIELD_NAMES
 
+    # 条件付き必須フィールド（chat_llm_provider="claude" 時のみ必須）
+    _CONDITIONALLY_REQUIRED = {"claude_allowed_tools", "claude_timeout"}
+
     for name, field_info in Settings.model_fields.items():
-        if name not in _ENV_FIELD_NAMES:
+        if name not in _ENV_FIELD_NAMES and name not in _CONDITIONALLY_REQUIRED:
             assert field_info.is_required(), (
                 f"Settings.{name} にデフォルト値があります（config.toml 必須のため不要）"
             )

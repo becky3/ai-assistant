@@ -93,7 +93,7 @@ class Settings(BaseModel):
 
     # LLM
     online_llm_provider: Literal["openai", "anthropic"]
-    chat_llm_provider: Literal["local", "online"]
+    chat_llm_provider: Literal["local", "online", "claude"]
     profiler_llm_provider: Literal["local", "online"]
     topic_llm_provider: Literal["local", "online"]
     summarizer_llm_provider: Literal["local", "online"]
@@ -115,6 +115,10 @@ class Settings(BaseModel):
 
     # RAG
     rag_show_sources: bool
+
+    # Claude CLI（chat_llm_provider="claude" の場合のみ必須）
+    claude_allowed_tools: str = ""
+    claude_timeout: int = Field(default=120, ge=1)
 
 
 def _load_toml_config() -> dict[str, Any]:

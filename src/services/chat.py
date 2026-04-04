@@ -104,12 +104,15 @@ class ChatService:
 
     def __init__(
         self,
-        llm: LLMProvider,
+        llm: LLMProvider | None,
         session_factory: async_sessionmaker[AsyncSession],
         system_prompt: str = "",
         mcp_manager: MCPClientManager | None = None,
         thread_history_fetcher: Callable[[str, str, str], Awaitable[list[Message] | None]] | None = None,
         format_instruction: str = "",
+        claude_mode: bool = False,
+        claude_allowed_tools: str = "",
+        claude_timeout: int = 120,
     ) -> None:
         self._llm = llm
         self._session_factory = session_factory
@@ -117,6 +120,9 @@ class ChatService:
         self._mcp_manager = mcp_manager
         self._thread_history_fetcher = thread_history_fetcher
         self._format_instruction = format_instruction
+        self._claude_mode = claude_mode
+        self._claude_allowed_tools = claude_allowed_tools
+        self._claude_timeout = claude_timeout
 
     async def respond(
         self,
@@ -140,65 +146,128 @@ class ChatService:
             if history is None:
                 history = await self._load_history(session, thread_ts)
 
-            # メッセージリストを構築
-            # 構成順: format_instruction → personality
-            # MCP system_instructions は後段で先頭に挿入される
-            messages: list[Message] = []
-            parts: list[str] = []
-            if self._format_instruction:
-                parts.append(self._format_instruction)
-            if self._system_prompt:
-                parts.append(self._system_prompt)
-            system_content = "\n\n".join(parts)
-            if system_content:
-                messages.append(Message(role="system", content=system_content))
-            messages.extend(history)
-            messages.append(Message(role="user", content=text))
-
-            # MCP無効 or MCPClientManager未注入 → 従来通り
-            if not self._mcp_manager:
-                response = await self._llm.complete(messages)
-                return await self._save_and_return(
-                    session, user_id, thread_ts, text, response.content,
+            # claude モード: Claude CLI ワンショット実行
+            if self._claude_mode:
+                return await self._respond_via_cli(
+                    session, user_id, text, thread_ts, history,
                 )
 
-            # ツール呼び出しループ
-            tools = await self._mcp_manager.get_available_tools()
-            if not tools:
-                # ツールがない場合は従来通り
-                response = await self._llm.complete(messages)
-                return await self._save_and_return(
-                    session, user_id, thread_ts, text, response.content,
-                )
-
-            # MCPサーバーのシステム指示をシステムプロンプトの先頭に追加
-            # ツール動作の指示はキャラクター設定より優先度が高いため先頭に配置
-            system_instructions = self._mcp_manager.get_system_instructions()
-            if system_instructions:
-                extra = "\n\n".join(system_instructions)
-                if messages and messages[0].role == "system":
-                    messages[0] = Message(
-                        role="system",
-                        content=extra + "\n\n" + messages[0].content,
-                    )
-                else:
-                    messages.insert(0, Message(role="system", content=extra))
-
-            # 自動コンテキスト注入（RAG等）
-            rag_sources, auto_applied = await self._inject_auto_context(messages, text)
-
-            final_response = await self._run_tool_loop(
-                messages, tools, applied_instructions=auto_applied,
+            # local/online モード: 従来の LLM プロバイダー呼び出し
+            return await self._respond_via_llm(
+                session, user_id, text, thread_ts, history,
             )
 
-            # ツールループで rag_search が呼ばれた場合のソースURL抽出
-            if not rag_sources:
-                rag_sources = self._extract_rag_sources_from_messages(messages)
+    async def _respond_via_cli(
+        self,
+        session: AsyncSession,
+        user_id: str,
+        text: str,
+        thread_ts: str,
+        history: list[Message],
+    ) -> str:
+        """Claude CLI ワンショット実行で応答を生成する."""
+        from src.llm.claude_cli import call_claude
 
+        # 会話履歴 + ユーザーメッセージを1つのプロンプトに整形
+        prompt_parts: list[str] = []
+        if history:
+            prompt_parts.append("以下はこれまでの会話履歴です。")
+            for msg in history:
+                role_label = "ユーザー" if msg.role == "user" else "アシスタント"
+                prompt_parts.append(f"{role_label}: {msg.content}")
+            prompt_parts.append("")
+        prompt_parts.append(f"ユーザー: {text}")
+        prompt = "\n".join(prompt_parts)
+
+        # システムプロンプト構築
+        sys_parts: list[str] = []
+        if self._format_instruction:
+            sys_parts.append(self._format_instruction)
+        if self._system_prompt:
+            sys_parts.append(self._system_prompt)
+        system_prompt = "\n\n".join(sys_parts)
+
+        response_text = await call_claude(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            allowed_tools=self._claude_allowed_tools,
+            timeout=self._claude_timeout,
+        )
+
+        return await self._save_and_return(
+            session, user_id, thread_ts, text, response_text,
+        )
+
+    async def _respond_via_llm(
+        self,
+        session: AsyncSession,
+        user_id: str,
+        text: str,
+        thread_ts: str,
+        history: list[Message],
+    ) -> str:
+        """従来の LLM プロバイダーで応答を生成する."""
+        assert self._llm is not None  # noqa: S101
+
+        # メッセージリストを構築
+        # 構成順: format_instruction → personality
+        # MCP system_instructions は後段で先頭に挿入される
+        messages: list[Message] = []
+        parts: list[str] = []
+        if self._format_instruction:
+            parts.append(self._format_instruction)
+        if self._system_prompt:
+            parts.append(self._system_prompt)
+        system_content = "\n\n".join(parts)
+        if system_content:
+            messages.append(Message(role="system", content=system_content))
+        messages.extend(history)
+        messages.append(Message(role="user", content=text))
+
+        # MCP無効 or MCPClientManager未注入 → 従来通り
+        if not self._mcp_manager:
+            response = await self._llm.complete(messages)
             return await self._save_and_return(
-                session, user_id, thread_ts, text, final_response.content,
-                rag_sources=rag_sources,
+                session, user_id, thread_ts, text, response.content,
             )
+
+        # ツール呼び出しループ
+        tools = await self._mcp_manager.get_available_tools()
+        if not tools:
+            # ツールがない場合は従来通り
+            response = await self._llm.complete(messages)
+            return await self._save_and_return(
+                session, user_id, thread_ts, text, response.content,
+            )
+
+        # MCPサーバーのシステム指示をシステムプロンプトの先頭に追加
+        # ツール動作の指示はキャラクター設定より優先度が高いため先頭に配置
+        system_instructions = self._mcp_manager.get_system_instructions()
+        if system_instructions:
+            extra = "\n\n".join(system_instructions)
+            if messages and messages[0].role == "system":
+                messages[0] = Message(
+                    role="system",
+                    content=extra + "\n\n" + messages[0].content,
+                )
+            else:
+                messages.insert(0, Message(role="system", content=extra))
+
+        # 自動コンテキスト注入（RAG等）
+        rag_sources, auto_applied = await self._inject_auto_context(messages, text)
+
+        final_response = await self._run_tool_loop(
+            messages, tools, applied_instructions=auto_applied,
+        )
+
+        # ツールループで rag_search が呼ばれた場合のソースURL抽出
+        if not rag_sources:
+            rag_sources = self._extract_rag_sources_from_messages(messages)
+
+        return await self._save_and_return(
+            session, user_id, thread_ts, text, final_response.content,
+            rag_sources=rag_sources,
+        )
 
     async def _run_tool_loop(
         self,
@@ -208,6 +277,7 @@ class ChatService:
         applied_instructions: set[str] | None = None,
     ) -> LLMResponse:
         """ツール呼び出しループを実行する."""
+        assert self._llm is not None  # noqa: S101  -- called from _respond_via_llm
         applied_instructions = applied_instructions if applied_instructions is not None else set()
         for _ in range(TOOL_LOOP_MAX_ITERATIONS):
             response = await self._llm.complete_with_tools(messages, tools)
