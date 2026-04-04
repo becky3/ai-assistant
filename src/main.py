@@ -224,6 +224,8 @@ async def main() -> None:
             slack_client=slack_client,
             rag_bluesky_handle=settings.rag_bluesky_handle,
             rag_zenn_username=settings.rag_zenn_username,
+            rag_bluesky_max_posts=settings.rag_bluesky_max_posts,
+            rag_zenn_max_articles=settings.rag_zenn_max_articles,
         )
 
         register_handlers(

@@ -91,6 +91,8 @@ def _make_router(
         bot_start_time=bot_start_time,
         rag_bluesky_handle=rag_bluesky_handle,
         rag_zenn_username=rag_zenn_username,
+        rag_bluesky_max_posts=100,
+        rag_zenn_max_articles=10,
     )
     return adapter, router
 

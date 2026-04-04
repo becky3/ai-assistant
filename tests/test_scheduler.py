@@ -581,6 +581,8 @@ async def test_manual_deliver_command_passes_layout_from_router() -> None:
         channel_id=channel_id,
         feed_card_layout="vertical",
         slack_client=slack_client,
+        rag_bluesky_max_posts=100,
+        rag_zenn_max_articles=10,
     )
 
     msg = IncomingMessage(

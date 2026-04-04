@@ -189,6 +189,8 @@ async def _setup(
         bot_start_time=bot_start_time,
         rag_bluesky_handle=settings.rag_bluesky_handle,
         rag_zenn_username=settings.rag_zenn_username,
+        rag_bluesky_max_posts=settings.rag_bluesky_max_posts,
+        rag_zenn_max_articles=settings.rag_zenn_max_articles,
     )
 
     return router, cli_adapter, mcp_manager

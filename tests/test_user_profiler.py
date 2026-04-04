@@ -219,6 +219,8 @@ async def test_profile_keyword_triggers_get_profile() -> None:
         messaging=messaging,
         chat_service=chat_service,
         user_profiler=user_profiler,
+        rag_bluesky_max_posts=100,
+        rag_zenn_max_articles=10,
     )
 
     msg = IncomingMessage(
