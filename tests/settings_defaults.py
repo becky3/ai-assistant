@@ -17,6 +17,8 @@ TEST_SETTINGS_DEFAULTS: dict[str, object] = {
     "mcp_enabled": False,
     "mcp_servers_config": "config/mcp_servers.json",
     "log_level": "INFO",
+    "rag_bluesky_handle": "",
+    "rag_zenn_username": "",
     # config.toml フィールド
     "online_llm_provider": "openai",
     "chat_llm_provider": "local",

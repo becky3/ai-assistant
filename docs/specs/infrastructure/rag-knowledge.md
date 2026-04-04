@@ -26,6 +26,24 @@ MCP サーバー設定の `system_instruction` / `response_instruction` によ�
 
 MCP ツールの定義・振る舞いは [rag-knowledge 仕様書](https://github.com/becky3/rag-knowledge/blob/main/docs/specs/rag-knowledge.md)で管理する。
 
+### Slack コマンド
+
+| コマンド | 説明 |
+|---|---|
+| `rag crawl <URL> [パターン]` | リンク集ページからクロール＆取り込み |
+| `rag add <URL>` | 単一ページ取り込み |
+| `rag status` | ナレッジベース統計表示 |
+| `rag delete <URL>` | ソース URL 指定で削除 |
+| `rag update` | BlueSky・Zenn の定期更新（`.env` のアカウント設定を使用） |
+| `rag rebuild [mode]` | インデックス再構築（mode: `full` / `convert` / `index` / `incremental`、デフォルト: `index`）。各モードの詳細は [rag-knowledge 仕様書](https://github.com/becky3/rag-knowledge/blob/main/docs/specs/rag-knowledge.md)を参照 |
+
+`rag update` は以下を順次実行する:
+
+1. `rag_crawl_bluesky` — `.env` の `RAG_BLUESKY_HANDLE` を対象に最大 100 件取得
+2. `rag_crawl_zenn` — `.env` の `RAG_ZENN_USERNAME` を対象に最大 10 件取得
+
+定期実行は Slack のワークフロー/スケジュール機能から呼び出す想定。Bot 側は呼ばれたら実行するのみ。
+
 ## コンポーネント構成
 
 本仕様書固有のコンポーネントはない。接続構成は [MCP 統合](mcp-integration.md) のコンポーネント構成図を参照。

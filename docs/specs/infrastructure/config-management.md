@@ -100,6 +100,8 @@ TOML はフラット構造（セクションなし）とし、キー名は `Sett
 | `mcp_enabled` | `MCP_ENABLED` | `false` | MCP 機能の有効/無効 |
 | `mcp_servers_config` | `MCP_SERVERS_CONFIG` | `config/mcp_servers.json` | MCP サーバー設定ファイルパス |
 | `log_level` | `LOG_LEVEL` | `INFO` | ログ出力レベル |
+| `rag_bluesky_handle` | `RAG_BLUESKY_HANDLE` | `""`（空文字列） | RAG 定期更新対象の BlueSky ハンドル |
+| `rag_zenn_username` | `RAG_ZENN_USERNAME` | `""`（空文字列） | RAG 定期更新対象の Zenn ユーザー名 |
 
 #### 共通設定値層（config.toml）
 
@@ -139,6 +141,8 @@ TOML はフラット構造（セクションなし）とし、キー名は `Sett
 | `ENV_NAME` | 環境依存値 | 環境識別子はデプロイ先ごとに異なる |
 | `MCP_ENABLED` | 環境依存値 | MCP サーバーの有無はデプロイ環境に依存 |
 | `LOG_LEVEL` | 環境依存値 | 本番・開発でログレベルを変えるため |
+| `RAG_BLUESKY_HANDLE` | 環境依存値 | 取得対象アカウントはデプロイ環境ごとに異なりうる |
+| `RAG_ZENN_USERNAME` | 環境依存値 | 取得対象アカウントはデプロイ環境ごとに異なりうる |
 | `TIMEZONE` | 共通設定値 | タイムゾーンはプロジェクト共通の運用方針であり環境ごとに変える必要がない |
 | LLM プロバイダー選択 | 共通設定値 | プロジェクトとしてどの LLM を使うかの方針 |
 | モデル名 | 共通設定値 | プロジェクトとして使用するモデルの統一管理 |
@@ -182,4 +186,4 @@ flowchart TD
 - [全体仕様概要](../overview.md) — LLM 使い分けルール・設定一覧
 - [MCP 統合](mcp-integration.md) — MCP 関連設定（`mcp_enabled`、`mcp_servers_config`）
 - [チャット応答](../features/chat-response.md) — Claude CLI モード（`claude_allowed_tools`、`claude_timeout`）
-- [RAG ナレッジ](rag-knowledge.md) — RAG 関連設定（`rag_show_sources`）
+- [RAG ナレッジ](rag-knowledge.md) — RAG 関連設定（`rag_show_sources`、`rag_bluesky_handle`、`rag_zenn_username`）

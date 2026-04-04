@@ -57,6 +57,10 @@ class _EnvLoader(BaseSettings):
     # Logging
     log_level: str = "INFO"
 
+    # RAG 定期更新アカウント（rag update コマンドで使用）
+    rag_bluesky_handle: str = ""
+    rag_zenn_username: str = ""
+
 
 # .env 管理フィールド名の集合（重複検出に使用）
 _ENV_FIELD_NAMES = frozenset(_EnvLoader.model_fields.keys())
@@ -82,6 +86,8 @@ class Settings(BaseModel):
     mcp_enabled: bool
     mcp_servers_config: str
     log_level: str
+    rag_bluesky_handle: str
+    rag_zenn_username: str
 
     def get_auto_reply_channels(self) -> list[str]:
         """自動返信チャンネルのリストを返す（カンマ区切りを解析）."""

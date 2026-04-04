@@ -187,6 +187,8 @@ async def _setup(
         env_name=settings.env_name,
         mcp_manager=mcp_manager,
         bot_start_time=bot_start_time,
+        rag_bluesky_handle=settings.rag_bluesky_handle,
+        rag_zenn_username=settings.rag_zenn_username,
     )
 
     return router, cli_adapter, mcp_manager
