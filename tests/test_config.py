@@ -21,9 +21,9 @@ def test_settings_has_all_fields() -> None:
     """Settings にシークレット以外の設定項目を網羅."""
     fields = set(Settings.model_fields.keys())
     # 環境依存値
-    assert {"lmstudio_base_url", "database_url", "mcp_enabled"} <= fields
+    assert {"lmstudio_base_url", "database_url", "mcp_enabled", "online_llm_provider"} <= fields
     # 共通設定値
-    assert {"online_llm_provider", "openai_model", "feed_articles_per_feed"} <= fields
+    assert {"openai_model", "feed_articles_per_feed"} <= fields
     # シークレットフィールドが Settings から削除されていること
     assert "slack_bot_token" not in fields
     assert "openai_api_key" not in fields
@@ -58,14 +58,15 @@ def test_get_settings_loads_from_env_and_toml() -> None:
     settings = get_settings()
     # .env から
     assert settings.lmstudio_base_url
-    # config.toml から
     assert settings.online_llm_provider in ("openai", "anthropic")
+    # config.toml から
+    assert settings.openai_model
 
 
 def test_toml_config_loads() -> None:
     """config.toml がフラット構造で正しく読み込まれる."""
     data = _load_toml_config()
-    assert "online_llm_provider" in data
+    assert "openai_model" in data
     assert "feed_articles_per_feed" in data
     assert "thread_history_limit" in data
 

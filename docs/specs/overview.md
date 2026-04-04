@@ -41,33 +41,34 @@ AI Assistantは、Slack上で動作するAIアシスタントである。
 ## 4. LLM使い分けルール
 
 全サービスでローカルLLM（LM Studio）をデフォルトで使用する。
-各サービスごとに `config/config.toml` で使用するLLMを変更可能。
+各サービスごとに `.env` で使用するLLMプロバイダーを変更可能。モデル名は `config/config.toml` で管理。
 
 ### サービスごとのLLM設定
 
-| config.toml キー | 対象サービス | デフォルト | 説明 |
-|----------|-------------|-----------|------|
-| `chat_llm_provider` | ChatService | local | チャット応答 |
-| `profiler_llm_provider` | UserProfiler | local | ユーザー情報抽出 |
-| `topic_llm_provider` | TopicRecommender | local | トピック提案 |
-| `summarizer_llm_provider` | Summarizer | local | 記事要約 |
+| .env キー | 対象サービス | .env.example 値 | 説明 |
+|----------|-------------|----------------|------|
+| `ONLINE_LLM_PROVIDER` | 全サービス共通 | `openai` | オンライン LLM プロバイダー（`openai` / `anthropic`） |
+| `CHAT_LLM_PROVIDER` | ChatService | `local` | チャット応答 |
+| `PROFILER_LLM_PROVIDER` | UserProfiler | `local` | ユーザー情報抽出 |
+| `TOPIC_LLM_PROVIDER` | TopicRecommender | `local` | トピック提案 |
+| `SUMMARIZER_LLM_PROVIDER` | Summarizer | `local` | 記事要約 |
 
-各設定には `"local"` または `"online"` を指定する。`chat_llm_provider` のみ `"claude"` も指定可能（Claude CLI ワンショット実行）。
-`"online"` の場合、`online_llm_provider` の設定（`"openai"` or `"anthropic"`）が使用される。
+各設定には `"local"` または `"online"` を指定する。`CHAT_LLM_PROVIDER` のみ `"claude"` も指定可能（Claude CLI ワンショット実行）。
+`"online"` の場合、`ONLINE_LLM_PROVIDER` の設定（`"openai"` or `"anthropic"`）が使用される。
 
 ### 設定例
 
-```toml
+```bash
 # 全てローカル（デフォルト）
-chat_llm_provider = "local"
-profiler_llm_provider = "local"
-topic_llm_provider = "local"
-summarizer_llm_provider = "local"
+CHAT_LLM_PROVIDER=local
+PROFILER_LLM_PROVIDER=local
+TOPIC_LLM_PROVIDER=local
+SUMMARIZER_LLM_PROVIDER=local
 
 # チャットとトピック提案のみオンラインにする場合
-# chat_llm_provider = "online"
-# topic_llm_provider = "online"
-# online_llm_provider = "openai"
+# CHAT_LLM_PROVIDER=online
+# TOPIC_LLM_PROVIDER=online
+# ONLINE_LLM_PROVIDER=openai
 ```
 
 ## 5. DB設計

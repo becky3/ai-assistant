@@ -61,6 +61,13 @@ class _EnvLoader(BaseSettings):
     rag_bluesky_handle: str = ""
     rag_zenn_username: str = ""
 
+    # LLM プロバイダー選択（マシンの LLM 環境に依存）
+    online_llm_provider: Literal["openai", "anthropic"]
+    chat_llm_provider: Literal["local", "online", "claude"]
+    profiler_llm_provider: Literal["local", "online"]
+    topic_llm_provider: Literal["local", "online"]
+    summarizer_llm_provider: Literal["local", "online"]
+
 
 # .env 管理フィールド名の集合（重複検出に使用）
 _ENV_FIELD_NAMES = frozenset(_EnvLoader.model_fields.keys())
@@ -72,8 +79,8 @@ class Settings(BaseModel):
     仕様: docs/specs/infrastructure/config-management.md
 
     各設定値の取得元は1つに固定（フォールバックなし）:
-    - 環境依存値(.env): slack_news_channel_id, lmstudio_base_url 等
-    - 共通設定値(config.toml): online_llm_provider, feed_articles_per_feed 等
+    - 環境依存値(.env): slack_news_channel_id, lmstudio_base_url, chat_llm_provider 等
+    - 共通設定値(config.toml): openai_model, feed_articles_per_feed 等
     - シークレットは Settings に含まない（使用箇所で get_secret() を直接呼び出す）
     """
 
@@ -88,6 +95,11 @@ class Settings(BaseModel):
     log_level: str
     rag_bluesky_handle: str
     rag_zenn_username: str
+    online_llm_provider: Literal["openai", "anthropic"]
+    chat_llm_provider: Literal["local", "online", "claude"]
+    profiler_llm_provider: Literal["local", "online"]
+    topic_llm_provider: Literal["local", "online"]
+    summarizer_llm_provider: Literal["local", "online"]
 
     def get_auto_reply_channels(self) -> list[str]:
         """自動返信チャンネルのリストを返す（カンマ区切りを解析）."""
@@ -97,12 +109,7 @@ class Settings(BaseModel):
 
     # --- config.toml から取得（共通設定値、config.toml 必須） ---
 
-    # LLM
-    online_llm_provider: Literal["openai", "anthropic"]
-    chat_llm_provider: Literal["local", "online", "claude"]
-    profiler_llm_provider: Literal["local", "online"]
-    topic_llm_provider: Literal["local", "online"]
-    summarizer_llm_provider: Literal["local", "online"]
+    # LLM モデル名
     openai_model: str
     anthropic_model: str
     lmstudio_model: str
