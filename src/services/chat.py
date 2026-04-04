@@ -207,7 +207,10 @@ class ChatService:
         history: list[Message],
     ) -> str:
         """従来の LLM プロバイダーで応答を生成する."""
-        assert self._llm is not None  # noqa: S101
+        if self._llm is None:
+            raise ValueError(
+                "LLM provider is not configured. Set `llm` when claude_mode is disabled.",
+            )
 
         # メッセージリストを構築
         # 構成順: format_instruction → personality
@@ -277,7 +280,10 @@ class ChatService:
         applied_instructions: set[str] | None = None,
     ) -> LLMResponse:
         """ツール呼び出しループを実行する."""
-        assert self._llm is not None  # noqa: S101  -- called from _respond_via_llm
+        if self._llm is None:
+            raise ValueError(
+                "LLM provider is not configured. Set `llm` when claude_mode is disabled.",
+            )
         applied_instructions = applied_instructions if applied_instructions is not None else set()
         for _ in range(TOOL_LOOP_MAX_ITERATIONS):
             response = await self._llm.complete_with_tools(messages, tools)

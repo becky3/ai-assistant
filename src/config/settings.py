@@ -116,7 +116,7 @@ class Settings(BaseModel):
     # RAG
     rag_show_sources: bool
 
-    # Claude CLI（chat_llm_provider="claude" の場合のみ必須）
+    # Claude CLI（chat_llm_provider="claude" の場合に使用。未指定時はデフォルト値を利用）
     claude_allowed_tools: str = ""
     claude_timeout: int = Field(default=120, ge=1)
 
