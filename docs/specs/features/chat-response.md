@@ -63,11 +63,11 @@ Claude CLI（`claude -p`）のワンショット実行で応答を生成する�
 1. 会話履歴とユーザーメッセージを1つのプロンプトテキストに整形する
 2. Claude CLI を subprocess で起動し、プロンプトを stdin 経由で渡す
    - `--system-prompt`: フォーマット指示 + 性格設定
-   - `--allowedTools`: 許可する MCP ツールパターン（`claude_allowed_tools` 設定値）
+   - `--allowedTools`: 許可する MCP ツールパターン（`claude_allowed_tools` 設定値）。`claude_allowed_tools` が空文字列の場合はフラグ自体を省略する
    - `--output-format text`: テキスト出力
 3. stdout から応答テキストを取得する
 
-MCP ツールの発見・呼び出し・ツールループは全て Claude CLI が内部で処理する。rag-knowledge 側で MCP ツールが追加された場合、ai-assistant 側の変更は不要。
+MCP ツールの発見・呼び出し・ツールループは全て Claude CLI が内部で処理する。`claude_allowed_tools` が空文字列の場合は MCP ツールを使用せず、テキスト応答のみを生成する。rag-knowledge 側で MCP ツールが追加された場合、ai-assistant 側の変更は不要。
 
 ## エッジケース
 

@@ -177,7 +177,7 @@ flowchart TB
 | ツール実行タイムアウト | タイムアウトエラーとして処理し、エラー内容を LLM に返す |
 | MCP 無効時 | 従来どおりの動作（ツールなしで応答） |
 | 設定ファイル不在 | MCP 機能を無効として続行 |
-| Claude CLI モードでの MCP 接続失敗 | Claude CLI が内部で処理する（ai-assistant 側での制御は不要） |
+| Claude CLI モードでの MCP 接続失敗 | MCP の再接続や詳細制御は Claude CLI 側に委ねるが、CLI の非0 exit や stderr などのプロセス失敗は ai-assistant 側で検知し、ユーザー向けエラー返却・ログ出力を行う |
 
 ## 関連ドキュメント
 

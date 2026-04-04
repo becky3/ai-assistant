@@ -122,8 +122,10 @@ TOML はフラット構造（セクションなし）とし、キー名は `Sett
 | `feed_collect_days` | `feed_collect_days` | 1 以上の整数 | 収集対象の日数 |
 | `thread_history_limit` | `thread_history_limit` | 1〜100 | スレッド履歴取得の最大件数 |
 | `rag_show_sources` | `rag_show_sources` | `true` / `false` | RAG 参照元 URL 表示（デバッグ用） |
-| `claude_allowed_tools` | `claude_allowed_tools` | MCP ツールパターン文字列 | `claude` モード時に許可する MCP ツール（`--allowedTools` に渡す値） |
-| `claude_timeout` | `claude_timeout` | 1 以上の整数（秒） | `claude` モード時の Claude CLI プロセスタイムアウト |
+| `claude_allowed_tools` | `claude_allowed_tools` | MCP ツールパターン文字列 | `chat_llm_provider=claude` の場合のみ必須。許可する MCP ツール（`--allowedTools` に渡す値） |
+| `claude_timeout` | `claude_timeout` | 1 以上の整数（秒） | `chat_llm_provider=claude` の場合のみ必須。Claude CLI プロセスタイムアウト |
+
+`claude_allowed_tools` と `claude_timeout` は条件付き必須項目である。`chat_llm_provider=claude` の場合は必須とし、いずれかが未設定なら起動時エラーとする。`chat_llm_provider=local` / `online` の場合は任意とし、設定されていてもアプリケーションは参照しない。
 
 #### 分類判断の根拠
 
