@@ -134,7 +134,10 @@ async def _setup(
         session_factory=session_factory,
     )
 
-    summarizer = Summarizer(llm=summarizer_llm)
+    summarizer = Summarizer(
+        llm=summarizer_llm,
+        reasoning_effort=settings.feed_summarize_reasoning_effort,
+    )
     ogp_extractor = OgpExtractor()
     feed_collector = FeedCollector(
         session_factory=session_factory,

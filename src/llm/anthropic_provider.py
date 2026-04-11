@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
 from anthropic import AsyncAnthropic
 from anthropic.types import MessageParam, TextBlockParam, ToolParam, ToolUseBlockParam
@@ -74,7 +75,12 @@ class AnthropicProvider(LLMProvider):
         self._client = AsyncAnthropic(api_key=api_key)
         self._model = model
 
-    async def complete(self, messages: list[Message]) -> LLMResponse:
+    async def complete(
+        self,
+        messages: list[Message],
+        *,
+        reasoning_effort: Literal["none", "low", "medium", "high"] | None = None,
+    ) -> LLMResponse:
         system_prompt, chat_messages = _build_anthropic_messages(messages)
 
         response = await self._client.messages.create(

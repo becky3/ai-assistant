@@ -162,7 +162,10 @@ async def main() -> None:
         )
 
         # 要約・収集サービス
-        summarizer = Summarizer(llm=summarizer_llm)
+        summarizer = Summarizer(
+            llm=summarizer_llm,
+            reasoning_effort=settings.feed_summarize_reasoning_effort,
+        )
         ogp_extractor = OgpExtractor()
         feed_collector = FeedCollector(
             session_factory=session_factory,

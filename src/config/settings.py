@@ -123,6 +123,7 @@ class Settings(BaseModel):
     feed_articles_per_feed: int = Field(ge=1)
     feed_card_layout: Literal["vertical", "horizontal"]
     feed_summarize_timeout: int = Field(ge=0)
+    feed_summarize_reasoning_effort: Literal["none", "low", "medium", "high"]
     feed_collect_days: int = Field(ge=1)
 
     # Thread

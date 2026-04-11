@@ -35,7 +35,7 @@ async def test_prompt_no_inference_when_description_exists() -> None:
 async def test_summarize_with_no_description(mock_llm: AsyncMock) -> None:
     """概要なしの場合、descriptionが「なし」としてプロンプトに渡される."""
     mock_llm.complete.return_value = LLMResponse(content="タイトルから推測した要約")
-    summarizer = Summarizer(llm=mock_llm)
+    summarizer = Summarizer(llm=mock_llm, reasoning_effort=None)
 
     result = await summarizer.summarize("Python 3.13の新機能", "https://example.com/article")
 
@@ -50,7 +50,7 @@ async def test_summarize_with_no_description(mock_llm: AsyncMock) -> None:
 async def test_summarize_with_description(mock_llm: AsyncMock) -> None:
     """概要ありの場合、descriptionがそのままプロンプトに渡される."""
     mock_llm.complete.return_value = LLMResponse(content="概要に基づく要約")
-    summarizer = Summarizer(llm=mock_llm)
+    summarizer = Summarizer(llm=mock_llm, reasoning_effort=None)
 
     result = await summarizer.summarize(
         "Python 3.13の新機能",
@@ -67,7 +67,7 @@ async def test_summarize_with_description(mock_llm: AsyncMock) -> None:
 async def test_summarize_empty_description_treated_as_none(mock_llm: AsyncMock) -> None:
     """空文字列の概要は「なし」として扱われる."""
     mock_llm.complete.return_value = LLMResponse(content="推測された要約")
-    summarizer = Summarizer(llm=mock_llm)
+    summarizer = Summarizer(llm=mock_llm, reasoning_effort=None)
 
     await summarizer.summarize("記事タイトル", "https://example.com/article", "")
 
@@ -79,7 +79,7 @@ async def test_summarize_empty_description_treated_as_none(mock_llm: AsyncMock) 
 async def test_summarize_fallback_to_title_on_empty_response(mock_llm: AsyncMock) -> None:
     """LLMが空の応答を返した場合、タイトルをフォールバックとして返す."""
     mock_llm.complete.return_value = LLMResponse(content="")
-    summarizer = Summarizer(llm=mock_llm)
+    summarizer = Summarizer(llm=mock_llm, reasoning_effort=None)
 
     result = await summarizer.summarize("フォールバックテスト", "https://example.com/article")
 
@@ -89,7 +89,7 @@ async def test_summarize_fallback_to_title_on_empty_response(mock_llm: AsyncMock
 async def test_summarize_fallback_to_title_on_exception(mock_llm: AsyncMock) -> None:
     """LLM呼び出しが例外を投げた場合、タイトルをフォールバックとして返す."""
     mock_llm.complete.side_effect = RuntimeError("LLM error")
-    summarizer = Summarizer(llm=mock_llm)
+    summarizer = Summarizer(llm=mock_llm, reasoning_effort=None)
 
     result = await summarizer.summarize("エラーテスト", "https://example.com/article")
 
@@ -101,7 +101,7 @@ async def test_exception_log_contains_url_and_lang(
 ) -> None:
     """例外時のログにURLとlang情報が含まれる."""
     mock_llm.complete.side_effect = RuntimeError("LLM error")
-    summarizer = Summarizer(llm=mock_llm)
+    summarizer = Summarizer(llm=mock_llm, reasoning_effort=None)
 
     await summarizer.summarize(
         "テスト記事", "https://example.com/article", lang="ja"
@@ -116,7 +116,7 @@ async def test_empty_response_log_contains_url_and_lang(
 ) -> None:
     """空応答時のログにURLとlang情報が含まれる."""
     mock_llm.complete.return_value = LLMResponse(content="")
-    summarizer = Summarizer(llm=mock_llm)
+    summarizer = Summarizer(llm=mock_llm, reasoning_effort=None)
 
     await summarizer.summarize(
         "テスト記事", "https://example.com/article", lang="en"

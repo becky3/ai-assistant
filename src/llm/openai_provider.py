@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Literal
 
 from openai import AsyncOpenAI
 from openai.types.chat import (
@@ -75,7 +76,12 @@ class OpenAIProvider(LLMProvider):
         self._client = AsyncOpenAI(api_key=api_key)
         self._model = model
 
-    async def complete(self, messages: list[Message]) -> LLMResponse:
+    async def complete(
+        self,
+        messages: list[Message],
+        *,
+        reasoning_effort: Literal["none", "low", "medium", "high"] | None = None,
+    ) -> LLMResponse:
         response = await self._client.chat.completions.create(
             model=self._model,
             messages=[_to_openai_message(m) for m in messages],
