@@ -38,6 +38,7 @@ TEST_SETTINGS_DEFAULTS: dict[str, object] = {
     "rag_show_sources": False,
     "rag_bluesky_max_posts": 100,
     "rag_zenn_max_articles": 10,
+    "feed_summarize_reasoning_effort": "none",
     "claude_allowed_tools": "",
     "claude_timeout": 120,
 }

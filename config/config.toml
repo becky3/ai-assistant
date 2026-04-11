@@ -1,10 +1,11 @@
 openai_model = "gpt-4o-mini"
 anthropic_model = "claude-3-5-sonnet-20241022"
-lmstudio_model = "qwen/qwen3-next-80b"
+lmstudio_model = "google/gemma-4-26b-a4b"
 timezone = "Asia/Tokyo"
 feed_articles_per_feed = 50
 feed_card_layout = "horizontal"
 feed_summarize_timeout = 180
+feed_summarize_reasoning_effort = "none"
 feed_collect_days = 7
 thread_history_limit = 20
 rag_show_sources = true
