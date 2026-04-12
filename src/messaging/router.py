@@ -101,7 +101,7 @@ def _format_uptime(seconds: float) -> str:
 def _build_status_message(
     timezone: str, env_name: str, bot_start_time: datetime | None = None
 ) -> str:
-    """ボットステータスメッセージを構築する (F7)."""
+    """ボットステータスメッセージを構築する (F5)."""
     hostname = socket.gethostname()
     now = datetime.now(tz=ZoneInfo(timezone))
 
@@ -509,7 +509,7 @@ class MessageRouter:
         thread_id = msg.thread_id
         channel = msg.channel
 
-        # ステータスコマンド (F7)
+        # ステータスコマンド (F5)
         if cleaned_text.lower().strip() in _STATUS_KEYWORDS:
             response_text = _build_status_message(
                 self._timezone, self._env_name, self._bot_start_time
@@ -517,7 +517,7 @@ class MessageRouter:
             await self._messaging.send_message(response_text, thread_id, channel)
             return
 
-        # feedコマンド (F2-AC7, F6-AC4)
+        # feedコマンド (F2)
         lower_text = cleaned_text.lower().lstrip()
         if self._collector is not None and any(
             re.match(rf"^{re.escape(kw)}\b", lower_text) for kw in _FEED_KEYWORDS
@@ -525,7 +525,7 @@ class MessageRouter:
             await self._handle_feed_command(msg, cleaned_text, lower_text)
             return
 
-        # ragコマンド (F9)
+        # ragコマンド (F7)
         if self._mcp_manager is not None and any(
             re.match(rf"^{re.escape(kw)}\b", lower_text) for kw in _RAG_KEYWORDS
         ):

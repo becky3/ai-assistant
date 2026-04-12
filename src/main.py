@@ -65,7 +65,7 @@ async def main() -> None:
 
     mcp_manager: MCPClientManager | None = None
     try:
-        # 起動時刻を記録 (F7)
+        # 起動時刻を記録 (F5)
         bot_start_time = datetime.now(tz=ZoneInfo(settings.timezone))
 
         # DB 初期化
@@ -116,14 +116,14 @@ async def main() -> None:
         if not bot_user_id:
             raise RuntimeError("Slack auth_test response does not contain 'user_id'.")
 
-        # スレッド履歴サービス (F8)
+        # スレッド履歴サービス (F6)
         thread_history_service = ThreadHistoryService(
             slack_client=slack_client,
             bot_user_id=bot_user_id,
             limit=settings.thread_history_limit,
         )
 
-        # SlackAdapter (F11)
+        # SlackAdapter (F9)
         slack_adapter = SlackAdapter(
             slack_client=slack_client,
             bot_user_id=bot_user_id,
@@ -156,7 +156,7 @@ async def main() -> None:
             collect_days=settings.feed_collect_days,
         )
 
-        # MessageRouter (F11)
+        # MessageRouter (F9)
         router = MessageRouter(
             messaging=slack_adapter,
             chat_service=chat_service,
