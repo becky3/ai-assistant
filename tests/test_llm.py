@@ -93,8 +93,6 @@ def test_service_llm_settings_default_to_local() -> None:
     """config.toml のデフォルト値で各サービスのLLM設定が'local'."""
     settings = Settings(**TEST_SETTINGS_DEFAULTS)
     assert settings.chat_llm_provider == "local"
-    assert settings.profiler_llm_provider == "local"
-    assert settings.topic_llm_provider == "local"
     assert settings.summarizer_llm_provider == "local"
 
 
@@ -103,13 +101,9 @@ def test_service_llm_settings_can_be_configured() -> None:
     settings = Settings(**{
         **TEST_SETTINGS_DEFAULTS,
         "chat_llm_provider": "online",
-        "profiler_llm_provider": "online",
-        "topic_llm_provider": "local",
         "summarizer_llm_provider": "online",
     })
     assert settings.chat_llm_provider == "online"
-    assert settings.profiler_llm_provider == "online"
-    assert settings.topic_llm_provider == "local"
     assert settings.summarizer_llm_provider == "online"
 
 

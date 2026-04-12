@@ -64,8 +64,6 @@ def _make_msg(text: str, user_id: str = "U1", channel: str = "cli") -> IncomingM
 def _make_router(
     adapter: MockAdapter | None = None,
     chat_service: AsyncMock | None = None,
-    user_profiler: AsyncMock | None = None,
-    topic_recommender: AsyncMock | None = None,
     collector: AsyncMock | None = None,
     session_factory: AsyncMock | None = None,
     mcp_manager: AsyncMock | None = None,
@@ -86,8 +84,6 @@ def _make_router(
     router = MessageRouter(
         messaging=adapter,
         chat_service=chat_service,
-        user_profiler=user_profiler,
-        topic_recommender=topic_recommender,
         collector=collector,
         session_factory=session_factory,
         channel_id="C_TEST",
@@ -189,42 +185,6 @@ async def test_status_case_insensitive() -> None:
         assert "ボットステータス" in adapter.sent_messages[0][0], f"Failed for: {text}"
 
 
-async def test_profile_command() -> None:
-    """プロファイルコマンドでプロファイルが返される."""
-    profiler = AsyncMock()
-    profiler.get_profile.return_value = "テストプロファイル"
-    adapter, router = _make_router(user_profiler=profiler)
-
-    await router.process_message(_make_msg("プロファイル"))
-
-    assert len(adapter.sent_messages) == 1
-    assert "テストプロファイル" in adapter.sent_messages[0][0]
-
-
-async def test_profile_command_no_profile() -> None:
-    """プロファイルがない場合のメッセージ."""
-    profiler = AsyncMock()
-    profiler.get_profile.return_value = None
-    adapter, router = _make_router(user_profiler=profiler)
-
-    await router.process_message(_make_msg("profile"))
-
-    assert len(adapter.sent_messages) == 1
-    assert "まだプロファイル情報がありません" in adapter.sent_messages[0][0]
-
-
-async def test_topic_command() -> None:
-    """トピック提案コマンド."""
-    recommender = AsyncMock()
-    recommender.recommend.return_value = "おすすめトピック一覧"
-    adapter, router = _make_router(topic_recommender=recommender)
-
-    await router.process_message(_make_msg("おすすめ"))
-
-    assert len(adapter.sent_messages) == 1
-    assert "おすすめトピック一覧" in adapter.sent_messages[0][0]
-
-
 async def test_feed_list_command() -> None:
     """feed list コマンド."""
     collector = AsyncMock()
@@ -287,18 +247,6 @@ async def test_feed_export_command() -> None:
 
     assert len(adapter.uploaded_files) == 1
     assert "feeds.csv" in adapter.uploaded_files[0][1]
-
-
-async def test_topic_error_handling() -> None:
-    """トピック提案のエラーが適切にハンドリングされる."""
-    recommender = AsyncMock()
-    recommender.recommend.side_effect = RuntimeError("fail")
-    adapter, router = _make_router(topic_recommender=recommender)
-
-    await router.process_message(_make_msg("おすすめ"))
-
-    assert len(adapter.sent_messages) == 1
-    assert "エラー" in adapter.sent_messages[0][0]
 
 
 # --- _parse_rag_command テスト ---

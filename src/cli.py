@@ -35,8 +35,6 @@ from src.services.chat import ChatService
 from src.services.feed_collector import FeedCollector
 from src.services.ogp_extractor import OgpExtractor
 from src.services.summarizer import Summarizer
-from src.services.topic_recommender import TopicRecommender
-from src.services.user_profiler import UserProfiler
 
 logger = logging.getLogger(__name__)
 
@@ -98,8 +96,6 @@ async def _setup(
     if not is_claude_mode:
         # mypy は != "claude" で Literal["local", "online"] への絞り込みを行えないため type: ignore
         chat_llm = get_provider_for_service(settings, settings.chat_llm_provider)  # type: ignore[arg-type]
-    profiler_llm = get_provider_for_service(settings, settings.profiler_llm_provider)
-    topic_llm = get_provider_for_service(settings, settings.topic_llm_provider)
     summarizer_llm = get_provider_for_service(settings, settings.summarizer_llm_provider)
 
     # MCP初期化（有効時のみ）
@@ -124,16 +120,6 @@ async def _setup(
         claude_timeout=settings.claude_timeout,
     )
 
-    user_profiler = UserProfiler(
-        llm=profiler_llm,
-        session_factory=session_factory,
-    )
-
-    topic_recommender = TopicRecommender(
-        llm=topic_llm,
-        session_factory=session_factory,
-    )
-
     summarizer = Summarizer(llm=summarizer_llm)
     ogp_extractor = OgpExtractor()
     feed_collector = FeedCollector(
@@ -149,8 +135,6 @@ async def _setup(
     router = MessageRouter(
         messaging=cli_adapter,
         chat_service=chat_service,
-        user_profiler=user_profiler,
-        topic_recommender=topic_recommender,
         collector=feed_collector,
         session_factory=session_factory,
         channel_id="cli",

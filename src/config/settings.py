@@ -65,8 +65,6 @@ class _EnvLoader(BaseSettings):
     # LLM プロバイダー選択（マシンの LLM 環境に依存）
     online_llm_provider: Literal["openai", "anthropic"]
     chat_llm_provider: Literal["local", "online", "claude"]
-    profiler_llm_provider: Literal["local", "online"]
-    topic_llm_provider: Literal["local", "online"]
     summarizer_llm_provider: Literal["local", "online"]
 
 
@@ -99,8 +97,6 @@ class Settings(BaseModel):
     rag_zenn_username: str
     online_llm_provider: Literal["openai", "anthropic"]
     chat_llm_provider: Literal["local", "online", "claude"]
-    profiler_llm_provider: Literal["local", "online"]
-    topic_llm_provider: Literal["local", "online"]
     summarizer_llm_provider: Literal["local", "online"]
 
     def get_auto_reply_channels(self) -> list[str]:

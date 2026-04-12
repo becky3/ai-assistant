@@ -6,7 +6,6 @@ handlers.py の _process_message ロジックを移植したクラス。
 
 from __future__ import annotations
 
-import asyncio
 import csv
 import io
 import logging
@@ -23,8 +22,6 @@ from py_common_lib.httpx import ConstrainedClient
 from src.mcp_bridge.client_manager import MCPToolNotFoundError
 from src.messaging.port import IncomingMessage, MessagingPort
 from src.services.chat import ChatService
-from src.services.topic_recommender import TopicRecommender
-from src.services.user_profiler import UserProfiler
 
 if TYPE_CHECKING:
     from slack_sdk.web.async_client import AsyncWebClient
@@ -35,8 +32,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_PROFILE_KEYWORDS = ("プロファイル", "プロフィール", "profile")
-_TOPIC_KEYWORDS = ("おすすめ", "トピック", "何を学ぶ", "何学ぶ", "学習提案", "recommend")
 _DELIVER_KEYWORDS = ("deliver",)
 _FEED_KEYWORDS = ("feed",)
 _RAG_KEYWORDS = ("rag",)
@@ -462,16 +457,6 @@ async def _handle_feed_export_via_port(
     return ""
 
 
-async def _safe_extract_profile(
-    profiler: UserProfiler, user_id: str, message: str
-) -> None:
-    """プロファイル抽出を安全に実行する（例外をログに記録）."""
-    try:
-        await profiler.extract_profile(user_id, message)
-    except Exception:
-        logger.exception("Failed to extract user profile for %s", user_id)
-
-
 class MessageRouter:
     """キーワードルーティング + サービス層呼び出し.
 
@@ -483,8 +468,6 @@ class MessageRouter:
         messaging: MessagingPort,
         chat_service: ChatService,
         *,
-        user_profiler: UserProfiler | None,
-        topic_recommender: TopicRecommender | None,
         collector: FeedCollector | None,
         session_factory: async_sessionmaker[AsyncSession] | None,
         channel_id: str | None,
@@ -503,8 +486,6 @@ class MessageRouter:
     ) -> None:
         self._messaging = messaging
         self._chat_service = chat_service
-        self._user_profiler = user_profiler
-        self._topic_recommender = topic_recommender
         self._collector = collector
         self._session_factory = session_factory
         self._channel_id = channel_id
@@ -536,20 +517,6 @@ class MessageRouter:
             await self._messaging.send_message(response_text, thread_id, channel)
             return
 
-        # プロファイル確認キーワード (F3-AC4, F6-AC4)
-        if self._user_profiler is not None and any(
-            kw in cleaned_text.lower() for kw in _PROFILE_KEYWORDS
-        ):
-            profile_text = await self._user_profiler.get_profile(user_id)
-            if profile_text:
-                await self._messaging.send_message(profile_text, thread_id, channel)
-            else:
-                await self._messaging.send_message(
-                    "まだプロファイル情報がありません。会話を続けると自動的に記録されます！",
-                    thread_id, channel,
-                )
-            return
-
         # feedコマンド (F2-AC7, F6-AC4)
         lower_text = cleaned_text.lower().lstrip()
         if self._collector is not None and any(
@@ -575,21 +542,6 @@ class MessageRouter:
             await self._handle_deliver(msg)
             return
 
-        # トピック提案キーワード (F4, F6-AC4)
-        if self._topic_recommender is not None and any(
-            kw in cleaned_text.lower() for kw in _TOPIC_KEYWORDS
-        ):
-            try:
-                recommendation = await self._topic_recommender.recommend(user_id)
-                await self._messaging.send_message(recommendation, thread_id, channel)
-            except Exception:
-                logger.exception("Failed to generate topic recommendation")
-                await self._messaging.send_message(
-                    "申し訳ありません、トピック提案の生成中にエラーが発生しました。",
-                    thread_id, channel,
-                )
-            return
-
         # デフォルト: ChatService で応答
         try:
             response = await self._chat_service.respond(
@@ -601,11 +553,6 @@ class MessageRouter:
                 current_ts=msg.message_id,
             )
             await self._messaging.send_message(response, thread_id, channel)
-
-            if self._user_profiler is not None:
-                asyncio.create_task(
-                    _safe_extract_profile(self._user_profiler, user_id, cleaned_text)
-                )
         except Exception:
             logger.exception("Failed to generate response")
             await self._messaging.send_message(

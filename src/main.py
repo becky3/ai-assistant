@@ -49,8 +49,6 @@ async def main() -> None:
     from src.services.ogp_extractor import OgpExtractor
     from src.services.summarizer import Summarizer
     from src.services.thread_history import ThreadHistoryService
-    from src.services.topic_recommender import TopicRecommender
-    from src.services.user_profiler import UserProfiler
     from src.slack.app import create_app, socket_mode_handler
     from src.slack.handlers import register_handlers
 
@@ -92,8 +90,6 @@ async def main() -> None:
         if not is_claude_mode:
             # mypy は != "claude" で Literal["local", "online"] への絞り込みを行えないため type: ignore
             chat_llm = get_provider_for_service(settings, settings.chat_llm_provider)  # type: ignore[arg-type]
-        profiler_llm = get_provider_for_service(settings, settings.profiler_llm_provider)
-        topic_llm = get_provider_for_service(settings, settings.topic_llm_provider)
         summarizer_llm = get_provider_for_service(settings, settings.summarizer_llm_provider)
 
         # MCP初期化（有効時のみ）
@@ -149,18 +145,6 @@ async def main() -> None:
             claude_timeout=settings.claude_timeout,
         )
 
-        # ユーザー情報抽出サービス
-        user_profiler = UserProfiler(
-            llm=profiler_llm,
-            session_factory=session_factory,
-        )
-
-        # トピック提案サービス
-        topic_recommender = TopicRecommender(
-            llm=topic_llm,
-            session_factory=session_factory,
-        )
-
         # 要約・収集サービス
         summarizer = Summarizer(llm=summarizer_llm)
         ogp_extractor = OgpExtractor()
@@ -176,8 +160,6 @@ async def main() -> None:
         router = MessageRouter(
             messaging=slack_adapter,
             chat_service=chat_service,
-            user_profiler=user_profiler,
-            topic_recommender=topic_recommender,
             collector=feed_collector,
             session_factory=session_factory,
             channel_id=settings.slack_news_channel_id,
