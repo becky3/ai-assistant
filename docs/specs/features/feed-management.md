@@ -34,6 +34,7 @@ RSSフィードから学習関連記事を自動収集し、LLMで要約した�
 | `feed_articles_per_feed` | 共通設定値 | フィードごとの配信記事数を制限しチャンネルの可読性を維持する |
 | `feed_card_layout` | 共通設定値 | フィードカードの表示形式をプロジェクトとして統一する |
 | `feed_summarize_timeout` | 共通設定値 | 1記事あたりの要約タイムアウトを設けて無応答時の待機を防止する。超過時はそのフィードの収集を中止 |
+| `feed_summarize_reasoning_effort` | 共通設定値 | 要約時の LLM 推論深度を制御する。reasoning 対応モデルで不要な思考を抑制し処理速度を改善する |
 | `feed_collect_days` | 共通設定値 | 収集対象の日数を制限し処理量を抑制する。`published_at` がこの日数より古い記事はスキップ。`published_at` が NULL の記事はスキップしない |
 | `slack_news_channel_id` | 環境依存値 | フィード配信先チャンネル ID は Slack ワークスペースごとに異なる |
 

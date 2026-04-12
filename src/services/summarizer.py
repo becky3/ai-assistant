@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Literal
 
 from src.llm.base import LLMProvider, Message
 
@@ -36,8 +37,14 @@ class Summarizer:
     仕様: docs/specs/features/feed-management.md
     """
 
-    def __init__(self, llm: LLMProvider) -> None:
+    def __init__(
+        self,
+        llm: LLMProvider,
+        *,
+        reasoning_effort: Literal["none", "low", "medium", "high"] | None,
+    ) -> None:
         self._llm = llm
+        self._reasoning_effort = reasoning_effort
 
     async def summarize(
         self, title: str, url: str, description: str = "", lang: str = ""
@@ -52,9 +59,10 @@ class Summarizer:
         """
         prompt = SUMMARIZE_PROMPT.format(title=title, url=url, description=description or "なし")
         try:
-            response = await self._llm.complete([
-                Message(role="user", content=prompt),
-            ])
+            response = await self._llm.complete(
+                [Message(role="user", content=prompt)],
+                reasoning_effort=self._reasoning_effort,
+            )
             content = response.content.strip()
             if not content:
                 logger.warning(

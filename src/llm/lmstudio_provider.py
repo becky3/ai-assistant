@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any, Literal
 
 from openai import AsyncOpenAI
 from openai.types.chat import (
@@ -81,10 +82,19 @@ class LMStudioProvider(LLMProvider):
         self._client = AsyncOpenAI(base_url=normalized, api_key="lm-studio")
         self._model = model
 
-    async def complete(self, messages: list[Message]) -> LLMResponse:
+    async def complete(
+        self,
+        messages: list[Message],
+        *,
+        reasoning_effort: Literal["none", "low", "medium", "high"] | None = None,
+    ) -> LLMResponse:
+        extra_kwargs: dict[str, Any] = {}
+        if reasoning_effort is not None:
+            extra_kwargs["reasoning_effort"] = reasoning_effort
         response = await self._client.chat.completions.create(
             model=self._model,
             messages=[_to_openai_message(m) for m in messages],
+            **extra_kwargs,
         )
         choice = response.choices[0]
         usage = {}

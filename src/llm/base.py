@@ -61,7 +61,12 @@ class LLMProvider(abc.ABC):
     """全LLMプロバイダーの共通インターフェース."""
 
     @abc.abstractmethod
-    async def complete(self, messages: list[Message]) -> LLMResponse:
+    async def complete(
+        self,
+        messages: list[Message],
+        *,
+        reasoning_effort: Literal["none", "low", "medium", "high"] | None = None,
+    ) -> LLMResponse:
         """メッセージリストを受け取り、応答を返す."""
 
     async def complete_with_tools(

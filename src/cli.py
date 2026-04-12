@@ -120,7 +120,10 @@ async def _setup(
         claude_timeout=settings.claude_timeout,
     )
 
-    summarizer = Summarizer(llm=summarizer_llm)
+    summarizer = Summarizer(
+        llm=summarizer_llm,
+        reasoning_effort=settings.feed_summarize_reasoning_effort,
+    )
     ogp_extractor = OgpExtractor()
     feed_collector = FeedCollector(
         session_factory=session_factory,
