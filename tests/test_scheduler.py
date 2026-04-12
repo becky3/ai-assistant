@@ -576,8 +576,6 @@ async def test_manual_deliver_command_passes_layout_from_router() -> None:
     router = MessageRouter(
         messaging=messaging,
         chat_service=chat_service,
-        user_profiler=None,
-        topic_recommender=None,
         collector=collector,
         session_factory=session_factory,
         channel_id=channel_id,

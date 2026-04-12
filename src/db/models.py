@@ -43,19 +43,6 @@ class Article(Base):
     feed: Mapped[Feed] = relationship(back_populates="articles")
 
 
-class UserProfile(Base):
-    __tablename__ = "user_profiles"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    slack_user_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-    interests: Mapped[str] = mapped_column(Text, default="")
-    skills: Mapped[str] = mapped_column(Text, default="")
-    goals: Mapped[str] = mapped_column(Text, default="")
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.now(), onupdate=func.now()
-    )
-
-
 class Conversation(Base):
     __tablename__ = "conversations"
 

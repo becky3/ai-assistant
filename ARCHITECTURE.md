@@ -23,7 +23,7 @@
 | `src/config/` | pydantic-settings による環境変数・設定管理 |
 | `src/db/` | SQLAlchemy モデル定義・DB セッション管理 |
 | `src/llm/` | LLM プロバイダー抽象化（ローカル / OpenAI / Anthropic）とファクトリ |
-| `src/services/` | ビジネスロジック（チャット応答、RSS 収集、要約、プロファイリング、トピック提案等） |
+| `src/services/` | ビジネスロジック（チャット応答、RSS 収集、要約等） |
 | `src/slack/` | Slack Bolt アプリ初期化・イベントハンドラ |
 | `src/messaging/` | メッセージング抽象化（Port/Adapter パターン。Slack アダプター、CLI アダプター） |
 | `src/scheduler/` | APScheduler による定期実行ジョブ |
@@ -58,8 +58,6 @@
 |---|---|
 | `features/chat-response.md` | `src/services/`, `src/llm/` |
 | `features/feed-management.md` | `src/services/`, `src/scheduler/` |
-| `features/user-profiling.md` | `src/services/`, `src/db/` |
-| `features/topic-recommend.md` | `src/services/` |
 | `features/auto-reply.md` | `src/slack/`, `src/messaging/` |
 | `features/bot-status.md` | `src/slack/` |
 | `features/thread-support.md` | `src/slack/`, `src/services/` |

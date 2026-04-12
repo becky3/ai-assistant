@@ -102,9 +102,7 @@ TOML はフラット構造（セクションなし）とし、キー名は `Sett
 | `rag_zenn_username` | 環境依存値 | RAG 定期更新の対象 Zenn アカウントはデプロイ環境ごとに異なりうる |
 | `online_llm_provider` | 環境依存値 | オンライン利用時の API プロバイダーを切り替える |
 | `chat_llm_provider` | 環境依存値 | 利用する LLM をローカル・オンライン・Claude CLI で切り替える |
-| `profiler_llm_provider` | 環境依存値 | 同上（ローカルとオンラインの切り替え） |
-| `topic_llm_provider` | 環境依存値 | 同上 |
-| `summarizer_llm_provider` | 環境依存値 | 同上 |
+| `summarizer_llm_provider` | 環境依存値 | 同上（ローカルとオンラインの切り替え） |
 
 #### 共通設定値層（config.toml）
 

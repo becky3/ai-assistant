@@ -1,7 +1,7 @@
 # AI Assistant
 
 Slack上で動作するAI学習支援アシスタント。
-RSS記事の自動収集・要約配信、チャットでの質問応答、ユーザーの興味に基づく学習トピック提案を行う。
+RSS記事の自動収集・要約配信、チャットでの質問応答を行う。
 
 コスト最適化のため、タスクの性質に応じてローカルLLM（LM Studio）とオンラインLLM（OpenAI / Anthropic）を使い分ける。チャット応答では Claude CLI によるワンショット実行モードも選択可能。
 
@@ -11,8 +11,6 @@ RSS記事の自動収集・要約配信、チャットでの質問応答、ユ�
 |------|------|
 | **チャット応答** | Slackでボットにメンションすると、会話履歴を踏まえて文脈に沿った回答を返す |
 | **情報収集・配信** | RSSフィードから記事を自動収集・LLMで要約し、毎朝Slackチャンネルに配信する。管理コマンドでフィードの追加・削除も可能 |
-| **ユーザー情報抽出** | ユーザーとの会話から興味・スキル・学習目標を自動抽出し、プロファイルとして蓄積する |
-| **トピック提案** | ユーザープロファイルと最新の収集記事を組み合わせて、パーソナライズされた学習トピックを提案する |
 | **特定チャンネル自動返信** | 指定したチャンネルではメンション不要で、全メッセージに自動応答する |
 | **外部ツール連携（MCP）** | Model Context Protocolにより、LLMが外部ツールを動的に発見・呼び出しできるエージェント的な動作を実現する |
 | **RAGナレッジ** | 外部リポジトリ（rag-knowledge）のMCPサーバーと連携し、ベクトルDBの知識を活用してチャット応答品質を向上させる |
@@ -123,8 +121,6 @@ uv run mypy src
 
 - [チャット応答](docs/specs/features/chat-response.md)
 - [情報収集・配信](docs/specs/features/feed-management.md)
-- [ユーザー情報抽出](docs/specs/features/user-profiling.md)
-- [トピック提案](docs/specs/features/topic-recommend.md)
 - [特定チャンネル自動返信](docs/specs/features/auto-reply.md)
 - [ボットステータス](docs/specs/features/bot-status.md)
 - [スレッドサポート](docs/specs/features/thread-support.md)

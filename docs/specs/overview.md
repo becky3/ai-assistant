@@ -3,7 +3,7 @@
 ## 1. プロダクト概要
 
 AI Assistantは、Slack上で動作するAIアシスタントである。
-ユーザーとの会話、情報の自動収集・要約配信、ユーザープロファイリング、学習トピック提案を通じて、継続的な学習をサポートする。
+ユーザーとの会話、情報の自動収集・要約配信を通じて、継続的な学習をサポートする。
 
 ## 2. 機能一覧
 
@@ -11,17 +11,15 @@ AI Assistantは、Slack上で動作するAIアシスタントである。
 |---|--------|------|--------|
 | 1 | チャット応答 | @メンションによる質問応答 | [chat-response.md](features/chat-response.md) |
 | 2 | 情報収集・配信 | RSS収集→要約→毎朝自動配信 | [feed-management.md](features/feed-management.md) |
-| 3 | ユーザー情報抽出 | 会話から興味・スキル・目標を抽出 | [user-profiling.md](features/user-profiling.md) |
-| 4 | トピック提案 | 収集情報+プロファイルから学習提案 | [topic-recommend.md](features/topic-recommend.md) |
-| 5 | MCP統合 | LLMが外部ツールを動的に呼び出すプロトコル統合 | [mcp-integration.md](infrastructure/mcp-integration.md) |
-| 6 | 特定チャンネル自動返信 | 指定チャンネルでメンションなしでも自動応答 | [auto-reply.md](features/auto-reply.md) |
-| 7 | ボットステータスコマンド | 稼働環境・ホスト名・稼働時間の表示 | [bot-status.md](features/bot-status.md) |
-| 8 | ボットのスレッド対応 | Slackスレッド履歴取得によるコンテキスト補完 | [thread-support.md](features/thread-support.md) |
-| 9 | RAGナレッジ | 外部リポジトリ（rag-knowledge）の MCP サーバーとして動作。ベクトル DB に知識を蓄積しチャット応答に活用 | [rag-knowledge.md](infrastructure/rag-knowledge.md) |
-| 10 | Slack mrkdwn形式対応 | LLM返信をSlack mrkdwn形式で出力 | [slack-formatting.md](features/slack-formatting.md) |
-| 11 | CLIアダプター | Slack非依存でCLIからボット動作を確認するPort/Adapterパターン | [cli-adapter.md](features/cli-adapter.md) |
-| 12 | Botプロセスガード | PIDファイルによるプロセス管理で多重起動防止・管理コマンドを提供 | [bot-process-guard.md](infrastructure/bot-process-guard.md) |
-| 13 | 設定管理 | アプリケーション設定の3層分離（シークレット・環境依存値・共通設定値） | [config-management.md](infrastructure/config-management.md) |
+| 3 | MCP統合 | LLMが外部ツールを動的に呼び出すプロトコル統合 | [mcp-integration.md](infrastructure/mcp-integration.md) |
+| 4 | 特定チャンネル自動返信 | 指定チャンネルでメンションなしでも自動応答 | [auto-reply.md](features/auto-reply.md) |
+| 5 | ボットステータスコマンド | 稼働環境・ホスト名・稼働時間の表示 | [bot-status.md](features/bot-status.md) |
+| 6 | ボットのスレッド対応 | Slackスレッド履歴取得によるコンテキスト補完 | [thread-support.md](features/thread-support.md) |
+| 7 | RAGナレッジ | 外部リポジトリ（rag-knowledge）の MCP サーバーとして動作。ベクトル DB に知識を蓄積しチャット応答に活用 | [rag-knowledge.md](infrastructure/rag-knowledge.md) |
+| 8 | Slack mrkdwn形式対応 | LLM返信をSlack mrkdwn形式で出力 | [slack-formatting.md](features/slack-formatting.md) |
+| 9 | CLIアダプター | Slack非依存でCLIからボット動作を確認するPort/Adapterパターン | [cli-adapter.md](features/cli-adapter.md) |
+| 10 | Botプロセスガード | PIDファイルによるプロセス管理で多重起動防止・管理コマンドを提供 | [bot-process-guard.md](infrastructure/bot-process-guard.md) |
+| 11 | 設定管理 | アプリケーション設定の3層分離（シークレット・環境依存値・共通設定値） | [config-management.md](infrastructure/config-management.md) |
 
 ## 3. 技術スタック
 
@@ -49,8 +47,6 @@ AI Assistantは、Slack上で動作するAIアシスタントである。
 |----------|-------------|----------------|------|
 | `ONLINE_LLM_PROVIDER` | 全サービス共通 | `openai` | オンライン LLM プロバイダー（`openai` / `anthropic`） |
 | `CHAT_LLM_PROVIDER` | ChatService | `local` | チャット応答 |
-| `PROFILER_LLM_PROVIDER` | UserProfiler | `local` | ユーザー情報抽出 |
-| `TOPIC_LLM_PROVIDER` | TopicRecommender | `local` | トピック提案 |
 | `SUMMARIZER_LLM_PROVIDER` | Summarizer | `local` | 記事要約 |
 
 各設定には `"local"` または `"online"` を指定する。`CHAT_LLM_PROVIDER` のみ `"claude"` も指定可能（Claude CLI ワンショット実行）。
@@ -62,13 +58,10 @@ AI Assistantは、Slack上で動作するAIアシスタントである。
 # 全てローカル（デフォルト）
 ONLINE_LLM_PROVIDER=openai
 CHAT_LLM_PROVIDER=local
-PROFILER_LLM_PROVIDER=local
-TOPIC_LLM_PROVIDER=local
 SUMMARIZER_LLM_PROVIDER=local
 
-# チャットとトピック提案のみオンラインにする場合
+# チャットのみオンラインにする場合
 # CHAT_LLM_PROVIDER=online
-# TOPIC_LLM_PROVIDER=online
 # ONLINE_LLM_PROVIDER=openai
 ```
 
@@ -80,7 +73,6 @@ SUMMARIZER_LLM_PROVIDER=local
 |-----------|------|-----------|
 | feeds | RSSフィード管理 | url, name, category, enabled, created_at |
 | articles | 収集済み記事 | feed_id(FK), title, url, summary, published_at, collected_at |
-| user_profiles | ユーザー情報 | slack_user_id, interests, skills, goals, updated_at |
 | conversations | 会話履歴 | slack_user_id, thread_ts, role, content, created_at |
 
 ## 6. アシスタント設定

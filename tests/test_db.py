@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from src.config.settings import _EnvLoader
-from src.db.models import Article, Base, Conversation, Feed, UserProfile
+from src.db.models import Article, Base, Conversation, Feed
 from src.db import session as session_mod
 
 
@@ -49,17 +49,6 @@ async def test_article_belongs_to_feed(session: AsyncSession) -> None:
     result = await session.execute(select(Article))
     a = result.scalar_one()
     assert a.feed_id == feed.id
-
-
-async def test_user_profile(session: AsyncSession) -> None:
-    """user_profiles テーブル."""
-    profile = UserProfile(slack_user_id="U123", interests="Python", skills="web", goals="ML")
-    session.add(profile)
-    await session.commit()
-
-    result = await session.execute(select(UserProfile).where(UserProfile.slack_user_id == "U123"))
-    p = result.scalar_one()
-    assert p.interests == "Python"
 
 
 async def test_conversation(session: AsyncSession) -> None:
