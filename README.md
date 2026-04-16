@@ -151,3 +151,4 @@ shared-workflows リポジトリで管理。仕様書は [shared-workflows/docs/
 **プロジェクト固有スキル:**
 
 - [Check Review Batch スキル](docs/specs/agentic/skills/check-review-batch-skill.md)
+- Topic スキル — [article-writer](https://github.com/becky3/article-writer) リポジトリに移動
