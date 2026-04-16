@@ -47,8 +47,6 @@ htmlcov/
 # Temporary files
 .tmp/
 
-# Zenn drafts (personal, not for repository)
-docs/zenn-drafts/
 .claude/scheduled_tasks.lock
 .pr-creation-authorized
 aidlc-archive/

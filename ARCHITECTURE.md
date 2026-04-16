@@ -89,7 +89,6 @@
 | 仕様書 | 対象 |
 |---|---|
 | `agentic/skills/check-review-batch-skill.md` | 自動マージ Issue の PR バッチチェック |
-| `agentic/skills/topic-skill.md` | 学びトピック自動抽出・Zenn 記事生成 |
 
 ## 関連ドキュメント
 
