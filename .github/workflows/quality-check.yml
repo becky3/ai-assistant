@@ -23,3 +23,4 @@ jobs:
       lint_command: "uv run ruff check src/ tests/"
       typecheck_command: "uv run mypy src/"
       markdownlint: true
+    secrets: inherit
