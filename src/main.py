@@ -149,11 +149,13 @@ async def main() -> None:
         bot_user_id: str | None = auth_result.get("user_id")
         if not bot_user_id:
             raise RuntimeError("Slack auth_test response does not contain 'user_id'.")
+        bot_id: str | None = auth_result.get("bot_id")
 
         # スレッド履歴サービス (F6)
         thread_history_service = ThreadHistoryService(
             slack_client=slack_client,
             bot_user_id=bot_user_id,
+            bot_id=bot_id,
             limit=settings.thread_history_limit,
         )
 
