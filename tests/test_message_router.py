@@ -536,8 +536,9 @@ def test_strip_reminder_prefix_case_insensitive() -> None:
 
 
 def test_strip_reminder_prefix_no_prefix() -> None:
-    """プレフィックスがなければそのまま返す（末尾ピリオドも残る）."""
+    """プレフィックスがなければそのまま返す（先頭空白・末尾ピリオドも残る）."""
     assert _strip_reminder_prefix("rag update.") == "rag update."
+    assert _strip_reminder_prefix("  rag update") == "  rag update"
 
 
 def test_strip_reminder_prefix_no_trailing_dot() -> None:

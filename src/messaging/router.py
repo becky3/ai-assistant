@@ -44,9 +44,9 @@ def _strip_reminder_prefix(text: str) -> str:
     """Slack Reminder のプレフィックスと末尾ピリオドを除去する."""
     lstripped = text.lstrip()
     stripped = _REMINDER_PREFIX.sub("", lstripped)
-    if stripped != lstripped:
-        stripped = stripped.rstrip(".")
-    return stripped
+    if stripped == lstripped:
+        return text
+    return stripped.rstrip(".")
 
 
 def _parse_rag_command(text: str) -> tuple[str, str, str]:
