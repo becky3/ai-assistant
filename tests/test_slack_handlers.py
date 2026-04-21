@@ -16,6 +16,12 @@ def test_strip_mention_removes_bot_id() -> None:
     assert strip_mention("<@U1234ABC>") == ""
 
 
+def test_strip_mention_with_display_name() -> None:
+    """表示名付きメンション (<@U...|name>) を除去する."""
+    assert strip_mention("<@U0AC49HLCUB|daisy> rag update.") == "rag update."
+    assert strip_mention("Reminder: <@U0AC49HLCUB|daisy> rag update.") == "Reminder: rag update."
+
+
 def test_strip_mention_multiple() -> None:
     """複数メンションがあっても全て除去する."""
     assert strip_mention("<@U111> <@U222> test") == "test"
@@ -188,6 +194,18 @@ async def test_auto_reply_ignores_mention_messages() -> None:
 
     say = AsyncMock()
     event = {"user": "U123", "text": "<@UBOT> hello", "channel": "C_AUTO", "ts": "123.456"}
+    await handlers["message"](event=event, say=say)
+
+    router.process_message.assert_not_called()
+
+
+async def test_auto_reply_ignores_mention_with_display_name() -> None:
+    """表示名付きメンション (<@U...|name>) も app_mention 扱いでスキップ."""
+    router = AsyncMock()
+    handlers = _setup_handlers_with_auto_reply(router, ["C_AUTO"])
+
+    say = AsyncMock()
+    event = {"user": "U123", "text": "<@UBOT|botname> hello", "channel": "C_AUTO", "ts": "123.456"}
     await handlers["message"](event=event, say=say)
 
     router.process_message.assert_not_called()

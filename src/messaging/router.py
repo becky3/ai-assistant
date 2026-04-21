@@ -37,6 +37,17 @@ _FEED_KEYWORDS = ("feed",)
 _RAG_KEYWORDS = ("rag",)
 _STATUS_KEYWORDS = ("status", "info")
 
+_REMINDER_PREFIX = re.compile(r"^reminder:\s+", re.IGNORECASE)
+
+
+def _strip_reminder_prefix(text: str) -> str:
+    """Slack Reminder のプレフィックスと末尾ピリオドを除去する."""
+    lstripped = text.lstrip()
+    stripped = _REMINDER_PREFIX.sub("", lstripped)
+    if stripped == lstripped:
+        return text
+    return stripped.rstrip(".")
+
 
 def _parse_rag_command(text: str) -> tuple[str, str, str]:
     """ragコマンドを解析する."""
@@ -504,7 +515,7 @@ class MessageRouter:
 
     async def process_message(self, msg: IncomingMessage) -> None:
         """受信メッセージをキーワードルーティングし、適切なサービスに委譲する."""
-        cleaned_text = msg.text
+        cleaned_text = _strip_reminder_prefix(msg.text)
         user_id = msg.user_id
         thread_id = msg.thread_id
         channel = msg.channel
@@ -537,7 +548,10 @@ class MessageRouter:
             self._collector is not None
             and self._session_factory is not None
             and self._channel_id is not None
-            and any(kw in cleaned_text.lower() for kw in _DELIVER_KEYWORDS)
+            and any(
+                re.match(rf"^{re.escape(kw)}\b", lower_text)
+                for kw in _DELIVER_KEYWORDS
+            )
         ):
             await self._handle_deliver(msg)
             return
