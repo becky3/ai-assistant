@@ -16,6 +16,7 @@ from src.messaging.router import (
     _build_status_message,
     _format_uptime,
     _parse_rag_command,
+    _strip_reminder_prefix,
 )
 
 
@@ -519,3 +520,69 @@ async def test_rag_without_mcp_falls_through_to_chat() -> None:
 
     assert len(adapter.sent_messages) == 1
     chat_service.respond.assert_called_once()
+
+
+# --- _strip_reminder_prefix テスト ---
+
+
+def test_strip_reminder_prefix_removes_prefix_and_trailing_dot() -> None:
+    """Slack Reminder プレフィックスと末尾ピリオドが除去される."""
+    assert _strip_reminder_prefix("Reminder: deliver.") == "deliver"
+
+
+def test_strip_reminder_prefix_case_insensitive() -> None:
+    """大文字小文字を問わず除去される."""
+    assert _strip_reminder_prefix("reminder: rag update.") == "rag update"
+
+
+def test_strip_reminder_prefix_no_prefix() -> None:
+    """プレフィックスがなければそのまま返す（末尾ピリオドも残る）."""
+    assert _strip_reminder_prefix("rag update.") == "rag update."
+
+
+def test_strip_reminder_prefix_no_trailing_dot() -> None:
+    """Reminder プレフィックスありでも末尾ピリオドがなければそのまま."""
+    assert _strip_reminder_prefix("Reminder: rag update") == "rag update"
+
+
+def test_strip_reminder_prefix_leading_whitespace() -> None:
+    """先頭空白 + Reminder プレフィックスが除去される."""
+    assert _strip_reminder_prefix("  Reminder: feed list.") == "feed list"
+
+
+def test_strip_reminder_prefix_no_space_after_colon() -> None:
+    """Reminder: の後に空白なしの場合はプレフィックス除去しない."""
+    assert _strip_reminder_prefix("Reminder:deliver") == "Reminder:deliver"
+
+
+# --- Reminder プレフィックス経由のルーティングテスト ---
+
+
+async def test_reminder_rag_update_routes_to_rag_command() -> None:
+    """Reminder 経由の rag update がコマンドとして認識される (#823)."""
+    mcp_manager = AsyncMock()
+    mcp_manager.call_tool.return_value = "取り込み完了"
+    adapter, router = _make_router(
+        mcp_manager=mcp_manager,
+        rag_bluesky_handle="user.bsky.social",
+    )
+
+    await router.process_message(_make_msg("Reminder: rag update."))
+
+    assert len(adapter.sent_messages) == 2
+    mcp_manager.call_tool.assert_called_once()
+
+
+async def test_reminder_deliver_routes_to_deliver() -> None:
+    """Reminder 経由の deliver が deliver ハンドラに到達する."""
+    collector = AsyncMock()
+    session_factory = AsyncMock()
+    adapter, router = _make_router(
+        collector=collector,
+        session_factory=session_factory,
+    )
+
+    await router.process_message(_make_msg("Reminder: deliver."))
+
+    assert len(adapter.sent_messages) == 1
+    assert "Slack 接続時のみ" in adapter.sent_messages[0][0]

@@ -17,10 +17,12 @@ from src.messaging.port import IncomingMessage
 if TYPE_CHECKING:
     from src.messaging.router import MessageRouter
 
+_MENTION_PATTERN = re.compile(r"<@[A-Za-z0-9]+(?:\|[^>]+)?>\s*")
+
 
 def strip_mention(text: str) -> str:
-    """メンション部分 (<@U...>) を除去する."""
-    return re.sub(r"<@[A-Za-z0-9]+>\s*", "", text).strip()
+    """メンション部分 (<@U...> または <@U...|name>) を除去する."""
+    return _MENTION_PATTERN.sub("", text).strip()
 
 
 def register_handlers(
@@ -80,7 +82,7 @@ def register_handlers(
 
         text: str = event.get("text", "")
 
-        if re.search(r"<@[A-Za-z0-9]+>\s*", text):
+        if _MENTION_PATTERN.search(text):
             return
 
         user_id: str = event.get("user", "")
