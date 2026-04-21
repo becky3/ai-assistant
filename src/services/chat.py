@@ -452,7 +452,7 @@ class ChatService:
     ) -> str:
         """ユーザーメッセージとアシスタント応答をDBに保存し、応答テキストを返す."""
         logger.info("respond complete: user=%s, response_length=%d", user_id, len(assistant_text))
-        logger.debug("respond content: %s", assistant_text)
+        logger.info("respond content: %s", assistant_text)
 
         session.add(Conversation(
             slack_user_id=user_id,
