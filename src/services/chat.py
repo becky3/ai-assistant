@@ -134,6 +134,8 @@ class ChatService:
         current_ts: str = "",
     ) -> str:
         """ユーザーメッセージに対する応答を生成し、履歴を保存する."""
+        mode = "claude" if self._claude_mode else "llm"
+        logger.info("respond start: user=%s, mode=%s, text=%r", user_id, mode, text[:200])
         async with self._session_factory() as session:
             # スレッド内かつ thread_history_fetcher が利用可能な場合は外部から取得
             history: list[Message] | None = None
@@ -449,6 +451,8 @@ class ChatService:
         rag_sources: list[RagSource] | None = None,
     ) -> str:
         """ユーザーメッセージとアシスタント応答をDBに保存し、応答テキストを返す."""
+        logger.info("respond complete: user=%s, response_length=%d", user_id, len(assistant_text))
+
         session.add(Conversation(
             slack_user_id=user_id,
             thread_ts=thread_ts,

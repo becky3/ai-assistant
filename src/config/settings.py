@@ -57,6 +57,8 @@ class _EnvLoader(BaseSettings):
 
     # Logging
     log_level: str = "INFO"
+    debug_log_enabled: bool = False
+    log_dir: str = ""
 
     # RAG 定期更新アカウント（rag update コマンドで使用）
     rag_bluesky_handle: str = ""
@@ -93,6 +95,8 @@ class Settings(BaseModel):
     mcp_rag_transport: str
     mcp_rag_url: str
     log_level: str
+    debug_log_enabled: bool
+    log_dir: str
     rag_bluesky_handle: str
     rag_zenn_username: str
     online_llm_provider: Literal["openai", "anthropic"]
@@ -133,6 +137,9 @@ class Settings(BaseModel):
     # Claude CLI（chat_llm_provider="claude" の場合に使用。未指定時はデフォルト値を利用）
     claude_allowed_tools: str = ""
     claude_timeout: int = Field(default=120, ge=1)
+
+    # Logging（ログファイルのローテーション設定）
+    log_file_max_bytes: int = Field(ge=1)  # ログファイル1つあたりの最大サイズ
 
 
 def _load_toml_config() -> dict[str, Any]:

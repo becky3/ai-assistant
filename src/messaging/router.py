@@ -516,12 +516,15 @@ class MessageRouter:
     async def process_message(self, msg: IncomingMessage) -> None:
         """受信メッセージをキーワードルーティングし、適切なサービスに委譲する."""
         cleaned_text = _strip_reminder_prefix(msg.text)
+        if cleaned_text != msg.text:
+            logger.debug("strip_reminder_prefix: %r -> %r", msg.text, cleaned_text)
         user_id = msg.user_id
         thread_id = msg.thread_id
         channel = msg.channel
 
         # ステータスコマンド (F5)
         if cleaned_text.lower().strip() in _STATUS_KEYWORDS:
+            logger.info("routing: text=%r -> handler=status", cleaned_text[:200])
             response_text = _build_status_message(
                 self._timezone, self._env_name, self._bot_start_time
             )
@@ -533,6 +536,7 @@ class MessageRouter:
         if self._collector is not None and any(
             re.match(rf"^{re.escape(kw)}\b", lower_text) for kw in _FEED_KEYWORDS
         ):
+            logger.info("routing: text=%r -> handler=feed", cleaned_text[:200])
             await self._handle_feed_command(msg, cleaned_text, lower_text)
             return
 
@@ -540,6 +544,7 @@ class MessageRouter:
         if self._mcp_manager is not None and any(
             re.match(rf"^{re.escape(kw)}\b", lower_text) for kw in _RAG_KEYWORDS
         ):
+            logger.info("routing: text=%r -> handler=rag", cleaned_text[:200])
             await self._handle_rag_command(msg, cleaned_text)
             return
 
@@ -553,10 +558,12 @@ class MessageRouter:
                 for kw in _DELIVER_KEYWORDS
             )
         ):
+            logger.info("routing: text=%r -> handler=deliver", cleaned_text[:200])
             await self._handle_deliver(msg)
             return
 
         # デフォルト: ChatService で応答
+        logger.info("routing: text=%r -> handler=chat", cleaned_text[:200])
         try:
             response = await self._chat_service.respond(
                 user_id=user_id,
@@ -583,6 +590,7 @@ class MessageRouter:
         channel = msg.channel
 
         subcommand, urls, category = _parse_feed_command(cleaned_text)
+        logger.debug("feed command parsed: subcommand=%s, urls=%s, category=%s", subcommand, urls, category)
 
         if subcommand == "add":
             response_text = await _handle_feed_add(self._collector, urls, category)
@@ -769,6 +777,7 @@ class MessageRouter:
         channel = msg.channel
 
         subcommand, url, raw_url_token = _parse_rag_command(cleaned_text)
+        logger.debug("rag command parsed: subcommand=%s, url=%s", subcommand, url)
 
         if subcommand == "status":
             try:

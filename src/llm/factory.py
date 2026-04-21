@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Literal
 
 from py_common_lib.secrets import get_secret
@@ -13,6 +14,8 @@ from src.llm.anthropic_provider import AnthropicProvider
 from src.llm.base import LLMProvider
 from src.llm.lmstudio_provider import LMStudioProvider
 from src.llm.openai_provider import OpenAIProvider
+
+logger = logging.getLogger(__name__)
 
 
 def create_online_provider(settings: Settings) -> LLMProvider:
@@ -50,5 +53,9 @@ def get_provider_for_service(
         対応するLLMプロバイダー
     """
     if service_llm_setting == "online":
-        return create_online_provider(settings)
-    return create_local_provider(settings)
+        provider = create_online_provider(settings)
+        logger.info("LLM provider selected: %s (online/%s)", type(provider).__name__, settings.online_llm_provider)
+        return provider
+    provider = create_local_provider(settings)
+    logger.info("LLM provider selected: %s (local)", type(provider).__name__)
+    return provider

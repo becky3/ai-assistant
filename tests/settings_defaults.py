@@ -18,6 +18,8 @@ TEST_SETTINGS_DEFAULTS: dict[str, object] = {
     "mcp_rag_transport": "http",
     "mcp_rag_url": "",
     "log_level": "INFO",
+    "debug_log_enabled": False,
+    "log_dir": "",
     "rag_bluesky_handle": "",
     "rag_zenn_username": "",
     "online_llm_provider": "openai",
@@ -39,4 +41,5 @@ TEST_SETTINGS_DEFAULTS: dict[str, object] = {
     "feed_summarize_reasoning_effort": "none",
     "claude_allowed_tools": "",
     "claude_timeout": 120,
+    "log_file_max_bytes": 10485760,
 }

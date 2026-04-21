@@ -5,10 +5,13 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from src.llm.base import Message
 from src.messaging.port import MessagingPort
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from slack_sdk.web.async_client import AsyncWebClient
@@ -36,6 +39,7 @@ class SlackAdapter(MessagingPort):
 
     async def send_message(self, text: str, thread_id: str, channel: str) -> None:
         """Slack にメッセージを投稿する."""
+        logger.debug("send_message: channel=%s, length=%d", channel, len(text))
         await self._client.chat_postMessage(
             channel=channel, text=text, thread_ts=thread_id,
         )
@@ -49,6 +53,7 @@ class SlackAdapter(MessagingPort):
         comment: str,
     ) -> None:
         """Slack にファイルをアップロードする."""
+        logger.info("upload_file: channel=%s, filename=%s, size=%d", channel, filename, len(content))
         await self._client.files_upload_v2(
             channel=channel,
             thread_ts=thread_id,
