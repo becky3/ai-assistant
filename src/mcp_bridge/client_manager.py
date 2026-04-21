@@ -206,6 +206,8 @@ class MCPClientManager:
             MCPToolNotFoundError: 指定ツールが見つからない場合
             MCPToolExecutionError: ツール実行失敗時
         """
+        logger.info("call_tool: %s", tool_name)
+        logger.debug("call_tool args: %s", arguments)
         server_name = self._tool_to_server.get(tool_name)
         if server_name is None:
             raise MCPToolNotFoundError(f"ツール '{tool_name}' が見つかりません。")
@@ -230,7 +232,9 @@ class MCPClientManager:
                 text_parts.append(content_item.text)
             else:
                 text_parts.append(str(content_item))
-        return "\n".join(text_parts)
+        result_text = "\n".join(text_parts)
+        logger.info("call_tool completed: %s, result_length=%d", tool_name, len(result_text))
+        return result_text
 
     async def cleanup(self) -> None:
         """全接続をクリーンアップする."""

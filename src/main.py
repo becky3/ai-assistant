@@ -7,13 +7,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
+from py_common_lib.logging import SessionRotatingFileHandler
 from py_common_lib.secrets import SecretNotFoundError, get_secret
 
-from src.config.settings import SERVICE_NAME, get_settings, load_assistant_config
+from src.config.settings import SERVICE_NAME, Settings, get_settings, load_assistant_config
 from src.process_guard import (
     BOT_READY_SIGNAL,
     check_already_running,
@@ -27,13 +30,44 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
+
+def _configure_logging(settings: Settings) -> None:
+    """ログ設定を構築する（フォーマット統一・ファイル出力・デバッグ切替）."""
+    # debug_log_enabled=True の場合は log_level 設定を上書きして DEBUG にする
+    log_level: int | str = logging.DEBUG if settings.debug_log_enabled else settings.log_level
+    formatter = logging.Formatter(_LOG_FORMAT)
+
+    root = logging.getLogger()
+    root.setLevel(log_level)
+
+    if not root.handlers:
+        stream_handler = logging.StreamHandler(sys.stderr)
+        stream_handler.setFormatter(formatter)
+        root.addHandler(stream_handler)
+    else:
+        for handler in root.handlers:
+            handler.setFormatter(formatter)
+
+    log_dir = settings.log_dir
+    if log_dir and not any(isinstance(h, SessionRotatingFileHandler) for h in root.handlers):
+        log_path = Path(log_dir)
+        log_path.mkdir(parents=True, exist_ok=True)
+        file_handler = SessionRotatingFileHandler(
+            log_dir=log_path,
+            prefix="bot",
+            started_at=datetime.now(),
+            max_bytes=settings.log_file_max_bytes,
+        )
+        file_handler.setFormatter(formatter)
+        root.addHandler(file_handler)
 
 
 async def main() -> None:
     # ログ設定（プロセスガードのログ出力に必要なため最初に実行）
     settings = get_settings()
-    logging.basicConfig(level=settings.log_level)
+    _configure_logging(settings)
 
     # 重複起動検知: 既に動いていたら警告して終了
     check_already_running()

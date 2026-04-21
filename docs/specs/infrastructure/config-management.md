@@ -65,6 +65,7 @@ rag_bluesky_max_posts = 100
 rag_zenn_max_articles = 10
 claude_allowed_tools = "mcp__rag-knowledge-production__*,WebSearch,WebFetch"
 claude_timeout = 120
+log_file_max_bytes = 10485760
 ```
 
 TOML はフラット構造（セクションなし）とし、キー名は `Settings` クラスのフィールド名と一致させる。
@@ -98,6 +99,8 @@ TOML はフラット構造（セクションなし）とし、キー名は `Sett
 | `mcp_rag_transport` | 環境依存値 | MCP サーバーの接続方式はデプロイ環境に依存する |
 | `mcp_rag_url` | 環境依存値 | MCP サーバーのエンドポイント URL はデプロイ先ごとに異なる |
 | `log_level` | 環境依存値 | 本番・開発でログ出力レベルを変える必要がある |
+| `debug_log_enabled` | 環境依存値 | 開発・調査時にデバッグレベルのログ出力を有効にする |
+| `log_dir` | 環境依存値 | ログファイルの出力先ディレクトリをデプロイ先ごとに指定する |
 | `rag_bluesky_handle` | 環境依存値 | RAG 定期更新の対象 BlueSky アカウントはデプロイ環境ごとに異なりうる |
 | `rag_zenn_username` | 環境依存値 | RAG 定期更新の対象 Zenn アカウントはデプロイ環境ごとに異なりうる |
 | `online_llm_provider` | 環境依存値 | オンライン利用時の API プロバイダーを切り替える |
@@ -124,6 +127,7 @@ TOML はフラット構造（セクションなし）とし、キー名は `Sett
 | `rag_zenn_max_articles` | 共通設定値 | Zenn 定期更新でクロールする記事数の上限を制御する |
 | `claude_allowed_tools` | 共通設定値 | Claude CLI モードで許可する MCP ツールを制御する |
 | `claude_timeout` | 共通設定値 | Claude CLI プロセスのタイムアウトを設けて無応答時の待機を防止する |
+| `log_file_max_bytes` | 共通設定値 | ログファイル1つあたりの最大サイズを制御する（超過時にセッション単位で新ファイルへ切り替え、旧ファイルは保持） |
 
 `claude_allowed_tools` と `claude_timeout` は条件付き必須項目である。`chat_llm_provider=claude` の場合は必須とし、いずれかが未設定なら起動時エラーとする。`chat_llm_provider=local` / `online` の場合は任意とし、設定されていてもアプリケーションは参照しない。
 

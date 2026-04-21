@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import TYPE_CHECKING
 
@@ -17,12 +18,17 @@ from src.messaging.port import IncomingMessage
 if TYPE_CHECKING:
     from src.messaging.router import MessageRouter
 
+logger = logging.getLogger(__name__)
+
 _MENTION_PATTERN = re.compile(r"<@[A-Za-z0-9]+(?:\|[^>]+)?>\s*")
 
 
 def strip_mention(text: str) -> str:
     """メンション部分 (<@U...> または <@U...|name>) を除去する."""
-    return _MENTION_PATTERN.sub("", text).strip()
+    result = _MENTION_PATTERN.sub("", text).strip()
+    if result != text:
+        logger.debug("strip_mention: %r -> %r", text, result)
+    return result
 
 
 def register_handlers(
@@ -42,8 +48,14 @@ def register_handlers(
         files: list[dict[str, object]] | None = event.get("files")
         channel: str = event.get("channel", "")
 
+        logger.info(
+            "mention received: user=%s, channel=%s, raw_text=%r",
+            user_id, channel, text[:200],
+        )
+
         cleaned_text = strip_mention(text)
         if not cleaned_text:
+            logger.debug("mention ignored: empty text after strip_mention")
             return
 
         msg = IncomingMessage(
@@ -71,9 +83,11 @@ def register_handlers(
             return
 
         if event.get("bot_id"):
+            logger.debug("message filtered: bot_id present")
             return
 
         if event.get("subtype"):
+            logger.debug("message filtered: subtype=%s", event.get("subtype"))
             return
 
         channel: str = event.get("channel", "")
@@ -83,10 +97,12 @@ def register_handlers(
         text: str = event.get("text", "")
 
         if _MENTION_PATTERN.search(text):
+            logger.debug("message filtered: contains mention (handled by app_mention)")
             return
 
         user_id: str = event.get("user", "")
         if not user_id:
+            logger.debug("message filtered: no user_id")
             return
 
         raw_thread_ts: str | None = event.get("thread_ts")
@@ -96,7 +112,13 @@ def register_handlers(
 
         cleaned_text = text.strip()
         if not cleaned_text:
+            logger.debug("message filtered: empty text")
             return
+
+        logger.info(
+            "auto-reply message: user=%s, channel=%s, text=%r",
+            user_id, channel, cleaned_text[:200],
+        )
 
         msg = IncomingMessage(
             user_id=user_id,
