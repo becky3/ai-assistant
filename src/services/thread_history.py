@@ -29,11 +29,14 @@ def extract_text_from_blocks(blocks: list[dict[str, Any]]) -> str:
                     parts.append(text_val)
         elif block.get("type") == "rich_text":
             for element in block.get("elements", []):
+                section_parts: list[str] = []
                 for sub in element.get("elements", []):
                     if sub.get("type") in ("text", "link"):
                         text_val = sub.get("text", "")
                         if text_val:
-                            parts.append(text_val)
+                            section_parts.append(text_val)
+                if section_parts:
+                    parts.append("".join(section_parts))
     return "\n".join(parts)
 
 
@@ -105,7 +108,7 @@ class ThreadHistoryService:
 
             text = msg.get("text", "")
             blocks = msg.get("blocks")
-            if blocks:
+            if isinstance(blocks, list):
                 blocks_text = extract_text_from_blocks(blocks)
                 if blocks_text:
                     text = blocks_text

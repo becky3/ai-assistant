@@ -284,8 +284,7 @@ class TestExtractTextFromBlocks:
             },
         ]
         result = extract_text_from_blocks(blocks)
-        assert "Check out" in result
-        assert "this link" in result
+        assert "Check out this link" in result
 
 
 async def test_blockkit_message_text_extracted_from_blocks(
