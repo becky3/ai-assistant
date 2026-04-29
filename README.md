@@ -19,6 +19,7 @@ RSS記事の自動収集・要約配信、チャットでの質問応答を行�
 | **CLIアダプター** | Slack接続なしでCLIからボット動作を確認できるPort/Adapterパターンを提供する（REPLモード・ワンショットモード対応） |
 | **ボットステータス** | 稼働環境・ホスト名・稼働時間を表示し、どのサーバーでボットが動作しているかを確認できる |
 | **Botプロセスガード** | PIDファイルによるプロセス管理で、多重起動の防止・グレースフルシャットダウン・子プロセスのクリーンアップを行う |
+| **Remote Control 起動** | Slack コマンド (`@bot rc start <repo-key>`) でホスト PC 上の指定リポジトリで `claude remote-control` を起動し、claude.ai/code 接続 URL を返す。外出先のスマホから PC 操作なしで Claude Code セッションを開始できる。許可ユーザーと対象リポジトリの allowlist 設定が必要 |
 
 全機能の一覧と仕様書リンクは [全体仕様概要](docs/specs/overview.md) を参照。
 
@@ -126,6 +127,7 @@ uv run mypy src
 - [スレッドサポート](docs/specs/features/thread-support.md)
 - [Slack mrkdwn形式対応](docs/specs/features/slack-formatting.md)
 - [CLIアダプター](docs/specs/features/cli-adapter.md)
+- [Remote Control 起動](docs/specs/features/remote-control-launch.md)
 
 ### 基盤仕様（infrastructure）
 

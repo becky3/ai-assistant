@@ -25,6 +25,9 @@ TEST_SETTINGS_DEFAULTS: dict[str, object] = {
     "online_llm_provider": "openai",
     "chat_llm_provider": "local",
     "summarizer_llm_provider": "local",
+    "remote_control_allowed_users": "",
+    "remote_control_repositories": "",
+    "remote_control_log_dir": "",
     # config.toml フィールド
     "openai_model": "gpt-4o-mini",
     "anthropic_model": "claude-3-5-sonnet-20241022",
@@ -42,4 +45,5 @@ TEST_SETTINGS_DEFAULTS: dict[str, object] = {
     "claude_allowed_tools": "",
     "claude_timeout": 120,
     "log_file_max_bytes": 10485760,
+    "remote_control_url_timeout": 15,
 }

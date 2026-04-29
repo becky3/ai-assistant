@@ -50,3 +50,7 @@ htmlcov/
 .claude/scheduled_tasks.lock
 .pr-creation-authorized
 aidlc-archive/
+aidlc-docs/
+
+# Zenn drafts (personal authoring, not part of project)
+docs/zenn-drafts/

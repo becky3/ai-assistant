@@ -106,6 +106,9 @@ TOML はフラット構造（セクションなし）とし、キー名は `Sett
 | `online_llm_provider` | 環境依存値 | オンライン利用時の API プロバイダーを切り替える |
 | `chat_llm_provider` | 環境依存値 | 利用する LLM をローカル・オンライン・Claude CLI で切り替える |
 | `summarizer_llm_provider` | 環境依存値 | 同上（ローカルとオンラインの切り替え） |
+| `remote_control_allowed_users` | 環境依存値 | Remote Control 起動を許可する Slack ユーザーはデプロイ環境ごとに異なる |
+| `remote_control_repositories` | 環境依存値 | Remote Control 対象リポジトリの絶対パスはホスト PC ごとに異なる |
+| `remote_control_log_dir` | 環境依存値 | Remote Control 起動ログの出力先ディレクトリをホストごとに指定する |
 
 #### 共通設定値層（config.toml）
 
@@ -128,6 +131,7 @@ TOML はフラット構造（セクションなし）とし、キー名は `Sett
 | `claude_allowed_tools` | 共通設定値 | Claude CLI モードで許可する MCP ツールを制御する |
 | `claude_timeout` | 共通設定値 | Claude CLI プロセスのタイムアウトを設けて無応答時の待機を防止する |
 | `log_file_max_bytes` | 共通設定値 | ログファイル1つあたりの最大サイズを制御する（超過時にセッション単位で新ファイルへ切り替え、旧ファイルは保持） |
+| `remote_control_url_timeout` | 共通設定値 | Remote Control 起動時に接続 URL を抽出するタイムアウト秒数を制御する |
 
 `claude_allowed_tools` と `claude_timeout` は条件付き必須項目である。`chat_llm_provider=claude` の場合は必須とし、いずれかが未設定なら起動時エラーとする。`chat_llm_provider=local` / `online` の場合は任意とし、設定されていてもアプリケーションは参照しない。
 

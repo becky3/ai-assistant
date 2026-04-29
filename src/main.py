@@ -81,6 +81,7 @@ async def main() -> None:
     from src.services.chat import ChatService
     from src.services.feed_collector import FeedCollector
     from src.services.ogp_extractor import OgpExtractor
+    from src.services.remote_control import RemoteControlLauncher
     from src.services.summarizer import Summarizer
     from src.services.thread_history import ThreadHistoryService
     from src.slack.app import create_app, socket_mode_handler
@@ -195,6 +196,31 @@ async def main() -> None:
             collect_days=settings.feed_collect_days,
         )
 
+        # Remote Control 起動サービス（allowlist 設定がある場合のみ有効化）
+        rc_repositories = settings.get_remote_control_repositories()
+        rc_allowed_users = settings.get_remote_control_allowed_users()
+        remote_control_launcher: RemoteControlLauncher | None
+        if rc_repositories and rc_allowed_users:
+            rc_log_dir = (
+                Path(settings.remote_control_log_dir)
+                if settings.remote_control_log_dir
+                else Path(".tmp/remote-control")
+            )
+            remote_control_launcher = RemoteControlLauncher(
+                repositories=rc_repositories,
+                log_dir=rc_log_dir,
+                url_timeout=settings.remote_control_url_timeout,
+            )
+            logger.info(
+                "Remote Control 起動を有効化: repos=%s, users=%d",
+                sorted(rc_repositories.keys()), len(rc_allowed_users),
+            )
+        else:
+            remote_control_launcher = None
+            logger.info(
+                "Remote Control 起動は無効（REMOTE_CONTROL_ALLOWED_USERS / REMOTE_CONTROL_REPOSITORIES のいずれかが未設定）",
+            )
+
         # MessageRouter (F9)
         router = MessageRouter(
             messaging=slack_adapter,
@@ -214,6 +240,8 @@ async def main() -> None:
             rag_zenn_username=settings.rag_zenn_username,
             rag_bluesky_max_posts=settings.rag_bluesky_max_posts,
             rag_zenn_max_articles=settings.rag_zenn_max_articles,
+            remote_control_launcher=remote_control_launcher,
+            remote_control_allowed_users=rc_allowed_users,
         )
 
         register_handlers(
