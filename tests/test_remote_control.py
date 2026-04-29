@@ -89,7 +89,10 @@ async def test_extract_url_finds_existing_url(tmp_path: Path) -> None:
 
 
 async def test_extract_url_timeout(tmp_path: Path) -> None:
-    """ログに URL が現れない場合、タイムアウトする."""
+    """ログに URL が現れない場合、タイムアウトする.
+
+    Slack 向けメッセージにはファイル名のみ含まれ、絶対パスは含まれない（情報露出防止）。
+    """
     log_path = tmp_path / "session.log"
     log_path.write_text("no url here\n", encoding="utf-8")
     launcher = _make_launcher(url_timeout=1)
@@ -99,7 +102,9 @@ async def test_extract_url_timeout(tmp_path: Path) -> None:
 
     with pytest.raises(RemoteControlURLTimeoutError) as exc_info:
         await launcher._extract_url(log_path, proc)  # type: ignore[arg-type]
-    assert str(log_path) in str(exc_info.value)
+    msg = str(exc_info.value)
+    assert log_path.name in msg
+    assert str(tmp_path) not in msg
 
 
 async def test_extract_url_process_exited_before_url(tmp_path: Path) -> None:

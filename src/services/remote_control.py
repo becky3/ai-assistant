@@ -95,7 +95,10 @@ class RemoteControlLauncher:
             msg = "claude コマンドが PATH 上に見つかりません。Claude Code CLI をインストールしてください。"
             raise RemoteControlBinaryNotFoundError(msg)
 
-        session_name = f"slack-{repo_key}-{int(time.time())}"
+        # defense in depth: 設定層 (_parse_remote_control_repositories) で文字種制限済みだが、
+        # サービス層単独で使われる場合（テスト等）にもパストラバーサルを防ぐため再度サニタイズする
+        safe_repo_key = re.sub(r"[^A-Za-z0-9._-]", "_", repo_key) or "repo"
+        session_name = f"slack-{safe_repo_key}-{int(time.time())}"
         self._log_dir.mkdir(parents=True, exist_ok=True)
         log_path = self._log_dir / f"{session_name}.log"
 
@@ -166,9 +169,15 @@ class RemoteControlLauncher:
                 raise RemoteControlProcessExitedError(msg)
 
             if time.monotonic() >= deadline:
+                # 公開チャンネルでの実行を想定し、Slack 向け応答にホストの絶対パスを
+                # 露出させない。詳細な絶対パスは管理者向けにサーバーログに残す
+                logger.warning(
+                    "remote-control URL extraction timed out: timeout=%ss, log_path=%s",
+                    self._url_timeout, log_path,
+                )
                 msg = (
                     f"接続 URL の抽出がタイムアウトしました（{self._url_timeout}秒）。"
-                    f"ログファイルを直接確認してください: {log_path}"
+                    f"ログファイル名: {log_path.name}"
                 )
                 raise RemoteControlURLTimeoutError(msg)
 

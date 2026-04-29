@@ -559,9 +559,16 @@ class MessageRouter:
             return
 
         # rc コマンド (Remote Control 起動)
-        if self._remote_control_launcher is not None and any(
-            re.match(rf"^{re.escape(kw)}\b", lower_text) for kw in _RC_KEYWORDS
-        ):
+        if any(re.match(rf"^{re.escape(kw)}\b", lower_text) for kw in _RC_KEYWORDS):
+            if self._remote_control_launcher is None:
+                logger.info(
+                    "routing: text=%r -> handler=rc_disabled", cleaned_text[:200],
+                )
+                await self._messaging.send_message(
+                    "Remote Control 機能は現在無効です。管理者に設定を依頼してください。",
+                    thread_id, channel,
+                )
+                return
             logger.info("routing: text=%r -> handler=rc", cleaned_text[:200])
             await self._handle_rc_command(msg, cleaned_text)
             return

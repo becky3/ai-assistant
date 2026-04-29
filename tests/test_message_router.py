@@ -723,8 +723,8 @@ async def test_rc_command_success_returns_url() -> None:
     launcher.launch.assert_awaited_once_with("ai-assistant")
 
 
-async def test_rc_command_disabled_falls_through_to_chat() -> None:
-    """remote_control_launcher が None の場合、rc は通常 chat ルーティングに落ちる."""
+async def test_rc_command_disabled_returns_explicit_error() -> None:
+    """remote_control_launcher が None の場合、fail-closed で明示エラーを返し chat にフォールスルーしない."""
     chat_service = AsyncMock()
     chat_service.respond.return_value = "通常応答"
     adapter, router = _make_router(
@@ -736,21 +736,18 @@ async def test_rc_command_disabled_falls_through_to_chat() -> None:
     await router.process_message(_make_msg("rc start foo", user_id="U_AUTHORIZED"))
 
     assert len(adapter.sent_messages) == 1
-    assert adapter.sent_messages[0][0] == "通常応答"
-    chat_service.respond.assert_awaited_once()
+    assert "Remote Control 機能は現在無効です" in adapter.sent_messages[0][0]
+    chat_service.respond.assert_not_awaited()
 
 
-async def test_rc_command_url_timeout_reports_log_path() -> None:
-    """URL 抽出タイムアウトはログファイルパスを案内する."""
-    from pathlib import Path
-
+async def test_rc_command_url_timeout_reports_log_filename_only() -> None:
+    """URL 抽出タイムアウト時は Slack 向けメッセージにファイル名のみを含め絶対パスは露出させない."""
     from src.services.remote_control import RemoteControlURLTimeoutError
 
-    log_path = Path(".tmp/remote-control/slack-foo-1.log")
     launcher = _make_rc_launcher(
         repositories={"foo": "/repo"},
         launch_exception=RemoteControlURLTimeoutError(
-            f"接続 URL の抽出がタイムアウトしました（5秒）。ログファイルを直接確認してください: {log_path}",
+            "接続 URL の抽出がタイムアウトしました（5秒）。ログファイル名: slack-foo-1.log",
         ),
     )
     adapter, router = _make_router(
@@ -763,4 +760,4 @@ async def test_rc_command_url_timeout_reports_log_path() -> None:
     assert len(adapter.sent_messages) == 1
     text = adapter.sent_messages[0][0]
     assert "タイムアウト" in text
-    assert str(log_path) in text
+    assert "slack-foo-1.log" in text

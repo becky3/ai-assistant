@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import functools
+import re
 import tomllib
 from pathlib import Path
 from typing import Any, Literal
@@ -17,6 +18,11 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# REMOTE_CONTROL_REPOSITORIES の key として許可する文字種。
+# ファイル名・セッション名にそのまま埋め込まれるため、パストラバーサルを誘発する
+# 文字（`/`, `\`, 先頭 `.` 等）を排除する。先頭は英数のみ許容して `..` を弾く
+_REMOTE_CONTROL_REPO_KEY_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 DEFAULT_LMSTUDIO_BASE_URL = "http://localhost:1234"
 
@@ -183,7 +189,13 @@ def _parse_remote_control_repositories(value: str) -> dict[str, str]:
     """`<key>=<path>` カンマ区切り文字列を dict にパースする.
 
     Settings の起動時バリデータと get_remote_control_repositories() の共通パーサ。
-    重複 key・空 key/path・区切り文字 `=` 不在をすべて ValueError として検出する。
+    以下をすべて ValueError として検出する:
+
+    - 区切り文字 `=` 不在
+    - 空の key / path
+    - 重複 key
+    - key に `[A-Za-z0-9._-]` 以外の文字が含まれる（パストラバーサル防止）
+    - path が絶対パスでない（fail-fast による意図しないディレクトリでの起動防止）
     """
     if not value:
         return {}
@@ -204,6 +216,18 @@ def _parse_remote_control_repositories(value: str) -> dict[str, str]:
         if not key or not path:
             msg = (
                 f"REMOTE_CONTROL_REPOSITORIES の項目に空の key/path が含まれます: '{entry}'"
+            )
+            raise ValueError(msg)
+        if not _REMOTE_CONTROL_REPO_KEY_PATTERN.match(key):
+            msg = (
+                "REMOTE_CONTROL_REPOSITORIES の key は英数・`.`・`_`・`-` のみ使用できます: "
+                f"'{key}'"
+            )
+            raise ValueError(msg)
+        if not Path(path).is_absolute():
+            msg = (
+                "REMOTE_CONTROL_REPOSITORIES の path は絶対パスで指定してください: "
+                f"'{entry}'"
             )
             raise ValueError(msg)
         if key in result:

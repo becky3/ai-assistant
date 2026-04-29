@@ -147,3 +147,50 @@ def test_get_auto_reply_channels_filters_empty_tokens() -> None:
         **{**TEST_SETTINGS_DEFAULTS, "slack_auto_reply_channels": "C111,,C222,,,C333"}
     )
     assert s.get_auto_reply_channels() == ["C111", "C222", "C333"]
+
+
+def test_remote_control_repositories_rejects_invalid_key_chars() -> None:
+    """REMOTE_CONTROL_REPOSITORIES: key に英数._- 以外を含むと ValueError."""
+    with pytest.raises(ValueError, match="英数・"):
+        Settings(
+            **{
+                **TEST_SETTINGS_DEFAULTS,
+                "remote_control_repositories": "ai/assistant=/abs/path",
+            },
+        )
+
+
+def test_remote_control_repositories_rejects_path_traversal_key() -> None:
+    """REMOTE_CONTROL_REPOSITORIES: key に `..` を含むと ValueError."""
+    with pytest.raises(ValueError, match="英数・"):
+        Settings(
+            **{
+                **TEST_SETTINGS_DEFAULTS,
+                "remote_control_repositories": "..=/abs/path",
+            },
+        )
+
+
+def test_remote_control_repositories_rejects_relative_path() -> None:
+    """REMOTE_CONTROL_REPOSITORIES: path が絶対パスでないと ValueError."""
+    with pytest.raises(ValueError, match="絶対パス"):
+        Settings(
+            **{
+                **TEST_SETTINGS_DEFAULTS,
+                "remote_control_repositories": "ai-assistant=relative/path",
+            },
+        )
+
+
+def test_remote_control_repositories_accepts_valid_entries() -> None:
+    """REMOTE_CONTROL_REPOSITORIES: 制約を満たす key/path はパースされる."""
+    import os
+
+    abs_path = "C:/abs/path" if os.name == "nt" else "/abs/path"
+    s = Settings(
+        **{
+            **TEST_SETTINGS_DEFAULTS,
+            "remote_control_repositories": f"ai-assistant={abs_path}",
+        },
+    )
+    assert s.get_remote_control_repositories() == {"ai-assistant": abs_path}
