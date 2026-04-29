@@ -153,6 +153,8 @@ async def _setup(
         rag_zenn_username=settings.rag_zenn_username,
         rag_bluesky_max_posts=settings.rag_bluesky_max_posts,
         rag_zenn_max_articles=settings.rag_zenn_max_articles,
+        remote_control_launcher=None,
+        remote_control_allowed_users=[],
     )
 
     return router, cli_adapter, mcp_manager

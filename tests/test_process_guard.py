@@ -346,3 +346,47 @@ class TestCleanupChildren:
             side_effect=FileNotFoundError(),
         ):
             cleanup_children()  # 例外が発生しないこと
+
+    def test_unix_excludes_protected_pids(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Unix: exclude_pids に含まれる子プロセスは kill されない."""
+        import signal as sig
+
+        mock_result = MagicMock()
+        mock_result.stdout = "111\n222\n333\n"
+        monkeypatch.setattr("sys.platform", "linux")
+
+        with (
+            patch("src.process_guard.subprocess.run", return_value=mock_result),
+            patch("src.process_guard.os.kill") as mock_kill,
+        ):
+            cleanup_children(exclude_pids={222})
+            assert mock_kill.call_count == 2
+            mock_kill.assert_any_call(111, sig.SIGTERM)
+            mock_kill.assert_any_call(333, sig.SIGTERM)
+            for call in mock_kill.call_args_list:
+                assert call.args[0] != 222
+
+    def test_windows_excludes_protected_pids(
+        self, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Windows: exclude_pids に含まれる子プロセスは taskkill されない."""
+        wmic_result = MagicMock()
+        wmic_result.stdout = "ProcessId\n111\n222\n333\n\n"
+        taskkill_result = MagicMock()
+        monkeypatch.setattr("sys.platform", "win32")
+
+        with patch("src.process_guard.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                wmic_result, taskkill_result, taskkill_result,
+            ]
+            cleanup_children(exclude_pids={222})
+
+            # wmic 1回 + taskkill 2回（111, 333）= 3回。222 はスキップ
+            assert mock_run.call_count == 3
+            taskkill_calls = [
+                c for c in mock_run.call_args_list if c.args[0][0] == "taskkill"
+            ]
+            killed_pids = {int(c.args[0][2]) for c in taskkill_calls}
+            assert killed_pids == {111, 333}

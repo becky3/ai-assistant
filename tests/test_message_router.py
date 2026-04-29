@@ -75,6 +75,8 @@ def _make_router(
     feed_card_layout: Literal["vertical", "horizontal"] = "horizontal",
     bot_token: str | None = None,
     slack_client: AsyncMock | None = None,
+    remote_control_launcher: object | None = None,
+    remote_control_allowed_users: list[str] | None = None,
 ) -> tuple[MockAdapter, MessageRouter]:
     if adapter is None:
         adapter = MockAdapter()
@@ -100,6 +102,8 @@ def _make_router(
         rag_zenn_username=rag_zenn_username,
         rag_bluesky_max_posts=100,
         rag_zenn_max_articles=10,
+        remote_control_launcher=remote_control_launcher,  # type: ignore[arg-type]
+        remote_control_allowed_users=remote_control_allowed_users or [],
     )
     return adapter, router
 
@@ -587,3 +591,173 @@ async def test_reminder_deliver_routes_to_deliver() -> None:
 
     assert len(adapter.sent_messages) == 1
     assert "Slack 接続時のみ" in adapter.sent_messages[0][0]
+
+
+# --- rc コマンドテスト (Issue #831) ---
+
+
+def _make_rc_launcher(
+    *,
+    repositories: dict[str, str] | None = None,
+    launch_result: object | None = None,
+    launch_exception: BaseException | None = None,
+) -> object:
+    """RemoteControlLauncher のモックを構築する.
+
+    get_repositories は同期メソッド、launch は非同期メソッドの混在のため、
+    MagicMock 上に AsyncMock を被せる構成にする。
+    """
+    from unittest.mock import MagicMock
+
+    launcher = MagicMock()
+    launcher.get_repositories.return_value = repositories or {}
+    launch_mock = AsyncMock()
+    if launch_exception is not None:
+        launch_mock.side_effect = launch_exception
+    else:
+        launch_mock.return_value = launch_result
+    launcher.launch = launch_mock
+    return launcher
+
+
+async def test_rc_command_denied_for_unauthorized_user() -> None:
+    """認可ユーザー allowlist にない user_id からは権限拒否される."""
+    launcher = _make_rc_launcher(repositories={"ai-assistant": "/repo"})
+    adapter, router = _make_router(
+        remote_control_launcher=launcher,
+        remote_control_allowed_users=["U_AUTHORIZED"],
+    )
+
+    await router.process_message(_make_msg("rc start ai-assistant", user_id="U_OTHER"))
+
+    assert len(adapter.sent_messages) == 1
+    assert "権限がありません" in adapter.sent_messages[0][0]
+    launcher.launch.assert_not_called()
+
+
+async def test_rc_command_unknown_repo_key_returns_usage() -> None:
+    """未登録の repo-key を渡すと使用方法 + 登録済みリストが返る."""
+    from src.services.remote_control import RemoteControlError
+
+    launcher = _make_rc_launcher(
+        repositories={"ai-assistant": "/repo"},
+        launch_exception=RemoteControlError(
+            "未登録のリポジトリキーです: foo\n登録済み: ai-assistant",
+        ),
+    )
+    adapter, router = _make_router(
+        remote_control_launcher=launcher,
+        remote_control_allowed_users=["U_AUTHORIZED"],
+    )
+
+    await router.process_message(_make_msg("rc start foo", user_id="U_AUTHORIZED"))
+
+    assert len(adapter.sent_messages) == 1
+    text = adapter.sent_messages[0][0]
+    assert "未登録のリポジトリキー" in text
+    assert "ai-assistant" in text
+    launcher.launch.assert_awaited_once_with("foo")
+
+
+async def test_rc_command_missing_repo_key_returns_usage() -> None:
+    """rc start のみで repo-key が無い場合、使用方法を返す."""
+    launcher = _make_rc_launcher(repositories={"ai-assistant": "/repo"})
+    adapter, router = _make_router(
+        remote_control_launcher=launcher,
+        remote_control_allowed_users=["U_AUTHORIZED"],
+    )
+
+    await router.process_message(_make_msg("rc start", user_id="U_AUTHORIZED"))
+
+    assert len(adapter.sent_messages) == 1
+    text = adapter.sent_messages[0][0]
+    assert "リポジトリキーを指定してください" in text
+    assert "ai-assistant" in text
+    launcher.launch.assert_not_called()
+
+
+async def test_rc_command_unknown_subcommand_returns_usage() -> None:
+    """rc 直下に start 以外を指定した場合、使用方法を返す."""
+    launcher = _make_rc_launcher(repositories={"ai-assistant": "/repo"})
+    adapter, router = _make_router(
+        remote_control_launcher=launcher,
+        remote_control_allowed_users=["U_AUTHORIZED"],
+    )
+
+    await router.process_message(_make_msg("rc stop ai-assistant", user_id="U_AUTHORIZED"))
+
+    assert len(adapter.sent_messages) == 1
+    assert "使用方法" in adapter.sent_messages[0][0]
+    launcher.launch.assert_not_called()
+
+
+async def test_rc_command_success_returns_url() -> None:
+    """正常系: 起動成功時に repo / session / URL を返す."""
+    from pathlib import Path
+
+    from src.services.remote_control import RemoteControlLaunchResult
+
+    launcher = _make_rc_launcher(
+        repositories={"ai-assistant": "/repo"},
+        launch_result=RemoteControlLaunchResult(
+            session_name="slack-ai-assistant-1714389600",
+            connect_url="https://claude.ai/code?environment=env_TEST",
+            log_path=Path(".tmp/remote-control/slack-ai-assistant-1714389600.log"),
+        ),
+    )
+    adapter, router = _make_router(
+        remote_control_launcher=launcher,
+        remote_control_allowed_users=["U_AUTHORIZED"],
+    )
+
+    await router.process_message(
+        _make_msg("rc start ai-assistant", user_id="U_AUTHORIZED"),
+    )
+
+    assert len(adapter.sent_messages) == 1
+    text = adapter.sent_messages[0][0]
+    assert "Remote Control を起動しました" in text
+    assert "リポジトリ: ai-assistant" in text
+    assert "slack-ai-assistant-1714389600" in text
+    assert "https://claude.ai/code?environment=env_TEST" in text
+    launcher.launch.assert_awaited_once_with("ai-assistant")
+
+
+async def test_rc_command_disabled_returns_explicit_error() -> None:
+    """remote_control_launcher が None の場合、fail-closed で明示エラーを返し chat にフォールスルーしない."""
+    chat_service = AsyncMock()
+    chat_service.respond.return_value = "通常応答"
+    adapter, router = _make_router(
+        chat_service=chat_service,
+        remote_control_launcher=None,
+        remote_control_allowed_users=[],
+    )
+
+    await router.process_message(_make_msg("rc start foo", user_id="U_AUTHORIZED"))
+
+    assert len(adapter.sent_messages) == 1
+    assert "Remote Control 機能は現在無効です" in adapter.sent_messages[0][0]
+    chat_service.respond.assert_not_awaited()
+
+
+async def test_rc_command_url_timeout_reports_log_filename_only() -> None:
+    """URL 抽出タイムアウト時は Slack 向けメッセージにファイル名のみを含め絶対パスは露出させない."""
+    from src.services.remote_control import RemoteControlURLTimeoutError
+
+    launcher = _make_rc_launcher(
+        repositories={"foo": "/repo"},
+        launch_exception=RemoteControlURLTimeoutError(
+            "接続 URL の抽出がタイムアウトしました（5秒）。ログファイル名: slack-foo-1.log",
+        ),
+    )
+    adapter, router = _make_router(
+        remote_control_launcher=launcher,
+        remote_control_allowed_users=["U_AUTHORIZED"],
+    )
+
+    await router.process_message(_make_msg("rc start foo", user_id="U_AUTHORIZED"))
+
+    assert len(adapter.sent_messages) == 1
+    text = adapter.sent_messages[0][0]
+    assert "タイムアウト" in text
+    assert "slack-foo-1.log" in text

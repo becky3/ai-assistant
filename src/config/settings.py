@@ -10,13 +10,19 @@
 from __future__ import annotations
 
 import functools
+import re
 import tomllib
 from pathlib import Path
 from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# REMOTE_CONTROL_REPOSITORIES の key として許可する文字種。
+# ファイル名・セッション名にそのまま埋め込まれるため、パストラバーサルを誘発する
+# 文字（`/`, `\`, 先頭 `.` 等）を排除する。先頭は英数のみ許容して `..` を弾く
+_REMOTE_CONTROL_REPO_KEY_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 DEFAULT_LMSTUDIO_BASE_URL = "http://localhost:1234"
 
@@ -69,6 +75,11 @@ class _EnvLoader(BaseSettings):
     chat_llm_provider: Literal["local", "online", "claude"]
     summarizer_llm_provider: Literal["local", "online"]
 
+    # Remote Control 起動（リポジトリパス・許可ユーザーはホスト依存）
+    remote_control_allowed_users: str = ""
+    remote_control_repositories: str = ""
+    remote_control_log_dir: str = ""
+
 
 # .env 管理フィールド名の集合（重複検出に使用）
 _ENV_FIELD_NAMES = frozenset(_EnvLoader.model_fields.keys())
@@ -102,12 +113,32 @@ class Settings(BaseModel):
     online_llm_provider: Literal["openai", "anthropic"]
     chat_llm_provider: Literal["local", "online", "claude"]
     summarizer_llm_provider: Literal["local", "online"]
+    remote_control_allowed_users: str
+    remote_control_repositories: str
+    remote_control_log_dir: str
 
     def get_auto_reply_channels(self) -> list[str]:
         """自動返信チャンネルのリストを返す（カンマ区切りを解析）."""
         if not self.slack_auto_reply_channels:
             return []
         return [ch.strip() for ch in self.slack_auto_reply_channels.split(",") if ch.strip()]
+
+    def get_remote_control_allowed_users(self) -> list[str]:
+        """Remote Control を起動可能な Slack user_id のリストを返す."""
+        if not self.remote_control_allowed_users:
+            return []
+        return [
+            u.strip()
+            for u in self.remote_control_allowed_users.split(",")
+            if u.strip()
+        ]
+
+    def get_remote_control_repositories(self) -> dict[str, str]:
+        """Remote Control の repo-key → 絶対パス対応表を返す.
+
+        書式・検証規則は `_parse_remote_control_repositories` を参照。
+        """
+        return _parse_remote_control_repositories(self.remote_control_repositories)
 
     # --- config.toml から取得（共通設定値、config.toml 必須） ---
 
@@ -140,6 +171,70 @@ class Settings(BaseModel):
 
     # Logging（ログファイルのローテーション設定）
     log_file_max_bytes: int = Field(ge=1)  # ログファイル1つあたりの最大サイズ
+
+    # Remote Control 起動（共通設定値）
+    # 起動後にログから接続 URL を抽出するタイムアウト秒数。
+    # 上限はサーバー応答性の悪化（長時間ポーリング）を防ぐためのハードリミット
+    remote_control_url_timeout: int = Field(ge=1, le=300)
+
+    @field_validator("remote_control_repositories")
+    @classmethod
+    def _validate_remote_control_repositories(cls, value: str) -> str:
+        """起動時に文法検証する（パース成功すれば値はそのまま採用）."""
+        _parse_remote_control_repositories(value)
+        return value
+
+
+def _parse_remote_control_repositories(value: str) -> dict[str, str]:
+    """`<key>=<path>` カンマ区切り文字列を dict にパースする.
+
+    Settings の起動時バリデータと get_remote_control_repositories() の共通パーサ。
+    以下をすべて ValueError として検出する:
+
+    - 区切り文字 `=` 不在
+    - 空の key / path
+    - 重複 key
+    - key に `[A-Za-z0-9._-]` 以外の文字が含まれる（パストラバーサル防止）
+    - path が絶対パスでない（fail-fast による意図しないディレクトリでの起動防止）
+    """
+    if not value:
+        return {}
+    result: dict[str, str] = {}
+    for raw_entry in value.split(","):
+        entry = raw_entry.strip()
+        if not entry:
+            continue
+        if "=" not in entry:
+            msg = (
+                "REMOTE_CONTROL_REPOSITORIES の項目は '<key>=<path>' 形式で記述してください: "
+                f"'{entry}'"
+            )
+            raise ValueError(msg)
+        key, path = entry.split("=", 1)
+        key = key.strip()
+        path = path.strip()
+        if not key or not path:
+            msg = (
+                f"REMOTE_CONTROL_REPOSITORIES の項目に空の key/path が含まれます: '{entry}'"
+            )
+            raise ValueError(msg)
+        if not _REMOTE_CONTROL_REPO_KEY_PATTERN.match(key):
+            msg = (
+                "REMOTE_CONTROL_REPOSITORIES の key は英数・`.`・`_`・`-` のみ使用できます: "
+                f"'{key}'"
+            )
+            raise ValueError(msg)
+        if not Path(path).is_absolute():
+            msg = (
+                "REMOTE_CONTROL_REPOSITORIES の path は絶対パスで指定してください: "
+                f"'{entry}'"
+            )
+            raise ValueError(msg)
+        if key in result:
+            msg = f"REMOTE_CONTROL_REPOSITORIES に重複した key があります: '{key}'"
+            raise ValueError(msg)
+        result[key] = path
+    return result
 
 
 def _load_toml_config() -> dict[str, Any]:

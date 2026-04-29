@@ -22,6 +22,11 @@ from py_common_lib.httpx import ConstrainedClient
 from src.mcp_bridge.client_manager import MCPToolNotFoundError
 from src.messaging.port import IncomingMessage, MessagingPort
 from src.services.chat import ChatService
+from src.services.remote_control import (
+    RemoteControlError,
+    RemoteControlLauncher,
+    RemoteControlURLTimeoutError,
+)
 
 if TYPE_CHECKING:
     from slack_sdk.web.async_client import AsyncWebClient
@@ -35,6 +40,7 @@ logger = logging.getLogger(__name__)
 _DELIVER_KEYWORDS = ("deliver",)
 _FEED_KEYWORDS = ("feed",)
 _RAG_KEYWORDS = ("rag",)
+_RC_KEYWORDS = ("rc",)
 _STATUS_KEYWORDS = ("status", "info")
 
 _REMINDER_PREFIX = re.compile(r"^reminder:\s+", re.IGNORECASE)
@@ -494,6 +500,8 @@ class MessageRouter:
         rag_zenn_username: str,
         rag_bluesky_max_posts: int,
         rag_zenn_max_articles: int,
+        remote_control_launcher: RemoteControlLauncher | None,
+        remote_control_allowed_users: list[str],
     ) -> None:
         self._messaging = messaging
         self._chat_service = chat_service
@@ -512,6 +520,8 @@ class MessageRouter:
         self._rag_zenn_username = rag_zenn_username
         self._rag_bluesky_max_posts = rag_bluesky_max_posts
         self._rag_zenn_max_articles = rag_zenn_max_articles
+        self._remote_control_launcher = remote_control_launcher
+        self._remote_control_allowed_users = remote_control_allowed_users
 
     async def process_message(self, msg: IncomingMessage) -> None:
         """受信メッセージをキーワードルーティングし、適切なサービスに委譲する."""
@@ -546,6 +556,21 @@ class MessageRouter:
         ):
             logger.info("routing: text=%r -> handler=rag", cleaned_text[:200])
             await self._handle_rag_command(msg, cleaned_text)
+            return
+
+        # rc コマンド (Remote Control 起動)
+        if any(re.match(rf"^{re.escape(kw)}\b", lower_text) for kw in _RC_KEYWORDS):
+            if self._remote_control_launcher is None:
+                logger.info(
+                    "routing: text=%r -> handler=rc_disabled", cleaned_text[:200],
+                )
+                await self._messaging.send_message(
+                    "Remote Control 機能は現在無効です。管理者に設定を依頼してください。",
+                    thread_id, channel,
+                )
+                return
+            logger.info("routing: text=%r -> handler=rc", cleaned_text[:200])
+            await self._handle_rc_command(msg, cleaned_text)
             return
 
         # 配信テストキーワード (F2)
@@ -947,4 +972,85 @@ class MessageRouter:
             lines.append(f"• `{tool.name}` — {desc}")
 
         await self._messaging.send_message("\n".join(lines), thread_id, channel)
+
+    async def _handle_rc_command(
+        self, msg: IncomingMessage, cleaned_text: str,
+    ) -> None:
+        """rc コマンドのルーティング（Remote Control 起動）.
+
+        仕様: docs/specs/features/remote-control-launch.md
+        """
+        assert self._remote_control_launcher is not None
+        thread_id = msg.thread_id
+        channel = msg.channel
+
+        if msg.user_id not in self._remote_control_allowed_users:
+            logger.warning(
+                "rc command denied: user=%s not in allowlist", msg.user_id,
+            )
+            await self._messaging.send_message(
+                "❌ このコマンドを実行する権限がありません",
+                thread_id, channel,
+            )
+            return
+
+        tokens = cleaned_text.split()
+        if len(tokens) < 2:
+            await self._messaging.send_message(
+                self._build_rc_usage(), thread_id, channel,
+            )
+            return
+
+        subcommand = tokens[1].lower()
+        if subcommand != "start":
+            await self._messaging.send_message(
+                self._build_rc_usage(), thread_id, channel,
+            )
+            return
+
+        if len(tokens) < 3:
+            await self._messaging.send_message(
+                "エラー: リポジトリキーを指定してください。\n" + self._build_rc_usage(),
+                thread_id, channel,
+            )
+            return
+
+        repo_key = tokens[2]
+
+        try:
+            result = await self._remote_control_launcher.launch(repo_key)
+        except RemoteControlURLTimeoutError as e:
+            await self._messaging.send_message(f"⌛ {e}", thread_id, channel)
+            return
+        except RemoteControlError as e:
+            # 既知エラー（未登録 key / claude 未インストール / プロセス即時終了 等）は
+            # サービス層が日本語メッセージを組み立て済みのため、そのまま転送する
+            await self._messaging.send_message(f"❌ {e}", thread_id, channel)
+            return
+        except Exception:
+            logger.exception("Failed to launch remote control: repo_key=%s", repo_key)
+            await self._messaging.send_message(
+                "❌ Remote Control の起動中に予期せぬエラーが発生しました。",
+                thread_id, channel,
+            )
+            return
+
+        response = (
+            "✅ Remote Control を起動しました\n"
+            f"リポジトリ: {repo_key}\n"
+            f"セッション名: {result.session_name}\n"
+            f"接続: {result.connect_url}"
+        )
+        await self._messaging.send_message(response, thread_id, channel)
+
+    def _build_rc_usage(self) -> str:
+        """rc コマンドの使用方法と登録済み repo-key を返す."""
+        assert self._remote_control_launcher is not None
+        repos = self._remote_control_launcher.get_repositories()
+        registered = ", ".join(sorted(repos.keys())) or "(未登録)"
+        return (
+            "使用方法:\n"
+            "• `@bot rc start <repo-key>` — 指定リポジトリで Claude Code Remote Control を起動\n"
+            f"登録済み: {registered}"
+        )
 
