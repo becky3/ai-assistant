@@ -73,10 +73,19 @@ class RemoteControlLauncher:
         self._repositories = repositories
         self._log_dir = log_dir
         self._url_timeout = url_timeout
+        # 起動中の remote-control プロセス PID。cleanup_children() の除外対象として参照される
+        self._active_pids: set[int] = set()
 
     def get_repositories(self) -> dict[str, str]:
         """登録済み repo allowlist を返す."""
         return dict(self._repositories)
+
+    def get_active_pids(self) -> set[int]:
+        """起動中の remote-control プロセス PID 集合を返す.
+
+        bot 終了時の cleanup_children() で「道連れ kill」を回避する除外リストに使う。
+        """
+        return set(self._active_pids)
 
     async def launch(self, repo_key: str) -> RemoteControlLaunchResult:
         """指定 repo-key で claude remote-control を起動し、接続 URL を返す."""
@@ -105,6 +114,7 @@ class RemoteControlLauncher:
         # log_file の Python 側バッファリング指定は子プロセスの書き込みには無関係
         # （fd 経由で直接 OS に書き込まれるため）。テキストモードは UTF-8 受け取りの意図表明のみ
         log_file = log_path.open("w", encoding="utf-8")
+        launch_failed = False
         try:
             if sys.platform == "win32":
                 creationflags = getattr(
@@ -126,11 +136,18 @@ class RemoteControlLauncher:
                     start_new_session=True,
                 )
         except Exception:
-            # 起動自体が失敗した場合、空のログファイルを残さない
-            log_path.unlink(missing_ok=True)
+            launch_failed = True
             raise
         finally:
             log_file.close()
+            # close 後に削除する（Windows ではオープン中のファイルは削除できないため、
+            # 順序を逆にすると元の起動失敗例外が unlink エラーでマスクされる）
+            if launch_failed:
+                try:
+                    log_path.unlink(missing_ok=True)
+                except OSError:
+                    # 削除失敗は元の起動失敗例外より重要ではないため握りつぶす
+                    pass
 
         logger.info(
             "remote-control launched: pid=%s, repo_key=%s, session=%s, log=%s",
@@ -138,6 +155,13 @@ class RemoteControlLauncher:
         )
 
         url = await self._extract_url(log_path, proc)
+        # POSIX で子プロセスが後に終了した際の zombie 化を防ぐため、
+        # 終了は監視しないが回収だけ非同期で受け取る（kill はしない）
+        self._active_pids.add(proc.pid)
+        wait_task = asyncio.create_task(proc.wait())
+        wait_task.add_done_callback(
+            lambda _t: self._active_pids.discard(proc.pid),
+        )
         return RemoteControlLaunchResult(
             session_name=session_name,
             connect_url=url,

@@ -10,6 +10,7 @@ import re
 import signal
 import subprocess
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -160,7 +161,7 @@ def check_already_running() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _cleanup_children_unix() -> None:
+def _cleanup_children_unix(exclude_pids: frozenset[int]) -> None:
     """Unix系OSで子プロセスをSIGTERMで停止する."""
     pid = os.getpid()
     try:
@@ -184,6 +185,11 @@ def _cleanup_children_unix() -> None:
             continue
         try:
             child_pid = int(child_pid_str)
+            if child_pid in exclude_pids:
+                logger.info(
+                    "保護対象の子プロセスのため停止しません: PID=%d", child_pid,
+                )
+                continue
             os.kill(child_pid, signal.SIGTERM)
             logger.info("子プロセスを停止しました: PID=%d", child_pid)
         except (ValueError, ProcessLookupError):
@@ -195,7 +201,7 @@ def _cleanup_children_unix() -> None:
             logger.warning("子プロセスの停止権限がありません: PID=%s", child_pid_str)
 
 
-def _cleanup_children_windows() -> None:
+def _cleanup_children_windows(exclude_pids: frozenset[int]) -> None:
     """Windowsでwmic/taskkillを使って子プロセスを停止する."""
     pid = os.getpid()
     try:
@@ -217,6 +223,9 @@ def _cleanup_children_windows() -> None:
         if not line or not line.isdigit():
             continue
         child_pid = int(line)
+        if child_pid in exclude_pids:
+            logger.info("保護対象の子プロセスのため停止しません: PID=%d", child_pid)
+            continue
         try:
             subprocess.run(
                 ["taskkill", "/PID", str(child_pid), "/F"],
@@ -231,9 +240,14 @@ def _cleanup_children_windows() -> None:
             logger.warning("taskkill がタイムアウトしました: PID=%d", child_pid)
 
 
-def cleanup_children() -> None:
-    """現在のプロセスの子プロセスをクリーンアップする（プラットフォーム分岐）."""
+def cleanup_children(exclude_pids: Iterable[int] = ()) -> None:
+    """現在のプロセスの子プロセスをクリーンアップする（プラットフォーム分岐）.
+
+    `exclude_pids` に含まれる PID は kill 対象から除外する。bot 終了時にも
+    存続させたい子プロセス（例: Slack 経由で起動した remote-control）を保護するために使う。
+    """
+    excluded = frozenset(exclude_pids)
     if sys.platform == "win32":
-        _cleanup_children_windows()
+        _cleanup_children_windows(excluded)
     else:
-        _cleanup_children_unix()
+        _cleanup_children_unix(excluded)

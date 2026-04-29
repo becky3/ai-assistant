@@ -99,6 +99,7 @@ async def main() -> None:
             )
 
     mcp_manager: MCPClientManager | None = None
+    remote_control_launcher: RemoteControlLauncher | None = None
     try:
         # 起動時刻を記録 (F5)
         bot_start_time = datetime.now(tz=ZoneInfo(settings.timezone))
@@ -199,7 +200,6 @@ async def main() -> None:
         # Remote Control 起動サービス（allowlist 設定がある場合のみ有効化）
         rc_repositories = settings.get_remote_control_repositories()
         rc_allowed_users = settings.get_remote_control_allowed_users()
-        remote_control_launcher: RemoteControlLauncher | None
         if rc_repositories and rc_allowed_users:
             rc_log_dir = (
                 Path(settings.remote_control_log_dir)
@@ -264,7 +264,14 @@ async def main() -> None:
             except Exception:
                 logger.warning("MCPクリーンアップ失敗", exc_info=True)
         try:
-            cleanup_children()
+            # Slack 経由で起動した remote-control プロセスは bot 停止時にも生かす
+            # （外出先ユーザーの作業中断を避けるため）
+            exclude_pids = (
+                remote_control_launcher.get_active_pids()
+                if remote_control_launcher is not None
+                else set()
+            )
+            cleanup_children(exclude_pids=exclude_pids)
         except Exception:
             logger.warning("子プロセスクリーンアップ失敗", exc_info=True)
         remove_pid_file()

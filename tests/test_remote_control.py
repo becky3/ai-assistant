@@ -61,6 +61,20 @@ def test_get_repositories_returns_copy() -> None:
     assert "bar" not in launcher.get_repositories()
 
 
+def test_get_active_pids_initially_empty() -> None:
+    """起動前の get_active_pids は空集合."""
+    launcher = _make_launcher(repositories={"foo": "/repo"})
+    assert launcher.get_active_pids() == set()
+
+
+def test_get_active_pids_returns_copy() -> None:
+    """get_active_pids が返す集合への変更は内部状態に影響しない."""
+    launcher = _make_launcher(repositories={"foo": "/repo"})
+    out = launcher.get_active_pids()
+    out.add(12345)
+    assert launcher.get_active_pids() == set()
+
+
 # --- _extract_url の単体テスト ---
 
 
