@@ -6,12 +6,11 @@ from __future__ import annotations
 
 import logging
 import os
-import re
-import signal
-import subprocess
 import sys
 from collections.abc import Iterable
 from pathlib import Path
+
+import psutil
 
 logger = logging.getLogger(__name__)
 
@@ -91,45 +90,14 @@ def remove_pid_file() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _is_process_alive_unix(pid: int) -> bool:
-    """Unix系OSでプロセスの生存を確認する."""
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
-
-
-def _is_process_alive_windows(pid: int) -> bool:
-    """Windowsでtasklistコマンドを使ってプロセスの生存を確認する."""
-    try:
-        result = subprocess.run(
-            ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        output = result.stdout.strip()
-        # tasklist は該当プロセスがない場合 "INFO: No tasks ..." を返す
-        if output.startswith("INFO:"):
-            return False
-        # PID列を単語境界で厳密一致（部分一致による誤判定を防止）
-        return bool(re.search(rf"\b{pid}\b", output))
-    except FileNotFoundError:
-        logger.warning("tasklist コマンドが見つかりません")
-        return False
-    except subprocess.TimeoutExpired:
-        logger.warning("tasklist コマンドがタイムアウトしました")
-        return False
-
-
 def is_process_alive(pid: int) -> bool:
-    """プロセスが生存しているか確認する（プラットフォーム分岐）."""
-    if sys.platform == "win32":
-        return _is_process_alive_windows(pid)
-    return _is_process_alive_unix(pid)
+    """プロセスが生存しているか確認する.
+
+    `psutil.pid_exists` は権限がない場合でも True を返すため、
+    旧 Unix 実装（`os.kill(pid, 0)` の `PermissionError` を alive=True とみなす）と
+    意味的に等価である。テスト時の patch ポイントを集約するため薄いラッパーとして残す。
+    """
+    return psutil.pid_exists(pid)
 
 
 # ---------------------------------------------------------------------------
@@ -161,93 +129,34 @@ def check_already_running() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _cleanup_children_unix(exclude_pids: frozenset[int]) -> None:
-    """Unix系OSで子プロセスをSIGTERMで停止する."""
-    pid = os.getpid()
-    try:
-        result = subprocess.run(
-            ["pgrep", "-P", str(pid)],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-    except FileNotFoundError:
-        logger.debug("pgrep コマンドが見つかりません。子プロセスクリーンアップをスキップします。")
-        return
-    except subprocess.TimeoutExpired:
-        logger.warning("pgrep コマンドがタイムアウトしました")
-        return
-
-    child_pids = result.stdout.strip().splitlines()
-    for child_pid_str in child_pids:
-        child_pid_str = child_pid_str.strip()
-        if not child_pid_str:
-            continue
-        try:
-            child_pid = int(child_pid_str)
-            if child_pid in exclude_pids:
-                logger.info(
-                    "保護対象の子プロセスのため停止しません: PID=%d", child_pid,
-                )
-                continue
-            os.kill(child_pid, signal.SIGTERM)
-            logger.info("子プロセスを停止しました: PID=%d", child_pid)
-        except (ValueError, ProcessLookupError):
-            logger.debug(
-                "子プロセスのPIDが不正、または既に存在しません。スキップします: PID文字列=%r",
-                child_pid_str,
-            )
-        except PermissionError:
-            logger.warning("子プロセスの停止権限がありません: PID=%s", child_pid_str)
-
-
-def _cleanup_children_windows(exclude_pids: frozenset[int]) -> None:
-    """Windowsでwmic/taskkillを使って子プロセスを停止する."""
-    pid = os.getpid()
-    try:
-        result = subprocess.run(
-            ["wmic", "process", "where", f"(ParentProcessId={pid})", "get", "ProcessId"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-    except FileNotFoundError:
-        logger.debug("wmic コマンドが見つかりません。子プロセスクリーンアップをスキップします。")
-        return
-    except subprocess.TimeoutExpired:
-        logger.warning("wmic コマンドがタイムアウトしました")
-        return
-
-    for line in result.stdout.strip().splitlines():
-        line = line.strip()
-        if not line or not line.isdigit():
-            continue
-        child_pid = int(line)
-        if child_pid in exclude_pids:
-            logger.info("保護対象の子プロセスのため停止しません: PID=%d", child_pid)
-            continue
-        try:
-            subprocess.run(
-                ["taskkill", "/PID", str(child_pid), "/F"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            logger.info("子プロセスを停止しました: PID=%d", child_pid)
-        except FileNotFoundError:
-            logger.warning("taskkill コマンドが見つかりません")
-        except subprocess.TimeoutExpired:
-            logger.warning("taskkill がタイムアウトしました: PID=%d", child_pid)
-
-
 def cleanup_children(exclude_pids: Iterable[int] = ()) -> None:
-    """現在のプロセスの子プロセスをクリーンアップする（プラットフォーム分岐）.
+    """現在のプロセスの子プロセスをクリーンアップする.
 
     `exclude_pids` に含まれる PID は kill 対象から除外する。bot 終了時にも
     存続させたい子プロセス（例: Slack 経由で起動した remote-control）を保護するために使う。
+
+    Windows では TerminateProcess、Unix では SIGTERM が送信される。
     """
     excluded = frozenset(exclude_pids)
-    if sys.platform == "win32":
-        _cleanup_children_windows(excluded)
-    else:
-        _cleanup_children_unix(excluded)
+    pid = os.getpid()
+    try:
+        parent = psutil.Process(pid)
+        children = parent.children(recursive=False)
+    except psutil.NoSuchProcess:
+        logger.debug("プロセスが見つかりません: PID=%d", pid)
+        return
+    except psutil.AccessDenied:
+        logger.warning("プロセス情報のアクセス権限がありません: PID=%d", pid)
+        return
+
+    for child in children:
+        if child.pid in excluded:
+            logger.info("保護対象の子プロセスのため停止しません: PID=%d", child.pid)
+            continue
+        try:
+            child.terminate()
+            logger.info("子プロセスを停止しました: PID=%d", child.pid)
+        except psutil.NoSuchProcess:
+            logger.debug("子プロセスが既に存在しません: PID=%d", child.pid)
+        except psutil.AccessDenied:
+            logger.warning("子プロセスの停止権限がありません: PID=%d", child.pid)

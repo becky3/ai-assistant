@@ -5,88 +5,23 @@
 
 from __future__ import annotations
 
-import subprocess
 from argparse import Namespace
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import psutil
 import pytest
 
 from src.bot_manager import (
-    _get_child_pids_windows,
-    _get_child_pids_unix,
     _kill_process_tree,
     _start_bot,
     _stop_bot,
+    cmd_restart,
     cmd_start,
     cmd_status,
     cmd_stop,
-    cmd_restart,
     handle_command,
 )
-
-
-# ---------------------------------------------------------------------------
-# _get_child_pids テスト
-# ---------------------------------------------------------------------------
-
-
-class TestGetChildPids:
-    """子プロセスPID取得のテスト."""
-
-    def test_get_child_pids_windows_returns_pids(self) -> None:
-        """Windows: wmic出力から子プロセスPIDを取得する."""
-        mock_result = MagicMock()
-        mock_result.stdout = "ProcessId\n111\n222\n\n"
-        with patch("src.bot_manager.subprocess.run", return_value=mock_result):
-            pids = _get_child_pids_windows(9999)
-        assert pids == [111, 222]
-
-    def test_get_child_pids_windows_empty(self) -> None:
-        """Windows: 子プロセスがない場合は空リストを返す."""
-        mock_result = MagicMock()
-        mock_result.stdout = "ProcessId\n\n"
-        with patch("src.bot_manager.subprocess.run", return_value=mock_result):
-            pids = _get_child_pids_windows(9999)
-        assert pids == []
-
-    def test_get_child_pids_windows_wmic_not_found(self) -> None:
-        """Windows: wmicが見つからない場合は空リストを返す."""
-        with patch("src.bot_manager.subprocess.run", side_effect=FileNotFoundError()):
-            pids = _get_child_pids_windows(9999)
-        assert pids == []
-
-    def test_get_child_pids_unix_returns_pids(self) -> None:
-        """Unix: pgrep出力から子プロセスPIDを取得する."""
-        mock_result = MagicMock()
-        mock_result.stdout = "111\n222\n"
-        with patch("src.bot_manager.subprocess.run", return_value=mock_result):
-            pids = _get_child_pids_unix(9999)
-        assert pids == [111, 222]
-
-    def test_get_child_pids_unix_pgrep_not_found(self) -> None:
-        """Unix: pgrepが見つからない場合は空リストを返す."""
-        with patch("src.bot_manager.subprocess.run", side_effect=FileNotFoundError()):
-            pids = _get_child_pids_unix(9999)
-        assert pids == []
-
-    def test_get_child_pids_windows_wmic_timeout(self) -> None:
-        """Windows: wmicがタイムアウトした場合は空リストを返す."""
-        with patch(
-            "src.bot_manager.subprocess.run",
-            side_effect=subprocess.TimeoutExpired(cmd="wmic", timeout=10),
-        ):
-            pids = _get_child_pids_windows(9999)
-        assert pids == []
-
-    def test_get_child_pids_unix_pgrep_timeout(self) -> None:
-        """Unix: pgrepがタイムアウトした場合は空リストを返す."""
-        with patch(
-            "src.bot_manager.subprocess.run",
-            side_effect=subprocess.TimeoutExpired(cmd="pgrep", timeout=5),
-        ):
-            pids = _get_child_pids_unix(9999)
-        assert pids == []
 
 
 # ---------------------------------------------------------------------------
@@ -97,52 +32,91 @@ class TestGetChildPids:
 class TestKillProcessTree:
     """プロセスツリー停止のテスト."""
 
-    def test_windows_kills_children_then_parent(
-        self, monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Windows で子プロセスが先に停止され、その後に本体が停止される."""
-        monkeypatch.setattr("sys.platform", "win32")
+    @staticmethod
+    def _make_child(pid: int) -> MagicMock:
+        child = MagicMock()
+        child.pid = pid
+        return child
+
+    def test_kills_children_then_parent(self) -> None:
+        """子プロセスが先に停止され、その後に本体が停止される."""
         kill_order: list[int] = []
 
-        wmic_result = MagicMock()
-        wmic_result.stdout = "ProcessId\n111\n222\n\n"
-        taskkill_result = MagicMock()
+        child_a = self._make_child(111)
+        child_a.terminate.side_effect = lambda: kill_order.append(111)
+        child_b = self._make_child(222)
+        child_b.terminate.side_effect = lambda: kill_order.append(222)
 
-        def fake_run(cmd: list[str], **kwargs: object) -> MagicMock:
-            if cmd[0] == "wmic":
-                return wmic_result
-            if cmd[0] == "taskkill":
-                pid = int(cmd[2])
-                kill_order.append(pid)
-                return taskkill_result
-            return MagicMock()
+        mock_parent = MagicMock()
+        mock_parent.pid = 9999
+        mock_parent.children.return_value = [child_a, child_b]
+        mock_parent.terminate.side_effect = lambda: kill_order.append(9999)
 
-        with patch("src.bot_manager.subprocess.run", side_effect=fake_run):
+        with patch("src.bot_manager.psutil.Process", return_value=mock_parent):
             _kill_process_tree(9999)
 
-        # 子プロセス(111, 222)が先、本体(9999)が最後
         assert kill_order == [111, 222, 9999]
 
-    def test_unix_kills_children_then_parent(
-        self, monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Unix で子プロセスが先に停止され、その後に本体が停止される."""
-        monkeypatch.setattr("sys.platform", "linux")
-        kill_order: list[int] = []
+    def test_no_children_kills_parent_only(self) -> None:
+        """子プロセスがいない場合は本体のみ停止する."""
+        mock_parent = MagicMock()
+        mock_parent.pid = 9999
+        mock_parent.children.return_value = []
 
-        pgrep_result = MagicMock()
-        pgrep_result.stdout = "111\n222\n"
+        with patch("src.bot_manager.psutil.Process", return_value=mock_parent):
+            _kill_process_tree(9999)
 
-        def fake_kill(pid: int, sig: int) -> None:
-            kill_order.append(pid)
+        mock_parent.terminate.assert_called_once()
 
-        with (
-            patch("src.bot_manager.subprocess.run", return_value=pgrep_result),
-            patch("src.bot_manager.os.kill", side_effect=fake_kill),
+    def test_parent_no_such_process_returns_silently(self) -> None:
+        """親プロセスが既に存在しない場合は静かに終了する."""
+        with patch(
+            "src.bot_manager.psutil.Process",
+            side_effect=psutil.NoSuchProcess(pid=9999),
         ):
+            _kill_process_tree(9999)  # 例外が発生しないこと
+
+    def test_children_access_denied_falls_back_to_parent_kill(self) -> None:
+        """子プロセス列挙で AccessDenied が起きても本体の停止は試みる."""
+        mock_parent = MagicMock()
+        mock_parent.pid = 9999
+        mock_parent.children.side_effect = psutil.AccessDenied(pid=9999)
+
+        with patch("src.bot_manager.psutil.Process", return_value=mock_parent):
             _kill_process_tree(9999)
 
-        assert kill_order == [111, 222, 9999]
+        mock_parent.terminate.assert_called_once()
+
+    def test_children_no_such_process_returns_silently(self) -> None:
+        """子プロセス列挙で NoSuchProcess が起きた場合は親も既に消失とみなして抜ける."""
+        mock_parent = MagicMock()
+        mock_parent.pid = 9999
+        mock_parent.children.side_effect = psutil.NoSuchProcess(pid=9999)
+
+        with patch("src.bot_manager.psutil.Process", return_value=mock_parent):
+            _kill_process_tree(9999)
+
+        mock_parent.terminate.assert_not_called()
+
+    def test_parent_terminate_no_such_process_is_silent(self) -> None:
+        """親 terminate 中に親が既に消失しても例外を伝播しない."""
+        mock_parent = MagicMock()
+        mock_parent.pid = 9999
+        mock_parent.children.return_value = []
+        mock_parent.terminate.side_effect = psutil.NoSuchProcess(pid=9999)
+
+        with patch("src.bot_manager.psutil.Process", return_value=mock_parent):
+            _kill_process_tree(9999)  # 例外が発生しないこと
+
+    def test_parent_terminate_access_denied_is_silent(self) -> None:
+        """親 terminate で権限エラーが起きても例外を伝播しない."""
+        mock_parent = MagicMock()
+        mock_parent.pid = 9999
+        mock_parent.children.return_value = []
+        mock_parent.terminate.side_effect = psutil.AccessDenied(pid=9999)
+
+        with patch("src.bot_manager.psutil.Process", return_value=mock_parent):
+            _kill_process_tree(9999)  # 例外が発生しないこと
 
 
 # ---------------------------------------------------------------------------

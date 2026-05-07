@@ -6,11 +6,11 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
-import signal
 import subprocess
 import sys
 from pathlib import Path
+
+import psutil
 
 from src.process_guard import (
     BOT_READY_SIGNAL,
@@ -30,99 +30,50 @@ LOG_FILE = LOG_DIR / "bot.log"
 # ---------------------------------------------------------------------------
 
 
-def _get_child_pids_windows(pid: int) -> list[int]:
-    """Windowsで指定PIDの子プロセスPIDリストを取得する."""
-    try:
-        result = subprocess.run(
-            ["wmic", "process", "where", f"(ParentProcessId={pid})", "get", "ProcessId"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-    except FileNotFoundError:
-        logger.debug("wmic コマンドが見つかりません")
-        return []
-    except subprocess.TimeoutExpired:
-        logger.warning("wmic コマンドがタイムアウトしました")
-        return []
-
-    child_pids: list[int] = []
-    for line in result.stdout.strip().splitlines():
-        line = line.strip()
-        if line and line.isdigit():
-            child_pids.append(int(line))
-    return child_pids
-
-
-def _get_child_pids_unix(pid: int) -> list[int]:
-    """Unixで指定PIDの子プロセスPIDリストを取得する."""
-    try:
-        result = subprocess.run(
-            ["pgrep", "-P", str(pid)],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-    except FileNotFoundError:
-        logger.debug("pgrep コマンドが見つかりません")
-        return []
-    except subprocess.TimeoutExpired:
-        logger.warning("pgrep コマンドがタイムアウトしました")
-        return []
-
-    child_pids: list[int] = []
-    for line in result.stdout.strip().splitlines():
-        line = line.strip()
-        if line and line.isdigit():
-            child_pids.append(int(line))
-    return child_pids
-
-
-def _kill_pid_windows(pid: int) -> None:
-    """Windowsで指定PIDのプロセスを強制停止する."""
-    try:
-        result = subprocess.run(
-            ["taskkill", "/PID", str(pid), "/F"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0:
-            logger.info("プロセスを停止しました: PID=%d", pid)
-        else:
-            logger.warning(
-                "プロセスの停止に失敗しました: PID=%d (returncode=%d)",
-                pid, result.returncode,
-            )
-    except FileNotFoundError:
-        logger.warning("taskkill コマンドが見つかりません")
-    except subprocess.TimeoutExpired:
-        logger.warning("taskkill がタイムアウトしました: PID=%d", pid)
-
-
-def _kill_pid_unix(pid: int) -> None:
-    """Unixで指定PIDのプロセスをSIGTERMで停止する."""
-    try:
-        os.kill(pid, signal.SIGTERM)
-        logger.info("プロセスを停止しました: PID=%d", pid)
-    except ProcessLookupError:
-        logger.debug("プロセスが既に存在しません: PID=%d", pid)
-    except PermissionError:
-        logger.warning("プロセスの停止権限がありません: PID=%d", pid)
-
-
 def _kill_process_tree(pid: int) -> None:
-    """指定PIDのプロセスツリー（子プロセス→本体の順）を外部から停止する."""
-    if sys.platform == "win32":
-        child_pids = _get_child_pids_windows(pid)
-        for child_pid in child_pids:
-            _kill_pid_windows(child_pid)
-        _kill_pid_windows(pid)
-    else:
-        child_pids = _get_child_pids_unix(pid)
-        for child_pid in child_pids:
-            _kill_pid_unix(child_pid)
-        _kill_pid_unix(pid)
+    """指定PIDのプロセスツリー（子プロセス→本体の順）を外部から停止する.
+
+    親・子のいずれも既に取得済みの psutil.Process オブジェクトに対して terminate() を
+    呼ぶことで、PID → Process の再ルックアップによる PID 再利用レースの窓を縮小する。
+    親プロセスが既に消失している場合は kill 不要のため早期 return する。
+    子プロセスの列挙に失敗した場合でも、本体プロセスの停止は試行する。
+
+    Unix では SIGTERM、Windows では TerminateProcess（強制終了）が送信される
+    （いずれも psutil の `Process.terminate()` に委譲）。
+    """
+    try:
+        parent = psutil.Process(pid)
+    except psutil.NoSuchProcess:
+        logger.debug("プロセスが既に存在しません: PID=%d", pid)
+        return
+
+    children: list[psutil.Process] = []
+    try:
+        children = parent.children(recursive=False)
+    except psutil.NoSuchProcess:
+        logger.debug("プロセスが既に存在しません: PID=%d", pid)
+        return
+    except psutil.AccessDenied:
+        logger.warning(
+            "子プロセス列挙の権限がありません。本体のみ停止を試みます: PID=%d", pid,
+        )
+
+    for child in children:
+        try:
+            child.terminate()
+            logger.info("プロセスを停止しました: PID=%d", child.pid)
+        except psutil.NoSuchProcess:
+            logger.debug("プロセスが既に存在しません: PID=%d", child.pid)
+        except psutil.AccessDenied:
+            logger.warning("プロセスの停止権限がありません: PID=%d", child.pid)
+
+    try:
+        parent.terminate()
+        logger.info("プロセスを停止しました: PID=%d", pid)
+    except psutil.NoSuchProcess:
+        logger.debug("プロセスが既に存在しません: PID=%d", pid)
+    except psutil.AccessDenied:
+        logger.warning("プロセスの停止権限がありません: PID=%d", pid)
 
 
 # ---------------------------------------------------------------------------

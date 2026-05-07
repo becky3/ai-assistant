@@ -6,17 +6,16 @@
 from __future__ import annotations
 
 import os
-import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import psutil
 import pytest
 
 from src.process_guard import (
-    _is_process_alive_unix,
-    _is_process_alive_windows,
     check_already_running,
     cleanup_children,
+    is_process_alive,
     read_pid_file,
     remove_pid_file,
     write_pid_file,
@@ -143,85 +142,22 @@ class TestPidFile:
 
 
 # ---------------------------------------------------------------------------
-# プロセス生存確認テスト (Unix)
+# プロセス生存確認テスト
 # ---------------------------------------------------------------------------
 
 
-class TestIsProcessAliveUnix:
-    """Unix系OSでのプロセス生存確認."""
+class TestIsProcessAlive:
+    """プロセス生存確認."""
 
     def test_alive_process_returns_true(self) -> None:
-        """os.kill(pid, 0) が成功した場合はTrue."""
-        with patch("src.process_guard.os.kill") as mock_kill:
-            mock_kill.return_value = None
-            assert _is_process_alive_unix(12345) is True
-            mock_kill.assert_called_once_with(12345, 0)
+        """psutil.pid_exists が True を返す場合は True."""
+        with patch("src.process_guard.psutil.pid_exists", return_value=True):
+            assert is_process_alive(12345) is True
 
     def test_dead_process_returns_false(self) -> None:
-        """ProcessLookupError が発生した場合はFalse."""
-        with patch("src.process_guard.os.kill") as mock_kill:
-            mock_kill.side_effect = ProcessLookupError()
-            assert _is_process_alive_unix(12345) is False
-
-    def test_permission_error_returns_true(self) -> None:
-        """PermissionError が発生した場合はTrue（プロセスは存在する）."""
-        with patch("src.process_guard.os.kill") as mock_kill:
-            mock_kill.side_effect = PermissionError()
-            assert _is_process_alive_unix(12345) is True
-
-
-# ---------------------------------------------------------------------------
-# プロセス生存確認テスト (Windows)
-# ---------------------------------------------------------------------------
-
-
-class TestIsProcessAliveWindows:
-    """Windowsでのプロセス生存確認."""
-
-    def test_alive_process_returns_true(self) -> None:
-        """tasklist出力にPIDが含まれている場合はTrue."""
-        mock_result = MagicMock()
-        mock_result.stdout = "python.exe                   12345 Console  1    50,000 K\n"
-        with patch("src.process_guard.subprocess.run", return_value=mock_result):
-            assert _is_process_alive_windows(12345) is True
-
-    def test_dead_process_returns_false(self) -> None:
-        """tasklist が "INFO: No tasks" を返す場合はFalse."""
-        mock_result = MagicMock()
-        mock_result.stdout = "INFO: No tasks are running which match the specified criteria.\n"
-        with patch("src.process_guard.subprocess.run", return_value=mock_result):
-            assert _is_process_alive_windows(12345) is False
-
-    def test_tasklist_not_found_returns_false(self) -> None:
-        """tasklistコマンドが見つからない場合はFalse."""
-        with patch(
-            "src.process_guard.subprocess.run",
-            side_effect=FileNotFoundError(),
-        ):
-            assert _is_process_alive_windows(12345) is False
-
-    def test_tasklist_timeout_returns_false(self) -> None:
-        """tasklistがタイムアウトした場合はFalse."""
-        with patch(
-            "src.process_guard.subprocess.run",
-            side_effect=subprocess.TimeoutExpired(cmd="tasklist", timeout=5),
-        ):
-            assert _is_process_alive_windows(12345) is False
-
-    def test_pid_not_in_output_returns_false(self) -> None:
-        """tasklist出力にPIDが含まれていない場合はFalse."""
-        mock_result = MagicMock()
-        mock_result.stdout = "python.exe                   99999 Console  1    50,000 K\n"
-        with patch("src.process_guard.subprocess.run", return_value=mock_result):
-            assert _is_process_alive_windows(12345) is False
-
-    def test_partial_pid_match_returns_false(self) -> None:
-        """PIDが別PIDの部分文字列として含まれる場合はFalse（誤判定防止）."""
-        mock_result = MagicMock()
-        # PID=123 を検索するが、出力には 12345 しかない
-        mock_result.stdout = "python.exe                   12345 Console  1    50,000 K\n"
-        with patch("src.process_guard.subprocess.run", return_value=mock_result):
-            assert _is_process_alive_windows(123) is False
+        """psutil.pid_exists が False を返す場合は False."""
+        with patch("src.process_guard.psutil.pid_exists", return_value=False):
+            assert is_process_alive(12345) is False
 
 
 # ---------------------------------------------------------------------------
@@ -277,116 +213,88 @@ class TestCheckAlreadyRunning:
 class TestCleanupChildren:
     """子プロセスクリーンアップ."""
 
-    def test_unix_cleanup_sends_sigterm(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Unix: 子プロセスにSIGTERMを送信する."""
-        import signal as sig
+    @staticmethod
+    def _make_child(pid: int) -> MagicMock:
+        child = MagicMock()
+        child.pid = pid
+        return child
 
-        mock_result = MagicMock()
-        mock_result.stdout = "111\n222\n"
-        monkeypatch.setattr("sys.platform", "linux")
+    def test_terminates_all_children(self) -> None:
+        """子プロセスすべてに terminate() が送信される."""
+        child_a = self._make_child(111)
+        child_b = self._make_child(222)
+        mock_parent = MagicMock()
+        mock_parent.children.return_value = [child_a, child_b]
 
-        with (
-            patch("src.process_guard.subprocess.run", return_value=mock_result),
-            patch("src.process_guard.os.kill") as mock_kill,
-        ):
-            cleanup_children()
-            assert mock_kill.call_count == 2
-            mock_kill.assert_any_call(111, sig.SIGTERM)
-            mock_kill.assert_any_call(222, sig.SIGTERM)
-
-    def test_windows_cleanup_uses_taskkill(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Windows: wmic + taskkill で子プロセスを停止する."""
-        wmic_result = MagicMock()
-        wmic_result.stdout = "ProcessId\n111\n222\n\n"
-        taskkill_result = MagicMock()
-        monkeypatch.setattr("sys.platform", "win32")
-
-        with patch("src.process_guard.subprocess.run") as mock_run:
-            mock_run.side_effect = [wmic_result, taskkill_result, taskkill_result]
+        with patch("src.process_guard.psutil.Process", return_value=mock_parent):
             cleanup_children()
 
-            # wmic 1回 + taskkill 2回 = 3回
-            assert mock_run.call_count == 3
+        mock_parent.children.assert_called_once_with(recursive=False)
+        child_a.terminate.assert_called_once()
+        child_b.terminate.assert_called_once()
 
-    def test_cleanup_failure_does_not_raise(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """クリーンアップ失敗時に例外を送出しない."""
-        monkeypatch.setattr("sys.platform", "linux")
-
-        with patch(
-            "src.process_guard.subprocess.run",
-            side_effect=FileNotFoundError(),
-        ):
-            cleanup_children()  # 例外が発生しないこと
-
-    def test_unix_no_children(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_no_children_is_noop(self) -> None:
         """子プロセスがない場合は何もしない."""
-        mock_result = MagicMock()
-        mock_result.stdout = ""
-        monkeypatch.setattr("sys.platform", "linux")
+        mock_parent = MagicMock()
+        mock_parent.children.return_value = []
 
-        with (
-            patch("src.process_guard.subprocess.run", return_value=mock_result),
-            patch("src.process_guard.os.kill") as mock_kill,
-        ):
-            cleanup_children()
-            mock_kill.assert_not_called()
+        with patch("src.process_guard.psutil.Process", return_value=mock_parent):
+            cleanup_children()  # 例外が発生しないこと
 
-    def test_windows_wmic_not_found(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Windows: wmicが見つからない場合はスキップ."""
-        monkeypatch.setattr("sys.platform", "win32")
+    def test_no_such_process_is_silent(self) -> None:
+        """対象プロセスが存在しない場合は静かにスキップする."""
 
         with patch(
-            "src.process_guard.subprocess.run",
-            side_effect=FileNotFoundError(),
+            "src.process_guard.psutil.Process",
+            side_effect=psutil.NoSuchProcess(pid=12345),
         ):
             cleanup_children()  # 例外が発生しないこと
 
-    def test_unix_excludes_protected_pids(
-        self, monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Unix: exclude_pids に含まれる子プロセスは kill されない."""
-        import signal as sig
+    def test_access_denied_is_silent(self) -> None:
+        """親プロセスの情報取得で権限エラーが起きた場合も例外を伝播しない."""
 
-        mock_result = MagicMock()
-        mock_result.stdout = "111\n222\n333\n"
-        monkeypatch.setattr("sys.platform", "linux")
-
-        with (
-            patch("src.process_guard.subprocess.run", return_value=mock_result),
-            patch("src.process_guard.os.kill") as mock_kill,
+        with patch(
+            "src.process_guard.psutil.Process",
+            side_effect=psutil.AccessDenied(pid=12345),
         ):
+            cleanup_children()  # 例外が発生しないこと
+
+    def test_child_already_gone_is_silent(self) -> None:
+        """terminate 中に子プロセスが消えても例外を伝播しない."""
+
+        child = self._make_child(111)
+        child.terminate.side_effect = psutil.NoSuchProcess(pid=111)
+        mock_parent = MagicMock()
+        mock_parent.children.return_value = [child]
+
+        with patch("src.process_guard.psutil.Process", return_value=mock_parent):
+            cleanup_children()  # 例外が発生しないこと
+
+    def test_child_access_denied_is_silent(self) -> None:
+        """terminate で権限エラーが起きても例外を伝播せず次の子に進む."""
+
+        child_a = self._make_child(111)
+        child_a.terminate.side_effect = psutil.AccessDenied(pid=111)
+        child_b = self._make_child(222)
+        mock_parent = MagicMock()
+        mock_parent.children.return_value = [child_a, child_b]
+
+        with patch("src.process_guard.psutil.Process", return_value=mock_parent):
+            cleanup_children()
+
+        child_b.terminate.assert_called_once()  # 後続の子は処理される
+
+    def test_excludes_protected_pids(self) -> None:
+        """exclude_pids に含まれる子プロセスは terminate されない."""
+        child_a = self._make_child(111)
+        child_b = self._make_child(222)
+        child_c = self._make_child(333)
+        mock_parent = MagicMock()
+        mock_parent.children.return_value = [child_a, child_b, child_c]
+
+        with patch("src.process_guard.psutil.Process", return_value=mock_parent):
             cleanup_children(exclude_pids={222})
-            assert mock_kill.call_count == 2
-            mock_kill.assert_any_call(111, sig.SIGTERM)
-            mock_kill.assert_any_call(333, sig.SIGTERM)
-            for call in mock_kill.call_args_list:
-                assert call.args[0] != 222
 
-    def test_windows_excludes_protected_pids(
-        self, monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Windows: exclude_pids に含まれる子プロセスは taskkill されない."""
-        wmic_result = MagicMock()
-        wmic_result.stdout = "ProcessId\n111\n222\n333\n\n"
-        taskkill_result = MagicMock()
-        monkeypatch.setattr("sys.platform", "win32")
-
-        with patch("src.process_guard.subprocess.run") as mock_run:
-            mock_run.side_effect = [
-                wmic_result, taskkill_result, taskkill_result,
-            ]
-            cleanup_children(exclude_pids={222})
-
-            # wmic 1回 + taskkill 2回（111, 333）= 3回。222 はスキップ
-            assert mock_run.call_count == 3
-            taskkill_calls = [
-                c for c in mock_run.call_args_list if c.args[0][0] == "taskkill"
-            ]
-            killed_pids = {int(c.args[0][2]) for c in taskkill_calls}
-            assert killed_pids == {111, 333}
+        child_a.terminate.assert_called_once()
+        child_b.terminate.assert_not_called()
+        child_c.terminate.assert_called_once()
