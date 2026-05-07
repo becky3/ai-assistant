@@ -13,7 +13,6 @@ import psutil
 import pytest
 
 from src.bot_manager import (
-    _kill_pid,
     _kill_process_tree,
     _start_bot,
     _stop_bot,
@@ -23,38 +22,6 @@ from src.bot_manager import (
     cmd_stop,
     handle_command,
 )
-
-
-# ---------------------------------------------------------------------------
-# _kill_pid テスト
-# ---------------------------------------------------------------------------
-
-
-class TestKillPid:
-    """単一プロセス停止のテスト."""
-
-    def test_terminate_called(self) -> None:
-        """対象プロセスに terminate() が送信される."""
-        mock_proc = MagicMock()
-        with patch("src.bot_manager.psutil.Process", return_value=mock_proc):
-            _kill_pid(12345)
-        mock_proc.terminate.assert_called_once()
-
-    def test_no_such_process_is_silent(self) -> None:
-        """既に存在しないプロセスは静かにスキップする."""
-        with patch(
-            "src.bot_manager.psutil.Process",
-            side_effect=psutil.NoSuchProcess(pid=12345),
-        ):
-            _kill_pid(12345)  # 例外が発生しないこと
-
-    def test_access_denied_is_silent(self) -> None:
-        """権限エラーは警告のみで例外を伝播しない."""
-        with patch(
-            "src.bot_manager.psutil.Process",
-            side_effect=psutil.AccessDenied(pid=12345),
-        ):
-            _kill_pid(12345)  # 例外が発生しないこと
 
 
 # ---------------------------------------------------------------------------
@@ -81,75 +48,75 @@ class TestKillProcessTree:
         child_b.terminate.side_effect = lambda: kill_order.append(222)
 
         mock_parent = MagicMock()
+        mock_parent.pid = 9999
         mock_parent.children.return_value = [child_a, child_b]
+        mock_parent.terminate.side_effect = lambda: kill_order.append(9999)
 
-        def fake_kill_pid(pid: int) -> None:
-            kill_order.append(pid)
-
-        with (
-            patch("src.bot_manager.psutil.Process", return_value=mock_parent),
-            patch("src.bot_manager._kill_pid", side_effect=fake_kill_pid),
-        ):
+        with patch("src.bot_manager.psutil.Process", return_value=mock_parent):
             _kill_process_tree(9999)
 
         assert kill_order == [111, 222, 9999]
 
     def test_no_children_kills_parent_only(self) -> None:
         """子プロセスがいない場合は本体のみ停止する."""
-        kill_order: list[int] = []
-
         mock_parent = MagicMock()
+        mock_parent.pid = 9999
         mock_parent.children.return_value = []
 
-        def fake_kill_pid(pid: int) -> None:
-            kill_order.append(pid)
-
-        with (
-            patch("src.bot_manager.psutil.Process", return_value=mock_parent),
-            patch("src.bot_manager._kill_pid", side_effect=fake_kill_pid),
-        ):
+        with patch("src.bot_manager.psutil.Process", return_value=mock_parent):
             _kill_process_tree(9999)
 
-        assert kill_order == [9999]
+        mock_parent.terminate.assert_called_once()
 
     def test_parent_no_such_process_returns_silently(self) -> None:
-        """親プロセスが既に存在しない場合は静かに終了する（_kill_pid も呼ばない）."""
-        with (
-            patch(
-                "src.bot_manager.psutil.Process",
-                side_effect=psutil.NoSuchProcess(pid=9999),
-            ),
-            patch("src.bot_manager._kill_pid") as mock_kill_pid,
+        """親プロセスが既に存在しない場合は静かに終了する."""
+        with patch(
+            "src.bot_manager.psutil.Process",
+            side_effect=psutil.NoSuchProcess(pid=9999),
         ):
-            _kill_process_tree(9999)
-
-        mock_kill_pid.assert_not_called()
+            _kill_process_tree(9999)  # 例外が発生しないこと
 
     def test_children_access_denied_falls_back_to_parent_kill(self) -> None:
         """子プロセス列挙で AccessDenied が起きても本体の停止は試みる."""
         mock_parent = MagicMock()
+        mock_parent.pid = 9999
         mock_parent.children.side_effect = psutil.AccessDenied(pid=9999)
 
-        with (
-            patch("src.bot_manager.psutil.Process", return_value=mock_parent),
-            patch("src.bot_manager._kill_pid") as mock_kill_pid,
-        ):
+        with patch("src.bot_manager.psutil.Process", return_value=mock_parent):
             _kill_process_tree(9999)
 
-        mock_kill_pid.assert_called_once_with(9999)
+        mock_parent.terminate.assert_called_once()
 
     def test_children_no_such_process_returns_silently(self) -> None:
         """子プロセス列挙で NoSuchProcess が起きた場合は親も既に消失とみなして抜ける."""
         mock_parent = MagicMock()
+        mock_parent.pid = 9999
         mock_parent.children.side_effect = psutil.NoSuchProcess(pid=9999)
 
-        with (
-            patch("src.bot_manager.psutil.Process", return_value=mock_parent),
-            patch("src.bot_manager._kill_pid") as mock_kill_pid,
-        ):
+        with patch("src.bot_manager.psutil.Process", return_value=mock_parent):
             _kill_process_tree(9999)
 
-        mock_kill_pid.assert_not_called()
+        mock_parent.terminate.assert_not_called()
+
+    def test_parent_terminate_no_such_process_is_silent(self) -> None:
+        """親 terminate 中に親が既に消失しても例外を伝播しない."""
+        mock_parent = MagicMock()
+        mock_parent.pid = 9999
+        mock_parent.children.return_value = []
+        mock_parent.terminate.side_effect = psutil.NoSuchProcess(pid=9999)
+
+        with patch("src.bot_manager.psutil.Process", return_value=mock_parent):
+            _kill_process_tree(9999)  # 例外が発生しないこと
+
+    def test_parent_terminate_access_denied_is_silent(self) -> None:
+        """親 terminate で権限エラーが起きても例外を伝播しない."""
+        mock_parent = MagicMock()
+        mock_parent.pid = 9999
+        mock_parent.children.return_value = []
+        mock_parent.terminate.side_effect = psutil.AccessDenied(pid=9999)
+
+        with patch("src.bot_manager.psutil.Process", return_value=mock_parent):
+            _kill_process_tree(9999)  # 例外が発生しないこと
 
 
 # ---------------------------------------------------------------------------

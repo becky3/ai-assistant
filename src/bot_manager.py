@@ -30,31 +30,16 @@ LOG_FILE = LOG_DIR / "bot.log"
 # ---------------------------------------------------------------------------
 
 
-def _kill_pid(pid: int) -> None:
-    """指定PIDのプロセスを停止する.
-
-    Unix では SIGTERM を送り、子プロセスにグレースフル停止の機会を与える。
-    Windows では psutil.terminate() が TerminateProcess を呼ぶため強制終了となる
-    （Windows API にグレースフル停止に相当する仕組みがないため）。
-    実装は psutil の `Process.terminate()` に委譲する。
-    """
-    try:
-        proc = psutil.Process(pid)
-        proc.terminate()
-        logger.info("プロセスを停止しました: PID=%d", pid)
-    except psutil.NoSuchProcess:
-        logger.debug("プロセスが既に存在しません: PID=%d", pid)
-    except psutil.AccessDenied:
-        logger.warning("プロセスの停止権限がありません: PID=%d", pid)
-
-
 def _kill_process_tree(pid: int) -> None:
     """指定PIDのプロセスツリー（子プロセス→本体の順）を外部から停止する.
 
-    内部では psutil.Process オブジェクトを直接使い、PID → Process の再ルックアップを
-    避けることで PID 再利用レースの窓を縮小する。
+    親・子のいずれも既に取得済みの psutil.Process オブジェクトに対して terminate() を
+    呼ぶことで、PID → Process の再ルックアップによる PID 再利用レースの窓を縮小する。
     親プロセスが既に消失している場合は kill 不要のため早期 return する。
     子プロセスの列挙に失敗した場合でも、本体プロセスの停止は試行する。
+
+    Unix では SIGTERM、Windows では TerminateProcess（強制終了）が送信される
+    （いずれも psutil の `Process.terminate()` に委譲）。
     """
     try:
         parent = psutil.Process(pid)
@@ -82,7 +67,13 @@ def _kill_process_tree(pid: int) -> None:
         except psutil.AccessDenied:
             logger.warning("プロセスの停止権限がありません: PID=%d", child.pid)
 
-    _kill_pid(pid)
+    try:
+        parent.terminate()
+        logger.info("プロセスを停止しました: PID=%d", pid)
+    except psutil.NoSuchProcess:
+        logger.debug("プロセスが既に存在しません: PID=%d", pid)
+    except psutil.AccessDenied:
+        logger.warning("プロセスの停止権限がありません: PID=%d", pid)
 
 
 # ---------------------------------------------------------------------------
