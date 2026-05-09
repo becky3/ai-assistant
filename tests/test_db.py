@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import AsyncGenerator
 
 import pytest
@@ -66,6 +67,15 @@ async def test_init_db_and_get_session(monkeypatch: pytest.MonkeyPatch) -> None:
     """init_db/get_session 経由でテーブル作成とセッション取得ができる."""
     # .env.example をベースに読み込み、DATABASE_URL のみテスト用にオーバーライド
     monkeypatch.setenv("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+    # .env.example は主要動作環境 (Windows) 形式の絶対パス (C:/...) を持つ。
+    # Linux/macOS では Path("C:/...").is_absolute() が False を返し
+    # _validate_remote_control_repositories の絶対パス判定で弾かれるため、
+    # POSIX 互換の絶対パスにオーバーライドする。
+    if sys.platform != "win32":
+        monkeypatch.setenv(
+            "REMOTE_CONTROL_REPOSITORIES",
+            "ai-assistant=/path/to/ai-assistant,agent-commons=/path/to/agent-commons",
+        )
     monkeypatch.setattr(
         _EnvLoader, "model_config",
         {**_EnvLoader.model_config, "env_file": ".env.example"},

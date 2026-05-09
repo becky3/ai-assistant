@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -51,9 +52,19 @@ def test_settings_no_defaults_for_toml_fields() -> None:
             )
 
 
-def test_get_settings_loads_from_env_and_toml() -> None:
+def test_get_settings_loads_from_env_and_toml(monkeypatch: pytest.MonkeyPatch) -> None:
     """get_settings() が .env と config.toml から統合して読み込める."""
     from src.config.settings import get_settings
+
+    # .env.example は主要動作環境 (Windows) 形式の絶対パス (C:/...) を持つ。
+    # Linux/macOS では Path("C:/...").is_absolute() が False を返し
+    # _validate_remote_control_repositories の絶対パス判定で弾かれるため、
+    # POSIX 互換の絶対パスにオーバーライドする。
+    if sys.platform != "win32":
+        monkeypatch.setenv(
+            "REMOTE_CONTROL_REPOSITORIES",
+            "ai-assistant=/path/to/ai-assistant,agent-commons=/path/to/agent-commons",
+        )
 
     # .env の代わりに git 管理されている .env.example を使用
     get_settings.cache_clear()
@@ -65,6 +76,32 @@ def test_get_settings_loads_from_env_and_toml() -> None:
     assert settings.online_llm_provider in ("openai", "anthropic")
     # config.toml から
     assert settings.openai_model
+
+
+def test_env_example_has_no_empty_values() -> None:
+    """`.env.example` の全 KEY=value 行で value が非空であること.
+
+    Issue #837: `.env.example` は新規セットアップ時のテンプレートとして
+    各キーで「何を入れるか」「どんなフォーマットか」を読み取れる必要がある。
+    将来キー追加時に空欄プレースホルダーが混入することを防ぐためのガードレール。
+    """
+    env_example_path = Path(".env.example")
+    assert env_example_path.is_file(), ".env.example が見つかりません"
+
+    empty_keys = []
+    for raw in env_example_path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        if not value.strip():
+            empty_keys.append(key.strip())
+
+    assert not empty_keys, (
+        f".env.example の以下のキーが空欄です（フォーマット例の汎用ダミー値を設定してください）: {empty_keys}"
+    )
 
 
 def test_toml_config_loads() -> None:
