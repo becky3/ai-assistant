@@ -57,12 +57,15 @@ class Summarizer:
             description: 記事の概要。空文字の場合は「なし」として扱う。
             lang: ログ記録用の言語識別子（デフォルト: ""）。
         """
+        logger.info("summarize start: url=%s, lang=%s, desc_len=%d", url, lang, len(description))
         prompt = SUMMARIZE_PROMPT.format(title=title, url=url, description=description or "なし")
         try:
+            logger.debug("llm.complete start: url=%s", url)
             response = await self._llm.complete(
                 [Message(role="user", content=prompt)],
                 reasoning_effort=self._reasoning_effort,
             )
+            logger.debug("llm.complete complete: url=%s", url)
             content = response.content.strip()
             if not content:
                 logger.warning(
@@ -70,10 +73,13 @@ class Summarizer:
                     url,
                     lang,
                 )
+                logger.info("summarize complete: url=%s, result=empty_fallback_to_title", url)
                 return title
+            logger.info("summarize complete: url=%s, summary_len=%d", url, len(content))
             return content
         except Exception:
             logger.exception(
                 "Failed to summarize article: url=%s, lang=%s", url, lang
             )
+            logger.info("summarize complete: url=%s, result=error_fallback_to_title", url)
             return title

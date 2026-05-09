@@ -41,6 +41,7 @@ async def call_claude(
     if allowed_tools:
         cmd.extend(["--allowedTools", allowed_tools])
 
+    logger.info("call_claude start: prompt_len=%d, timeout=%d", len(prompt), timeout)
     logger.debug("Claude CLI 実行: %s", " ".join(cmd[:4]))
 
     proc = await asyncio.create_subprocess_exec(
@@ -74,4 +75,5 @@ async def call_claude(
         logger.warning(msg)
         raise RuntimeError(msg)
 
+    logger.info("call_claude complete: response_len=%d", len(response))
     return response

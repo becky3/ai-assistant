@@ -74,22 +74,39 @@ class ThreadHistoryService:
         Returns:
             Message のリスト。取得失敗時は None（呼び出し元でフォールバック判定）。
         """
+        logger.info(
+            "fetch_thread_messages start: channel=%s, thread_ts=%s",
+            channel, thread_ts,
+        )
         try:
+            logger.debug("slack conversations_replies start: channel=%s, thread_ts=%s", channel, thread_ts)
             result = await self._client.conversations_replies(
                 channel=channel,
                 ts=thread_ts,
                 limit=self._limit,
             )
             raw_messages: list[dict[str, Any]] = result.get("messages", [])
+            logger.debug(
+                "slack conversations_replies complete: channel=%s, thread_ts=%s, raw_count=%d",
+                channel, thread_ts, len(raw_messages),
+            )
         except Exception:
             logger.exception(
                 "Failed to fetch thread replies: channel=%s, thread_ts=%s",
                 channel,
                 thread_ts,
             )
+            logger.info(
+                "fetch_thread_messages complete: channel=%s, thread_ts=%s, result=error",
+                channel, thread_ts,
+            )
             return None
 
         if not raw_messages:
+            logger.info(
+                "fetch_thread_messages complete: channel=%s, thread_ts=%s, count=0",
+                channel, thread_ts,
+            )
             return []
 
         # 今回のトリガーメッセージを除外（ChatService 側で追加されるため）
@@ -131,4 +148,8 @@ class ThreadHistoryService:
 
             messages.append(Message(role=role, content=content))
 
+        logger.info(
+            "fetch_thread_messages complete: channel=%s, thread_ts=%s, count=%d",
+            channel, thread_ts, len(messages),
+        )
         return messages

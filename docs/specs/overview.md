@@ -21,6 +21,7 @@ AI Assistantは、Slack上で動作するAIアシスタントである。
 | 10 | Botプロセスガード | PIDファイルによるプロセス管理で多重起動防止・管理コマンドを提供 | [bot-process-guard.md](infrastructure/bot-process-guard.md) |
 | 11 | 設定管理 | アプリケーション設定の3層分離（シークレット・環境依存値・共通設定値） | [config-management.md](infrastructure/config-management.md) |
 | 12 | Remote Control 起動 | Slack コマンドからホスト PC 上の指定リポジトリで `claude remote-control` を起動し、接続 URL を返す | [remote-control-launch.md](features/remote-control-launch.md) |
+| 13 | ログ出力 | 全 handler / 主要サービスのタイミングログによる観測性向上 | [logging.md](infrastructure/logging.md) |
 
 ## 3. 技術スタック
 

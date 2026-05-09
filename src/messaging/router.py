@@ -143,29 +143,43 @@ async def _handle_feed_add(
     collector: FeedCollector, urls: list[str], category: str
 ) -> str:
     """フィード追加処理."""
+    logger.info("handle_feed_add start: urls=%d, category=%s", len(urls), category)
+
     if not urls:
+        logger.info("handle_feed_add complete: result=empty_urls")
         return "エラー: URLを指定してください。\n例: `@bot feed add https://example.com/rss [カテゴリ]`"
 
+    success_count = 0
+    error_count = 0
     results: list[str] = []
     for url in urls:
         try:
             name = await collector.fetch_feed_title(url)
             feed = await collector.add_feed(url, name, category)
             results.append(f"✅ {feed.url} を追加しました（名前: {feed.name}、カテゴリ: {feed.category}）")
+            success_count += 1
         except ValueError as e:
             results.append(f"❌ {url}: {e}")
+            error_count += 1
         except Exception:
             logger.exception("Failed to add feed: %s", url)
             results.append(f"❌ {url}: 追加中にエラーが発生しました")
+            error_count += 1
 
+    logger.info(
+        "handle_feed_add complete: success=%d, error=%d, total=%d",
+        success_count, error_count, len(urls),
+    )
     return "\n".join(results)
 
 
 async def _handle_feed_list(collector: FeedCollector) -> str:
     """フィード一覧表示処理."""
+    logger.info("handle_feed_list start")
     enabled, disabled = await collector.list_feeds()
 
     if not enabled and not disabled:
+        logger.info("handle_feed_list complete: enabled=0, disabled=0")
         return "フィードが登録されていません"
 
     lines: list[str] = []
@@ -181,63 +195,100 @@ async def _handle_feed_list(collector: FeedCollector) -> str:
         for feed in disabled:
             lines.append(f"• {feed.url} — {feed.name}")
 
+    logger.info(
+        "handle_feed_list complete: enabled=%d, disabled=%d",
+        len(enabled), len(disabled),
+    )
     return "\n".join(lines)
 
 
 async def _handle_feed_delete(collector: FeedCollector, urls: list[str]) -> str:
     """フィード削除処理."""
+    logger.info("handle_feed_delete start: urls=%d", len(urls))
     if not urls:
+        logger.info("handle_feed_delete complete: result=empty_urls")
         return "エラー: URLを指定してください。\n例: `@bot feed delete https://example.com/rss`"
 
+    success_count = 0
+    error_count = 0
     results: list[str] = []
     for url in urls:
         try:
             await collector.delete_feed(url)
             results.append(f"✅ {url} を削除しました")
+            success_count += 1
         except ValueError as e:
             results.append(f"❌ {url}: {e}")
+            error_count += 1
         except Exception:
             logger.exception("Failed to delete feed: %s", url)
             results.append(f"❌ {url}: 削除中にエラーが発生しました")
+            error_count += 1
 
+    logger.info(
+        "handle_feed_delete complete: success=%d, error=%d, total=%d",
+        success_count, error_count, len(urls),
+    )
     return "\n".join(results)
 
 
 async def _handle_feed_enable(collector: FeedCollector, urls: list[str]) -> str:
     """フィード有効化処理."""
+    logger.info("handle_feed_enable start: urls=%d", len(urls))
     if not urls:
+        logger.info("handle_feed_enable complete: result=empty_urls")
         return "エラー: URLを指定してください。\n例: `@bot feed enable https://example.com/rss`"
 
+    success_count = 0
+    error_count = 0
     results: list[str] = []
     for url in urls:
         try:
             await collector.enable_feed(url)
             results.append(f"✅ {url} を有効化しました")
+            success_count += 1
         except ValueError as e:
             results.append(f"❌ {url}: {e}")
+            error_count += 1
         except Exception:
             logger.exception("Failed to enable feed: %s", url)
             results.append(f"❌ {url}: 有効化中にエラーが発生しました")
+            error_count += 1
 
+    logger.info(
+        "handle_feed_enable complete: success=%d, error=%d, total=%d",
+        success_count, error_count, len(urls),
+    )
     return "\n".join(results)
 
 
 async def _handle_feed_disable(collector: FeedCollector, urls: list[str]) -> str:
     """フィード無効化処理."""
+    logger.info("handle_feed_disable start: urls=%d", len(urls))
     if not urls:
+        logger.info("handle_feed_disable complete: result=empty_urls")
         return "エラー: URLを指定してください。\n例: `@bot feed disable https://example.com/rss`"
 
+    success_count = 0
+    error_count = 0
     results: list[str] = []
     for url in urls:
         try:
             await collector.disable_feed(url)
             results.append(f"✅ {url} を無効化しました")
+            success_count += 1
         except ValueError as e:
             results.append(f"❌ {url}: {e}")
+            error_count += 1
         except Exception:
             logger.exception("Failed to disable feed: %s", url)
             results.append(f"❌ {url}: 無効化中にエラーが発生しました")
+            error_count += 1
 
+    logger.info(
+        "handle_feed_disable complete: success=%d, error=%d, total=%d",
+        success_count, error_count, len(urls),
+    )
     return "\n".join(results)
 
 
@@ -367,8 +418,10 @@ async def _handle_feed_import(
     bot_token: str,
 ) -> str:
     """CSVファイルからフィードを一括インポートする."""
+    logger.info("handle_feed_import start: files=%d", len(files) if files else 0)
     rows, error = await _download_and_parse_csv(files, bot_token)
     if error is not None:
+        logger.info("handle_feed_import complete: result=download_or_parse_error")
         return error
 
     success_count, errors = await _import_feeds_from_rows(collector, rows)
@@ -380,6 +433,10 @@ async def _handle_feed_import(
     ]
     result_lines.extend(_format_error_details(errors))
 
+    logger.info(
+        "handle_feed_import complete: success=%d, error=%d, total=%d",
+        success_count, len(errors), len(rows),
+    )
     return "\n".join(result_lines)
 
 
@@ -389,14 +446,17 @@ async def _handle_feed_replace(
     bot_token: str,
 ) -> str:
     """CSVファイルで全フィードを置換する（全削除→再登録）."""
+    logger.info("handle_feed_replace start: files=%d", len(files) if files else 0)
     rows, error = await _download_and_parse_csv(files, bot_token)
     if error is not None:
+        logger.info("handle_feed_replace complete: result=download_or_parse_error")
         return error
 
     try:
         deleted_count = await collector.delete_all_feeds()
     except Exception:
         logger.exception("Failed to delete all feeds in replace")
+        logger.info("handle_feed_replace complete: result=delete_all_failed")
         return (
             "*フィード置換エラー*\n"
             "🗑️ 既存フィードの削除中に予期せぬエラーが発生しました。\n"
@@ -407,6 +467,10 @@ async def _handle_feed_replace(
         success_count, errors = await _import_feeds_from_rows(collector, rows)
     except Exception:
         logger.exception("Failed to import feeds after delete_all in replace")
+        logger.info(
+            "handle_feed_replace complete: result=import_failed, deleted=%d",
+            deleted_count,
+        )
         return (
             "*フィード置換エラー*\n"
             f"🗑️ 削除: {deleted_count}件（既存フィード）\n"
@@ -421,6 +485,10 @@ async def _handle_feed_replace(
     ]
     result_lines.extend(_format_error_details(errors))
 
+    logger.info(
+        "handle_feed_replace complete: deleted=%d, success=%d, error=%d, total=%d",
+        deleted_count, success_count, len(errors), len(rows),
+    )
     return "\n".join(result_lines)
 
 
@@ -431,9 +499,11 @@ async def _handle_feed_export_via_port(
     channel: str,
 ) -> str:
     """全フィードをCSV形式でエクスポートする（MessagingPort経由）."""
+    logger.info("handle_feed_export start")
     feeds = await collector.get_all_feeds()
 
     if not feeds:
+        logger.info("handle_feed_export complete: result=no_feeds")
         return "エクスポートするフィードがありません。"
 
     def _sanitize_csv_field(value: str) -> str:
@@ -464,13 +534,16 @@ async def _handle_feed_export_via_port(
         error_msg = str(e)
         if "missing_scope" in error_msg or "not_allowed_token_type" in error_msg:
             logger.error("File upload failed due to missing scope: %s", e)
+            logger.info("handle_feed_export complete: result=missing_scope")
             return (
                 "エラー: ファイルのアップロードに失敗しました。\n"
                 "Slack Appに `files:write` スコープの追加が必要です。"
             )
         logger.exception("Failed to upload CSV file")
+        logger.info("handle_feed_export complete: result=upload_error")
         return f"エラー: ファイルのアップロードに失敗しました: {e}"
 
+    logger.info("handle_feed_export complete: feeds=%d", len(feeds))
     return ""
 
 
@@ -615,6 +688,10 @@ class MessageRouter:
         channel = msg.channel
 
         subcommand, urls, category = _parse_feed_command(cleaned_text)
+        logger.info(
+            "handle_feed_command start: subcommand=%s, urls=%d, category=%s",
+            subcommand, len(urls), category,
+        )
         logger.debug("feed command parsed: subcommand=%s, urls=%s, category=%s", subcommand, urls, category)
 
         if subcommand == "add":
@@ -647,12 +724,15 @@ class MessageRouter:
             )
             if response_text:
                 await self._messaging.send_message(response_text, thread_id, channel)
+            logger.info("handle_feed_command complete: subcommand=export")
             return
         elif subcommand == "collect":
             await self._handle_feed_collect(msg, cleaned_text)
+            logger.info("handle_feed_command complete: subcommand=collect")
             return
         elif subcommand == "test":
             await self._handle_feed_test(msg)
+            logger.info("handle_feed_command complete: subcommand=test")
             return
         else:
             response_text = (
@@ -671,11 +751,13 @@ class MessageRouter:
             )
 
         await self._messaging.send_message(response_text, thread_id, channel)
+        logger.info("handle_feed_command complete: subcommand=%s", subcommand)
 
     async def _handle_feed_collect(
         self, msg: IncomingMessage, cleaned_text: str
     ) -> None:
         """feed collect コマンド処理."""
+        logger.info("handle_feed_collect start")
         thread_id = msg.thread_id
         channel = msg.channel
 
@@ -703,25 +785,33 @@ class MessageRouter:
                         f"要約スキップ収集が完了しました\n収集フィード数: {feed_count}\n収集記事数: {article_count}",
                         thread_id, channel,
                     )
+                    logger.info(
+                        "handle_feed_collect complete: feeds=%d, articles=%d",
+                        feed_count, article_count,
+                    )
                 except Exception:
                     logger.exception("Failed to collect feeds with skip-summary")
                     await self._messaging.send_message(
                         "要約スキップ収集中にエラーが発生しました。",
                         thread_id, channel,
                     )
+                    logger.info("handle_feed_collect complete: result=error")
             else:
                 await self._messaging.send_message(
                     "エラー: 配信設定が不足しています。", thread_id, channel
                 )
+                logger.info("handle_feed_collect complete: result=missing_config")
         else:
             response_text = (
                 "使用方法:\n"
                 "• `@bot feed collect --skip-summary` — 要約なし一括収集"
             )
             await self._messaging.send_message(response_text, thread_id, channel)
+            logger.info("handle_feed_collect complete: result=usage_help")
 
     async def _handle_feed_test(self, msg: IncomingMessage) -> None:
         """feed test コマンド処理."""
+        logger.info("handle_feed_test start")
         thread_id = msg.thread_id
         channel = msg.channel
 
@@ -745,20 +835,24 @@ class MessageRouter:
                 await self._messaging.send_message(
                     "テスト配信が完了しました", thread_id, channel
                 )
+                logger.info("handle_feed_test complete: result=success")
             except Exception:
                 logger.exception("Failed to run feed test delivery")
                 await self._messaging.send_message(
                     "テスト配信中にエラーが発生しました。",
                     thread_id, channel,
                 )
+                logger.info("handle_feed_test complete: result=error")
         else:
             await self._messaging.send_message(
                 "エラー: 配信設定が不足しています（Slack接続が必要です）。",
                 thread_id, channel,
             )
+            logger.info("handle_feed_test complete: result=missing_config")
 
     async def _handle_deliver(self, msg: IncomingMessage) -> None:
         """deliver コマンド処理."""
+        logger.info("handle_deliver start")
         assert self._collector is not None
         assert self._session_factory is not None
         assert self._channel_id is not None
@@ -770,6 +864,7 @@ class MessageRouter:
                 "エラー: deliver コマンドは Slack 接続時のみ使用できます。",
                 thread_id, channel,
             )
+            logger.info("handle_deliver complete: result=no_slack_client")
             return
 
         from src.scheduler.jobs import daily_collect_and_deliver
@@ -787,11 +882,13 @@ class MessageRouter:
             await self._messaging.send_message(
                 "配信が完了しました", thread_id, channel
             )
+            logger.info("handle_deliver complete: result=success")
         except Exception:
             logger.exception("Failed to run manual delivery")
             await self._messaging.send_message(
                 "配信中にエラーが発生しました。", thread_id, channel
             )
+            logger.info("handle_deliver complete: result=error")
 
     async def _handle_rag_command(
         self, msg: IncomingMessage, cleaned_text: str
@@ -802,6 +899,7 @@ class MessageRouter:
         channel = msg.channel
 
         subcommand, url, raw_url_token = _parse_rag_command(cleaned_text)
+        logger.info("handle_rag_command start: subcommand=%s", subcommand)
         logger.debug("rag command parsed: subcommand=%s, url=%s", subcommand, url)
 
         if subcommand == "status":
@@ -819,14 +917,17 @@ class MessageRouter:
             )
         elif subcommand == "update":
             await self._handle_rag_update(thread_id, channel)
+            logger.info("handle_rag_command complete: subcommand=update")
             return
         elif subcommand == "rebuild":
             tokens = cleaned_text.split()
             mode = tokens[2] if len(tokens) >= 3 else "index"
             await self._handle_rag_rebuild(mode, thread_id, channel)
+            logger.info("handle_rag_command complete: subcommand=rebuild")
             return
         elif subcommand == "help":
             await self._handle_rag_help(thread_id, channel)
+            logger.info("handle_rag_command complete: subcommand=help")
             return
         else:
             response_text = (
@@ -840,6 +941,7 @@ class MessageRouter:
 
         if response_text:
             await self._messaging.send_message(response_text, thread_id, channel)
+        logger.info("handle_rag_command complete: subcommand=%s", subcommand)
 
     async def _call_rag_url_tool(
         self,
@@ -867,6 +969,7 @@ class MessageRouter:
         self, thread_id: str, channel: str,
     ) -> None:
         """BlueSky・Zenn の定期更新を一括実行する."""
+        logger.info("handle_rag_update start")
         assert self._mcp_manager is not None
 
         if not self._rag_bluesky_handle and not self._rag_zenn_username:
@@ -874,6 +977,7 @@ class MessageRouter:
                 "エラー: RAG_BLUESKY_HANDLE / RAG_ZENN_USERNAME が .env に設定されていません。",
                 thread_id, channel,
             )
+            logger.info("handle_rag_update complete: result=missing_config")
             return
 
         targets: list[tuple[str, str, dict[str, object]]] = []
@@ -904,6 +1008,7 @@ class MessageRouter:
         await self._messaging.send_message(
             "\n".join(results), thread_id, channel,
         )
+        logger.info("handle_rag_update complete: targets=%d", len(targets))
 
     _VALID_REBUILD_MODES = frozenset({"full", "convert", "index", "incremental"})
 
@@ -911,6 +1016,7 @@ class MessageRouter:
         self, mode: str, thread_id: str, channel: str,
     ) -> None:
         """RAG インデックスの再構築を実行する."""
+        logger.info("handle_rag_rebuild start: mode=%s", mode)
         assert self._mcp_manager is not None
 
         if mode not in self._VALID_REBUILD_MODES:
@@ -919,6 +1025,7 @@ class MessageRouter:
                 f"有効な mode: {', '.join(sorted(self._VALID_REBUILD_MODES))}",
                 thread_id, channel,
             )
+            logger.info("handle_rag_rebuild complete: result=invalid_mode")
             return
 
         await self._messaging.send_message(
@@ -937,11 +1044,13 @@ class MessageRouter:
             response_text = "エラー: リビルド中にエラーが発生しました。"
 
         await self._messaging.send_message(response_text, thread_id, channel)
+        logger.info("handle_rag_rebuild complete: mode=%s", mode)
 
     async def _handle_rag_help(
         self, thread_id: str, channel: str,
     ) -> None:
         """RAG MCPツール一覧を動的に取得して表示する."""
+        logger.info("handle_rag_help start")
         assert self._mcp_manager is not None
 
         try:
@@ -952,6 +1061,7 @@ class MessageRouter:
                 "エラー: RAG ツール一覧の取得に失敗しました。",
                 thread_id, channel,
             )
+            logger.info("handle_rag_help complete: result=tools_fetch_error")
             return
 
         rag_tools = [t for t in tools if t.name.startswith("rag_")]
@@ -961,6 +1071,7 @@ class MessageRouter:
                 "RAG ツールが見つかりません。MCP サーバーが起動しているか確認してください。",
                 thread_id, channel,
             )
+            logger.info("handle_rag_help complete: result=no_rag_tools")
             return
 
         lines = ["*RAG MCPツール一覧:*\n"]
@@ -972,6 +1083,7 @@ class MessageRouter:
             lines.append(f"• `{tool.name}` — {desc}")
 
         await self._messaging.send_message("\n".join(lines), thread_id, channel)
+        logger.info("handle_rag_help complete: tools=%d", len(rag_tools))
 
     async def _handle_rc_command(
         self, msg: IncomingMessage, cleaned_text: str,
@@ -980,6 +1092,7 @@ class MessageRouter:
 
         仕様: docs/specs/features/remote-control-launch.md
         """
+        logger.info("handle_rc_command start: user=%s", msg.user_id)
         assert self._remote_control_launcher is not None
         thread_id = msg.thread_id
         channel = msg.channel
@@ -992,6 +1105,7 @@ class MessageRouter:
                 "❌ このコマンドを実行する権限がありません",
                 thread_id, channel,
             )
+            logger.info("handle_rc_command complete: result=permission_denied")
             return
 
         tokens = cleaned_text.split()
@@ -999,6 +1113,7 @@ class MessageRouter:
             await self._messaging.send_message(
                 self._build_rc_usage(), thread_id, channel,
             )
+            logger.info("handle_rc_command complete: result=usage")
             return
 
         subcommand = tokens[1].lower()
@@ -1006,6 +1121,7 @@ class MessageRouter:
             await self._messaging.send_message(
                 self._build_rc_usage(), thread_id, channel,
             )
+            logger.info("handle_rc_command complete: result=invalid_subcommand")
             return
 
         if len(tokens) < 3:
@@ -1013,6 +1129,7 @@ class MessageRouter:
                 "エラー: リポジトリキーを指定してください。\n" + self._build_rc_usage(),
                 thread_id, channel,
             )
+            logger.info("handle_rc_command complete: result=missing_repo_key")
             return
 
         repo_key = tokens[2]
@@ -1021,11 +1138,13 @@ class MessageRouter:
             result = await self._remote_control_launcher.launch(repo_key)
         except RemoteControlURLTimeoutError as e:
             await self._messaging.send_message(f"⌛ {e}", thread_id, channel)
+            logger.info("handle_rc_command complete: result=url_timeout, repo_key=%s", repo_key)
             return
         except RemoteControlError as e:
             # 既知エラー（未登録 key / claude 未インストール / プロセス即時終了 等）は
             # サービス層が日本語メッセージを組み立て済みのため、そのまま転送する
             await self._messaging.send_message(f"❌ {e}", thread_id, channel)
+            logger.info("handle_rc_command complete: result=known_error, repo_key=%s", repo_key)
             return
         except Exception:
             logger.exception("Failed to launch remote control: repo_key=%s", repo_key)
@@ -1033,6 +1152,7 @@ class MessageRouter:
                 "❌ Remote Control の起動中に予期せぬエラーが発生しました。",
                 thread_id, channel,
             )
+            logger.info("handle_rc_command complete: result=unexpected_error, repo_key=%s", repo_key)
             return
 
         response = (
@@ -1042,6 +1162,10 @@ class MessageRouter:
             f"接続: {result.connect_url}"
         )
         await self._messaging.send_message(response, thread_id, channel)
+        logger.info(
+            "handle_rc_command complete: result=success, repo_key=%s, session=%s",
+            repo_key, result.session_name,
+        )
 
     def _build_rc_usage(self) -> str:
         """rc コマンドの使用方法と登録済み repo-key を返す."""
