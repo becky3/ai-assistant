@@ -286,12 +286,15 @@ async def daily_collect_and_deliver(
     Returns:
         (配信フィード数, 配信記事数) のタプル。
     """
-    logger.info("Starting daily feed collection and delivery")
+    logger.info(
+        "daily_collect_and_deliver start: channel=%s, max_articles_per_feed=%s, layout=%s, skip_summary=%s",
+        channel_id, max_articles_per_feed, layout, skip_summary,
+    )
 
     try:
         feeds_list = await collector.get_enabled_feeds()
         if not feeds_list:
-            logger.info("No enabled feeds")
+            logger.info("daily_collect_and_deliver complete: result=no_enabled_feeds")
             return (0, 0)
 
         # skip-summary時はmax_articles_per_feedを無制限にする（全件収集・配信）
@@ -391,10 +394,14 @@ async def daily_collect_and_deliver(
         if header_posted:
             await _post_footer(slack_client, channel_id)
 
-        logger.info("Delivered %d articles to %s", len(total_delivered), channel_id)
+        logger.info(
+            "daily_collect_and_deliver complete: feeds=%d, articles=%d, channel=%s",
+            delivered_feed_count, len(total_delivered), channel_id,
+        )
         return (delivered_feed_count, len(total_delivered))
     except Exception:
         logger.exception("Error in daily_collect_and_deliver job")
+        logger.info("daily_collect_and_deliver complete: result=error")
         return (0, 0)
 
 
@@ -411,6 +418,10 @@ async def feed_test_deliver(
     本番と同じ _deliver_feed_to_slack を使用し、収集ステップのみスキップする。
     仕様: docs/specs/features/feed-management.md
     """
+    logger.info(
+        "feed_test_deliver start: channel=%s, max_feeds=%d, max_articles_per_feed=%d, layout=%s",
+        channel_id, max_feeds, max_articles_per_feed, layout,
+    )
     async with session_factory() as session:
         feed_result = await session.execute(
             select(Feed)
@@ -421,7 +432,7 @@ async def feed_test_deliver(
         test_feeds = list(feed_result.scalars().all())
 
     if not test_feeds:
-        logger.info("No enabled feeds for test delivery")
+        logger.info("feed_test_deliver complete: result=no_enabled_feeds")
         return
 
     # テストヘッダー（本番同等 +（テスト））
@@ -453,4 +464,4 @@ async def feed_test_deliver(
     await _post_footer(slack_client, channel_id)
 
     # delivered フラグは更新しない（テストなので副作用なし）
-    logger.info("Test delivery completed for %d feeds", feeds_delivered)
+    logger.info("feed_test_deliver complete: feeds=%d", feeds_delivered)

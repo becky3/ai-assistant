@@ -47,18 +47,25 @@ class OgpExtractor:
         2. なければ記事URLにGETしてog:imageを抽出
         3. 失敗時はNone
         """
+        logger.info("extract_image_url start: url=%s", url)
         # 1. RSSエントリから取得を試みる
         if entry:
             image = self._extract_from_entry(entry)
             if image:
+                logger.info("extract_image_url complete: url=%s, source=entry", url)
                 return unescape(image)
 
         # 2. 記事URLからOGPタグを取得
         try:
             result = await self._fetch_og_image(url)
+            if result:
+                logger.info("extract_image_url complete: url=%s, source=og:image", url)
+            else:
+                logger.info("extract_image_url complete: url=%s, source=none", url)
             return unescape(result) if result else None
         except Exception:
             logger.debug("Failed to fetch OGP image for %s", url, exc_info=True)
+            logger.info("extract_image_url complete: url=%s, source=error", url)
             return None
 
     def _extract_from_entry(self, entry: dict[str, Any]) -> str | None:
@@ -101,8 +108,10 @@ class OgpExtractor:
 
     async def _fetch_og_image(self, url: str) -> str | None:
         """記事URLにアクセスしてog:imageメタタグを抽出する."""
+        logger.debug("ogp http GET start: url=%s", url)
         async with ConstrainedClient(request_timeout=self._timeout) as client:
             resp = await client.get(url)
+            logger.debug("ogp http GET complete: url=%s, status=%d", url, resp.status_code)
             if resp.status_code in (301, 302, 303, 307, 308):
                 logger.warning(
                     "Redirect detected (SSRF protection): %s -> %s",

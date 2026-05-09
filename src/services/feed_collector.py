@@ -62,21 +62,22 @@ class FeedCollector:
         Args:
             skip_summary: Trueの場合、LLM要約をスキップしdescriptionを要約として保存する。
         """
+        logger.info("collect_all start: skip_summary=%s", skip_summary)
         collected: list[Article] = []
         async with self._session_factory() as session:
             feeds = await self._get_enabled_feeds(session)
 
-        logger.info("collect_all: %d feeds to process (skip_summary=%s)", len(feeds), skip_summary)
+        logger.info("collect_all progress: feeds=%d, skip_summary=%s", len(feeds), skip_summary)
         for i, feed in enumerate(feeds, 1):
             try:
-                logger.info("collect_all: [%d/%d] %s", i, len(feeds), feed.name)
+                logger.info("collect_all progress: index=%d/%d, feed=%s", i, len(feeds), feed.name)
                 articles = await self._collect_feed(feed, skip_summary=skip_summary)
                 collected.extend(articles)
             except Exception:
                 logger.exception("Failed to collect feed: %s (%s)", feed.name, feed.url)
                 continue
 
-        logger.info("collect_all: done — %d articles collected", len(collected))
+        logger.info("collect_all complete: feeds=%d, articles=%d", len(feeds), len(collected))
         return collected
 
     async def get_enabled_feeds(self) -> list[Feed]:
@@ -118,7 +119,13 @@ class FeedCollector:
                 True を返すと収集続行、False を返すと収集を中止する。
             skip_summary: Trueの場合、LLM要約をスキップしdescriptionを要約として保存する。
         """
+        logger.info("collect_feed start: feed=%s, url=%s, skip_summary=%s", feed.name, feed.url, skip_summary)
+        logger.debug("feedparser.parse start: url=%s", feed.url)
         parsed = await asyncio.to_thread(feedparser.parse, feed.url)
+        logger.debug(
+            "feedparser.parse complete: url=%s, entries=%d",
+            feed.url, len(parsed.entries),
+        )
         articles: list[Article] = []
         cutoff = datetime.now(tz=timezone.utc) - timedelta(days=self._collect_days)
 
@@ -206,6 +213,10 @@ class FeedCollector:
             await session.commit()
             articles.extend(new_articles)
 
+        logger.info(
+            "collect_feed complete: feed=%s, entries=%d, new_articles=%d",
+            feed.name, len(parsed.entries), len(articles),
+        )
         return articles
 
     async def fetch_feed_title(self, url: str) -> str:
@@ -217,13 +228,27 @@ class FeedCollector:
         Returns:
             フィード名。取得できない場合はURLをそのまま返す。
         """
+        logger.info("fetch_feed_title start: url=%s", url)
+        fallback_reason = "no_title"
         try:
+            logger.debug("feedparser.parse start: url=%s", url)
             parsed = await asyncio.to_thread(feedparser.parse, url)
+            logger.debug(
+                "feedparser.parse complete: url=%s, entries=%d",
+                url, len(parsed.entries),
+            )
             title = str(parsed.feed.get("title", ""))
             if title:
-                return title.strip()
+                stripped = title.strip()
+                logger.info("fetch_feed_title complete: url=%s, title=%r", url, stripped)
+                return stripped
         except Exception:
             logger.warning("Failed to fetch feed title from %s", url)
+            fallback_reason = "error"
+        logger.info(
+            "fetch_feed_title complete: url=%s, result=%s_fallback_to_url",
+            url, fallback_reason,
+        )
         return url
 
     async def add_feed(self, url: str, name: str, category: str = "一般") -> Feed:
@@ -240,17 +265,24 @@ class FeedCollector:
         Raises:
             ValueError: URLが既に登録されている場合
         """
+        logger.info("add_feed start: url=%s, name=%r, category=%s", url, name, category)
         async with self._session_factory() as session:
             # 重複チェック
+            logger.debug("db select start: Feed where url=%s", url)
             result = await session.execute(select(Feed).where(Feed.url == url))
             existing = result.scalar_one_or_none()
+            logger.debug("db select complete: existing=%s", existing is not None)
             if existing:
+                logger.info("add_feed complete: result=duplicate, url=%s", url)
                 raise ValueError("既に登録されています")
 
             feed = Feed(url=url, name=name, category=category, enabled=True)
             session.add(feed)
+            logger.debug("db commit start: insert Feed url=%s", url)
             await session.commit()
             await session.refresh(feed)
+            logger.debug("db commit complete: id=%d", feed.id)
+            logger.info("add_feed complete: url=%s, id=%d", url, feed.id)
             return feed
 
     async def delete_feed(self, url: str) -> None:
@@ -262,14 +294,17 @@ class FeedCollector:
         Raises:
             ValueError: URLが見つからない場合
         """
+        logger.info("delete_feed start: url=%s", url)
         async with self._session_factory() as session:
             result = await session.execute(select(Feed).where(Feed.url == url))
             feed = result.scalar_one_or_none()
             if not feed:
+                logger.info("delete_feed complete: result=not_found, url=%s", url)
                 raise ValueError("登録されていません")
 
             await session.delete(feed)
             await session.commit()
+            logger.info("delete_feed complete: url=%s", url)
 
     async def enable_feed(self, url: str) -> None:
         """フィードを有効化する.
@@ -280,14 +315,17 @@ class FeedCollector:
         Raises:
             ValueError: URLが見つからない場合
         """
+        logger.info("enable_feed start: url=%s", url)
         async with self._session_factory() as session:
             result = await session.execute(select(Feed).where(Feed.url == url))
             feed = result.scalar_one_or_none()
             if not feed:
+                logger.info("enable_feed complete: result=not_found, url=%s", url)
                 raise ValueError("登録されていません")
 
             feed.enabled = True
             await session.commit()
+            logger.info("enable_feed complete: url=%s", url)
 
     async def disable_feed(self, url: str) -> None:
         """フィードを無効化する.
@@ -298,14 +336,17 @@ class FeedCollector:
         Raises:
             ValueError: URLが見つからない場合
         """
+        logger.info("disable_feed start: url=%s", url)
         async with self._session_factory() as session:
             result = await session.execute(select(Feed).where(Feed.url == url))
             feed = result.scalar_one_or_none()
             if not feed:
+                logger.info("disable_feed complete: result=not_found, url=%s", url)
                 raise ValueError("登録されていません")
 
             feed.enabled = False
             await session.commit()
+            logger.info("disable_feed complete: url=%s", url)
 
     async def list_feeds(self) -> tuple[list[Feed], list[Feed]]:
         """全フィードを有効/無効で分類して取得する.
@@ -313,12 +354,17 @@ class FeedCollector:
         Returns:
             (有効フィードリスト, 無効フィードリスト) のタプル
         """
+        logger.info("list_feeds start")
         async with self._session_factory() as session:
             result = await session.execute(select(Feed).order_by(Feed.url.asc()))
             all_feeds = list(result.scalars().all())
 
         enabled = [f for f in all_feeds if f.enabled]
         disabled = [f for f in all_feeds if not f.enabled]
+        logger.info(
+            "list_feeds complete: enabled=%d, disabled=%d",
+            len(enabled), len(disabled),
+        )
         return (enabled, disabled)
 
     async def delete_all_feeds(self) -> int:
@@ -327,6 +373,7 @@ class FeedCollector:
         Returns:
             削除されたフィード数
         """
+        logger.info("delete_all_feeds start")
         async with self._session_factory() as session:
             result = await session.execute(select(Feed))
             feeds = list(result.scalars().all())
@@ -334,6 +381,7 @@ class FeedCollector:
             for feed in feeds:
                 await session.delete(feed)
             await session.commit()
+            logger.info("delete_all_feeds complete: count=%d", count)
             return count
 
     async def get_all_feeds(self) -> list[Feed]:
@@ -342,6 +390,9 @@ class FeedCollector:
         Returns:
             全Feedオブジェクトのリスト
         """
+        logger.info("get_all_feeds start")
         async with self._session_factory() as session:
             result = await session.execute(select(Feed).order_by(Feed.url.asc()))
-            return list(result.scalars().all())
+            feeds = list(result.scalars().all())
+        logger.info("get_all_feeds complete: count=%d", len(feeds))
+        return feeds

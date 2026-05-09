@@ -89,6 +89,7 @@ class RemoteControlLauncher:
 
     async def launch(self, repo_key: str) -> RemoteControlLaunchResult:
         """指定 repo-key で claude remote-control を起動し、接続 URL を返す."""
+        logger.info("remote_control launch start: repo_key=%s", repo_key)
         if repo_key not in self._repositories:
             registered = ", ".join(sorted(self._repositories.keys())) or "(なし)"
             msg = f"未登録のリポジトリキーです: {repo_key}\n登録済み: {registered}"
@@ -150,7 +151,7 @@ class RemoteControlLauncher:
                     pass
 
         logger.info(
-            "remote-control launched: pid=%s, repo_key=%s, session=%s, log=%s",
+            "remote_control subprocess complete: pid=%s, repo_key=%s, session=%s, log=%s",
             proc.pid, repo_key, session_name, log_path,
         )
 
@@ -161,6 +162,10 @@ class RemoteControlLauncher:
         wait_task = asyncio.create_task(proc.wait())
         wait_task.add_done_callback(
             lambda _t: self._active_pids.discard(proc.pid),
+        )
+        logger.info(
+            "remote_control launch complete: repo_key=%s, session=%s, pid=%s",
+            repo_key, session_name, proc.pid,
         )
         return RemoteControlLaunchResult(
             session_name=session_name,

@@ -206,8 +206,11 @@ class MCPClientManager:
             MCPToolNotFoundError: 指定ツールが見つからない場合
             MCPToolExecutionError: ツール実行失敗時
         """
-        logger.info("call_tool: %s", tool_name)
-        logger.debug("call_tool args: %s", arguments)
+        logger.info("call_tool start: tool=%s", tool_name)
+        # 引数値そのものは秘匿情報・個人情報を含む可能性があるため
+        # ログにはキー一覧と各値の長さのみ出力する
+        arg_summary = {k: f"len={len(str(v))}" for k, v in arguments.items()}
+        logger.debug("call_tool args: tool=%s, arg_summary=%s", tool_name, arg_summary)
         server_name = self._tool_to_server.get(tool_name)
         if server_name is None:
             raise MCPToolNotFoundError(f"ツール '{tool_name}' が見つかりません。")
@@ -233,7 +236,7 @@ class MCPClientManager:
             else:
                 text_parts.append(str(content_item))
         result_text = "\n".join(text_parts)
-        logger.info("call_tool completed: %s, result_length=%d", tool_name, len(result_text))
+        logger.info("call_tool complete: tool=%s, result_len=%d", tool_name, len(result_text))
         return result_text
 
     async def cleanup(self) -> None:
