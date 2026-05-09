@@ -29,7 +29,12 @@ bot 全体のログ出力に関する基盤と運用パターンを定義する�
 | INFO | handler の入口・完了、主要サービスの公開メソッドの入口・完了 |
 | DEBUG | 副作用を伴う処理（HTTP / DB / 外部コマンド / LLM / MCP）の前後 |
 | WARNING | 期待外の状態だが処理は継続する場合（タイムアウトでフォールバック、空応答時のフォールバック等） |
-| ERROR | 例外発生時。`logger.exception()` を用い、stack trace 付きで `ERROR` レベルに出力する |
+| ERROR | 致命的な例外で処理を中断する場合。`logger.exception()` を用い、stack trace 付きで `ERROR` レベルに出力する |
+
+例外発生時のレベル選択指針:
+
+- **致命的（処理を中断する）**: `logger.exception(...)` で `ERROR` + stack trace
+- **フォールバック可能（フォールバック処理で継続する）**: `logger.warning(...)` または `logger.debug(..., exc_info=True)` を使い分ける。stack trace が原因調査に有用なら `exc_info=True` を付ける。フォールバックが頻発する想定なら `DEBUG`、稀なら `WARNING` を選ぶ
 
 DEBUG レベルは `.env` の `DEBUG_LOG_ENABLED=true` で有効化できる（再起動が必要）。詳細は `config-management.md` を参照。
 

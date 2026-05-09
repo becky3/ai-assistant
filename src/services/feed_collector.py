@@ -229,6 +229,7 @@ class FeedCollector:
             フィード名。取得できない場合はURLをそのまま返す。
         """
         logger.info("fetch_feed_title start: url=%s", url)
+        fallback_reason = "no_title"
         try:
             logger.debug("feedparser.parse start: url=%s", url)
             parsed = await asyncio.to_thread(feedparser.parse, url)
@@ -243,7 +244,11 @@ class FeedCollector:
                 return stripped
         except Exception:
             logger.warning("Failed to fetch feed title from %s", url)
-        logger.info("fetch_feed_title complete: url=%s, result=error_fallback_to_url", url)
+            fallback_reason = "error"
+        logger.info(
+            "fetch_feed_title complete: url=%s, result=%s_fallback_to_url",
+            url, fallback_reason,
+        )
         return url
 
     async def add_feed(self, url: str, name: str, category: str = "一般") -> Feed:
