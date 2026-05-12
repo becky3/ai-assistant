@@ -15,6 +15,8 @@ Slack コマンドにより、ホスト PC 上で `claude remote-control` プロ
 
 - **二重 allowlist 方式**: 認可ユーザー allowlist と repo-key allowlist の両方を通過した場合のみ起動可能。任意のパス・任意のユーザーでの起動は拒否する。Slack 経由で任意プロセスを起動可能になることを防ぐため
 - **起動コマンドはリスト引数で渡す**: `subprocess` の `shell=False` でリスト引数を渡し、コマンドインジェクションを防止する
+- **`bypassPermissions` モードで起動する**: Slack 経由で起動したセッションは Yes/No 系の権限確認に応答する動線がないため、`--permission-mode bypassPermissions` を固定で付与する。二重 allowlist 方式が前提として機能することで本モードが正当な利用に限定される
+- **子プロセス環境に `REMOTE_SLACK_SESSION=1` を注入する**: 起動した Claude セッション側がリモート環境を検出し、確認動線を切替えるためのマーカー（bot プロセスの環境変数を継承した上で追加）。検出後の振る舞い差替えルールは agent-commons 側（becky3/agent-commons#358）で管理する
 - **`claude` CLI v2.1.51+ を運用前提とする**: Remote Control 機能はこのバージョン以降で利用可能。本機能の実装は `claude` 実行ファイルの **存在確認のみ**を行い、版数検証は運用で担保する（ホスト PC の `claude` インストール時に版数を満たすこと）。未インストール時は PATH エラーを返す。版数不一致時の検出は本機能のスコープ外
 - **ホスト OS 前提**: Windows 11（本プロジェクトの主要運用環境）。subprocess のデタッチ起動方式は OS ごとに分岐する
 - **claude にログイン済みであること**: ホスト PC で `claude auth` 等によるログインが完了していない場合、起動した remote-control プロセスは接続できない。ログイン状態は本機能の前提条件として運用で担保する
@@ -43,7 +45,7 @@ Slack コマンドにより、ホスト PC 上で `claude remote-control` プロ
 2. repo allowlist に `<repo-key>` が含まれるか検証する。含まれない場合は登録済み key 一覧を含むエラーを返して終了する
 3. allowlist の対応パスが実在ディレクトリであることを検証する。存在しない場合は構成エラーを返して終了する
 4. `claude` 実行ファイルが PATH 上で解決できることを検証する。解決できない場合は前提エラーを返して終了する
-5. `<repo-key>` を含むセッション名（例: `slack-<repo-key>-<unix-timestamp>`）を組み立て、`claude remote-control --name <session_name>` をデタッチ起動する。標準出力・標準エラーは起動ログファイル（`<log_dir>/<session_name>.log`）に書き出す
+5. セッション名（例: `slack-<repo-key>-<unix-timestamp>`）を組み立て、上記制約に従って `claude remote-control` をデタッチ起動する。stdout/stderr は `<log_dir>/<session_name>.log` に書き出す
 6. ログファイルを最大 15 秒間ポーリングし、`https://claude.ai/code?environment=env_...` 形式の URL を抽出する。タイムアウト時はタイムアウトエラーを返す
 7. 抽出した URL を Slack に返信する
 
