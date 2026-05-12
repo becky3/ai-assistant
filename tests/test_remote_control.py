@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -155,3 +155,52 @@ async def test_extract_url_handles_missing_log_file_initially(tmp_path: Path) ->
     await write_task
 
     assert url == "https://claude.ai/code?environment=env_01XYZ789"
+
+
+# --- 起動引数・環境変数の検証 (Issue #839) ---
+
+
+@pytest.mark.parametrize("platform", ["win32", "linux"])
+async def test_launch_passes_bypass_permissions_and_marker_env(
+    tmp_path: Path, platform: str,
+) -> None:
+    """Win/POSIX 両分岐で起動引数に --permission-mode bypassPermissions が含まれ、
+    子プロセス env に REMOTE_SLACK_SESSION=1 が注入され、親環境の PATH が継承される.
+    """
+    launcher = _make_launcher(
+        repositories={"foo": str(tmp_path)},
+        log_dir=tmp_path / "logs",
+    )
+
+    fake_proc = MagicMock()
+    fake_proc.pid = 12345
+    fake_proc.wait = AsyncMock(return_value=0)
+    fake_proc.returncode = None
+
+    with patch(
+        "src.services.remote_control.asyncio.create_subprocess_exec",
+        new=AsyncMock(return_value=fake_proc),
+    ) as mock_exec, patch(
+        "src.services.remote_control.shutil.which",
+        return_value="/usr/bin/claude",
+    ), patch(
+        "src.services.remote_control.sys.platform", platform,
+    ), patch.object(
+        launcher,
+        "_extract_url",
+        new=AsyncMock(return_value="https://claude.ai/code?environment=env_01TEST"),
+    ), patch.dict(
+        "src.services.remote_control.os.environ",
+        {"PATH": "/usr/bin"},
+        clear=False,
+    ):
+        await launcher.launch("foo")
+
+    args, kwargs = mock_exec.call_args
+    assert "--permission-mode" in args
+    perm_idx = args.index("--permission-mode")
+    assert args[perm_idx + 1] == "bypassPermissions"
+    assert "--name" in args  # 既存仕様: セッション名指定は維持
+    env = kwargs["env"]
+    assert env["REMOTE_SLACK_SESSION"] == "1"
+    assert env["PATH"] == "/usr/bin"  # 親環境の継承を確認

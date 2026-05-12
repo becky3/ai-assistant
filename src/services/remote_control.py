@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -114,6 +115,16 @@ class RemoteControlLauncher:
 
         # log_file の Python 側バッファリング指定は子プロセスの書き込みには無関係
         # （fd 経由で直接 OS に書き込まれるため）。テキストモードは UTF-8 受け取りの意図表明のみ
+        # Slack 経由のリモートセッションでは「ドキュメント確認依頼時の自動オープン」
+        # （~/.claude/rules/invariants.md）が機能しないため、Claude 側が確認動線を
+        # 切替えるためのマーカーを bot 環境継承時に追加する。同名キーがあれば本値で確定する
+        child_env = {**os.environ, "REMOTE_SLACK_SESSION": "1"}
+        # bypassPermissions: Slack 起動のセッションは Yes/No 確認に応答できないため許可確認を回避する
+        launch_args: tuple[str, ...] = (
+            claude_bin, "remote-control",
+            "--name", session_name,
+            "--permission-mode", "bypassPermissions",
+        )
         log_file = log_path.open("w", encoding="utf-8")
         launch_failed = False
         try:
@@ -122,19 +133,21 @@ class RemoteControlLauncher:
                     subprocess, "CREATE_NEW_PROCESS_GROUP", 0,
                 ) | getattr(subprocess, "DETACHED_PROCESS", 0)
                 proc = await asyncio.create_subprocess_exec(
-                    claude_bin, "remote-control", "--name", session_name,
+                    *launch_args,
                     cwd=str(repo_path),
                     stdout=log_file.fileno(),
                     stderr=subprocess.STDOUT,
                     creationflags=creationflags,
+                    env=child_env,
                 )
             else:
                 proc = await asyncio.create_subprocess_exec(
-                    claude_bin, "remote-control", "--name", session_name,
+                    *launch_args,
                     cwd=str(repo_path),
                     stdout=log_file.fileno(),
                     stderr=subprocess.STDOUT,
                     start_new_session=True,
+                    env=child_env,
                 )
         except Exception:
             launch_failed = True
