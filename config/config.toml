@@ -15,3 +15,4 @@ claude_allowed_tools = "mcp__rag-knowledge-production__*,WebSearch,WebFetch"
 claude_timeout = 120
 log_file_max_bytes = 10485760
 remote_control_url_timeout = 15
+article_publish_timeout = 1200

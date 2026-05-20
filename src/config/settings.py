@@ -80,6 +80,9 @@ class _EnvLoader(BaseSettings):
     remote_control_repositories: str = ""
     remote_control_log_dir: str = ""
 
+    # 記事自動投稿（article-writer リポジトリの絶対パス。空文字なら機能無効）
+    article_writer_repo_path: str = ""
+
 
 # .env 管理フィールド名の集合（重複検出に使用）
 _ENV_FIELD_NAMES = frozenset(_EnvLoader.model_fields.keys())
@@ -116,6 +119,7 @@ class Settings(BaseModel):
     remote_control_allowed_users: str
     remote_control_repositories: str
     remote_control_log_dir: str
+    article_writer_repo_path: str
 
     def get_auto_reply_channels(self) -> list[str]:
         """自動返信チャンネルのリストを返す（カンマ区切りを解析）."""
@@ -177,12 +181,36 @@ class Settings(BaseModel):
     # 上限はサーバー応答性の悪化（長時間ポーリング）を防ぐためのハードリミット
     remote_control_url_timeout: int = Field(ge=1, le=300)
 
+    # 記事自動投稿（共通設定値）
+    # claude -p '/auto-publish-diary' のタイムアウト秒数。
+    # 上限は実機 QA 実測 ~13 分を踏まえ、極端な長時間ハングを防ぐためのハードリミット
+    article_publish_timeout: int = Field(ge=60, le=3600)
+
     @field_validator("remote_control_repositories")
     @classmethod
     def _validate_remote_control_repositories(cls, value: str) -> str:
         """起動時に文法検証する（パース成功すれば値はそのまま採用）."""
         _parse_remote_control_repositories(value)
         return value
+
+    @field_validator("article_writer_repo_path")
+    @classmethod
+    def _validate_article_writer_repo_path(cls, value: str) -> str:
+        """起動時に絶対パスのみ許容する（fail-fast）.
+
+        `--dangerously-skip-permissions` 起動の安全性ガードレールとして、
+        相対パス指定による意図しないディレクトリでの起動を排除する。
+        """
+        stripped = value.strip()
+        if not stripped:
+            return ""
+        if not Path(stripped).is_absolute():
+            msg = (
+                "ARTICLE_WRITER_REPO_PATH は絶対パスで指定してください: "
+                f"'{stripped}'"
+            )
+            raise ValueError(msg)
+        return stripped
 
 
 def _parse_remote_control_repositories(value: str) -> dict[str, str]:
