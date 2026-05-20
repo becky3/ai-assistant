@@ -65,6 +65,9 @@ def test_get_settings_loads_from_env_and_toml(monkeypatch: pytest.MonkeyPatch) -
             "REMOTE_CONTROL_REPOSITORIES",
             "ai-assistant=/path/to/ai-assistant,agent-commons=/path/to/agent-commons",
         )
+        monkeypatch.setenv(
+            "ARTICLE_WRITER_REPO_PATH", "/path/to/article-writer",
+        )
 
     # .env の代わりに git 管理されている .env.example を使用
     get_settings.cache_clear()
@@ -231,3 +234,52 @@ def test_remote_control_repositories_accepts_valid_entries() -> None:
         },
     )
     assert s.get_remote_control_repositories() == {"ai-assistant": abs_path}
+
+
+def test_article_writer_repo_path_accepts_absolute_path() -> None:
+    """ARTICLE_WRITER_REPO_PATH: 絶対パスは受け入れる."""
+    import os
+
+    abs_path = "C:/abs/article-writer" if os.name == "nt" else "/abs/article-writer"
+    s = Settings(
+        **{
+            **TEST_SETTINGS_DEFAULTS,
+            "article_writer_repo_path": abs_path,
+        },
+    )
+    assert s.article_writer_repo_path == abs_path
+
+
+def test_article_writer_repo_path_accepts_empty_for_disable() -> None:
+    """ARTICLE_WRITER_REPO_PATH: 空文字は機能無効として受け入れる."""
+    s = Settings(
+        **{
+            **TEST_SETTINGS_DEFAULTS,
+            "article_writer_repo_path": "",
+        },
+    )
+    assert s.article_writer_repo_path == ""
+
+
+def test_article_writer_repo_path_normalizes_whitespace_to_empty() -> None:
+    """ARTICLE_WRITER_REPO_PATH: 空白のみの値は空文字に正規化される."""
+    s = Settings(
+        **{
+            **TEST_SETTINGS_DEFAULTS,
+            "article_writer_repo_path": "   ",
+        },
+    )
+    assert s.article_writer_repo_path == ""
+
+
+def test_article_writer_repo_path_rejects_relative_path() -> None:
+    """ARTICLE_WRITER_REPO_PATH: 相対パスは ValueError で拒否される（4 段防御のうち層 4）."""
+    import pydantic
+
+    with pytest.raises(pydantic.ValidationError, match="絶対パス"):
+        Settings(
+            **{
+                **TEST_SETTINGS_DEFAULTS,
+                "article_writer_repo_path": "../article-writer",
+            },
+        )

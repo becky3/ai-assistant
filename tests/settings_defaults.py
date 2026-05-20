@@ -28,6 +28,7 @@ TEST_SETTINGS_DEFAULTS: dict[str, object] = {
     "remote_control_allowed_users": "",
     "remote_control_repositories": "",
     "remote_control_log_dir": "",
+    "article_writer_repo_path": "",
     # config.toml フィールド
     "openai_model": "gpt-4o-mini",
     "anthropic_model": "claude-3-5-sonnet-20241022",
@@ -46,4 +47,5 @@ TEST_SETTINGS_DEFAULTS: dict[str, object] = {
     "claude_timeout": 120,
     "log_file_max_bytes": 10485760,
     "remote_control_url_timeout": 15,
+    "article_publish_timeout": 1200,
 }

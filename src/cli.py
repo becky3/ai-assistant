@@ -155,6 +155,7 @@ async def _setup(
         rag_zenn_max_articles=settings.rag_zenn_max_articles,
         remote_control_launcher=None,
         remote_control_allowed_users=[],
+        article_writer_publisher=None,
     )
 
     return router, cli_adapter, mcp_manager

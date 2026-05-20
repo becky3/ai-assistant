@@ -21,6 +21,14 @@ from py_common_lib.httpx import ConstrainedClient
 
 from src.mcp_bridge.client_manager import MCPToolNotFoundError
 from src.messaging.port import IncomingMessage, MessagingPort
+from src.services.article_publisher import (
+    ArticlePublishError,
+    ArticlePublishFailure,
+    ArticlePublishResponseFileError,
+    ArticlePublishResult,
+    ArticlePublishTimeoutError,
+    ArticleWriterPublisher,
+)
 from src.services.chat import ChatService
 from src.services.remote_control import (
     RemoteControlError,
@@ -37,6 +45,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_ARTICLE_KEYWORDS = ("article",)
 _DELIVER_KEYWORDS = ("deliver",)
 _FEED_KEYWORDS = ("feed",)
 _RAG_KEYWORDS = ("rag",)
@@ -575,6 +584,7 @@ class MessageRouter:
         rag_zenn_max_articles: int,
         remote_control_launcher: RemoteControlLauncher | None,
         remote_control_allowed_users: list[str],
+        article_writer_publisher: ArticleWriterPublisher | None,
     ) -> None:
         self._messaging = messaging
         self._chat_service = chat_service
@@ -595,6 +605,7 @@ class MessageRouter:
         self._rag_zenn_max_articles = rag_zenn_max_articles
         self._remote_control_launcher = remote_control_launcher
         self._remote_control_allowed_users = remote_control_allowed_users
+        self._article_writer_publisher = article_writer_publisher
 
     async def process_message(self, msg: IncomingMessage) -> None:
         """受信メッセージをキーワードルーティングし、適切なサービスに委譲する."""
@@ -629,6 +640,14 @@ class MessageRouter:
         ):
             logger.info("routing: text=%r -> handler=rag", cleaned_text[:200])
             await self._handle_rag_command(msg, cleaned_text)
+            return
+
+        # article コマンド (記事自動投稿)
+        if any(
+            re.match(rf"^{re.escape(kw)}\b", lower_text) for kw in _ARTICLE_KEYWORDS
+        ):
+            logger.info("routing: text=%r -> handler=article", cleaned_text[:200])
+            await self._handle_article_command(msg, cleaned_text)
             return
 
         # rc コマンド (Remote Control 起動)
@@ -1177,4 +1196,181 @@ class MessageRouter:
             "• `@bot rc start <repo-key>` — 指定リポジトリで Claude Code Remote Control を起動\n"
             f"登録済み: {registered}"
         )
+
+    async def _handle_article_command(
+        self, msg: IncomingMessage, cleaned_text: str,
+    ) -> None:
+        """article コマンドのルーティング（記事自動投稿）.
+
+        仕様: docs/specs/features/article-publishing.md
+        """
+        logger.info("handle_article_command start: user=%s", msg.user_id)
+        thread_id = msg.thread_id
+        channel = msg.channel
+
+        if self._article_writer_publisher is None:
+            await self._messaging.send_message(
+                "記事自動投稿機能は現在無効です。管理者に設定を依頼してください。",
+                thread_id, channel,
+            )
+            logger.info("handle_article_command complete: result=disabled")
+            return
+
+        if msg.user_id not in self._remote_control_allowed_users:
+            logger.warning(
+                "article command denied: user=%s not in allowlist", msg.user_id,
+            )
+            await self._messaging.send_message(
+                "❌ このコマンドを実行する権限がありません",
+                thread_id, channel,
+            )
+            logger.info("handle_article_command complete: result=permission_denied")
+            return
+
+        tokens = cleaned_text.split()
+        if len(tokens) < 2:
+            await self._messaging.send_message(
+                _build_article_usage(), thread_id, channel,
+            )
+            logger.info("handle_article_command complete: result=usage")
+            return
+
+        subcommand = tokens[1].lower()
+        if subcommand != "write-hatena":
+            await self._messaging.send_message(
+                _build_article_usage(), thread_id, channel,
+            )
+            logger.info(
+                "handle_article_command complete: result=invalid_subcommand",
+            )
+            return
+
+        await self._handle_article_write_hatena(thread_id, channel)
+
+    async def _handle_article_write_hatena(
+        self, thread_id: str, channel: str,
+    ) -> None:
+        """`article write-hatena` の本体: ArticleWriterPublisher を起動して結果を Slack 通知."""
+        assert self._article_writer_publisher is not None
+        publisher = self._article_writer_publisher
+
+        await self._messaging.send_message(
+            "📝 日記の自動投稿処理を開始します...", thread_id, channel,
+        )
+
+        try:
+            outcome = await publisher.publish_diary()
+        except ArticlePublishTimeoutError as e:
+            timeout_minutes = max(1, publisher.timeout // 60)
+            await self._messaging.send_message(
+                f"⌛ 記事の自動投稿がタイムアウトしました（{timeout_minutes}分）。"
+                "article-writer 側の worktree が残置されている可能性があります。",
+                thread_id, channel,
+            )
+            logger.info("handle_article_write_hatena complete: result=timeout, err=%s", e)
+            return
+        except ArticlePublishResponseFileError as e:
+            await self._messaging.send_message(
+                _format_article_response_file_error(e), thread_id, channel,
+            )
+            logger.info(
+                "handle_article_write_hatena complete: result=response_file_error",
+            )
+            return
+        except ArticlePublishError as e:
+            await self._messaging.send_message(
+                f"❌ 日記の自動投稿に失敗しました\n理由: {e}",
+                thread_id, channel,
+            )
+            logger.info(
+                "handle_article_write_hatena complete: result=publish_error",
+            )
+            return
+        except Exception:
+            logger.exception("Failed to publish diary")
+            await self._messaging.send_message(
+                "❌ 日記の自動投稿中に予期せぬエラーが発生しました。",
+                thread_id, channel,
+            )
+            logger.info(
+                "handle_article_write_hatena complete: result=unexpected_error",
+            )
+            return
+
+        if isinstance(outcome, ArticlePublishFailure):
+            response = _format_article_failure(outcome)
+        else:
+            response = _format_article_success(outcome)
+
+        await self._messaging.send_message(response, thread_id, channel)
+        logger.info(
+            "handle_article_write_hatena complete: result=success_or_known_failure",
+        )
+
+
+def _build_article_usage() -> str:
+    """article コマンドの使用方法を返す."""
+    return (
+        "使用方法:\n"
+        "• `@bot article write-hatena` — article-writer で `/auto-publish-diary` を起動"
+    )
+
+
+def _format_article_success(result: ArticlePublishResult) -> str:
+    """成功時の Slack メッセージを組み立てる."""
+    header = (
+        "✅ 日記の自動投稿に成功しました"
+        if result.worktree_removed
+        else "✅ 日記の自動投稿に成功しました（worktree 削除のみ失敗）"
+    )
+    lines = [header]
+    if result.article_path:
+        lines.append(f"記事: {result.article_path}")
+    if result.draft_url:
+        lines.append(f"下書き: {result.draft_url}")
+    if result.pr_url:
+        lines.append(f"PR: {result.pr_url}")
+    if result.status and result.status != "ok":
+        lines.append(f"status: {result.status}")
+    if not result.worktree_removed and result.worktree_path:
+        lines.append(f"残置 worktree: {_safe_worktree_label(result.worktree_path)}")
+    return "\n".join(lines)
+
+
+def _format_article_response_file_error(err: ArticlePublishResponseFileError) -> str:
+    """レスポンスファイル不在・解析失敗時の Slack メッセージを組み立てる（仕様書「出力 / 実行結果の解析失敗時」準拠）."""
+    return (
+        "❌ 日記の自動投稿に失敗しました（実行結果の解析に失敗）\n"
+        f"理由: {err.reason}\n"
+        f"exit code: {err.exit_code}\n"
+        f"stdout 末尾: {err.stdout_tail}"
+    )
+
+
+def _format_article_failure(failure: ArticlePublishFailure) -> str:
+    """失敗時の Slack メッセージを組み立てる（article-writer の result.json スキーマ準拠）."""
+    raw = failure.raw_json
+    lines = [
+        "❌ 日記の自動投稿に失敗しました",
+        f"exit code: {failure.exit_code}",
+    ]
+    failed_phase = raw.get("failed_phase")
+    if isinstance(failed_phase, str) and failed_phase:
+        lines.append(f"失敗 Phase: {failed_phase}")
+    error_text = raw.get("error")
+    if isinstance(error_text, str) and error_text:
+        lines.append(f"理由: {error_text}")
+    worktree_path = raw.get("worktree_path")
+    if isinstance(worktree_path, str) and worktree_path:
+        lines.append(f"残置 worktree: {_safe_worktree_label(worktree_path)}")
+    return "\n".join(lines)
+
+
+def _safe_worktree_label(worktree_path: str) -> str:
+    """worktree パスを Slack 通知向けに整形する（絶対パスは最後のセグメントのみ表示）."""
+    path = worktree_path.replace("\\", "/")
+    if path.startswith("/") or (len(path) >= 2 and path[1] == ":"):
+        # 絶対パスの場合は末尾セグメントのみ
+        return path.rsplit("/", 1)[-1] or worktree_path
+    return worktree_path
 

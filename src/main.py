@@ -78,6 +78,7 @@ async def main() -> None:
     from src.mcp_bridge.client_manager import MCPClientManager, build_mcp_server_configs
     from src.messaging.router import MessageRouter
     from src.messaging.slack_adapter import SlackAdapter
+    from src.services.article_publisher import ArticleWriterPublisher
     from src.services.chat import ChatService
     from src.services.feed_collector import FeedCollector
     from src.services.ogp_extractor import OgpExtractor
@@ -221,6 +222,24 @@ async def main() -> None:
                 "Remote Control 起動は無効（REMOTE_CONTROL_ALLOWED_USERS / REMOTE_CONTROL_REPOSITORIES のいずれかが未設定）",
             )
 
+        # 記事自動投稿サービス（ARTICLE_WRITER_REPO_PATH 設定がある場合のみ有効化）
+        # 空白のみの値は settings 側の field_validator で空文字に正規化済み
+        if settings.article_writer_repo_path:
+            article_writer_publisher = ArticleWriterPublisher(
+                repo_path=Path(settings.article_writer_repo_path),
+                timeout=settings.article_publish_timeout,
+            )
+            logger.info(
+                "記事自動投稿を有効化: repo_path=%s, timeout=%ds",
+                settings.article_writer_repo_path,
+                settings.article_publish_timeout,
+            )
+        else:
+            article_writer_publisher = None
+            logger.info(
+                "記事自動投稿は無効（ARTICLE_WRITER_REPO_PATH が未設定）",
+            )
+
         # MessageRouter (F9)
         router = MessageRouter(
             messaging=slack_adapter,
@@ -242,6 +261,7 @@ async def main() -> None:
             rag_zenn_max_articles=settings.rag_zenn_max_articles,
             remote_control_launcher=remote_control_launcher,
             remote_control_allowed_users=rc_allowed_users,
+            article_writer_publisher=article_writer_publisher,
         )
 
         register_handlers(

@@ -593,6 +593,7 @@ async def test_manual_deliver_command_passes_layout_from_router() -> None:
         rag_zenn_max_articles=10,
         remote_control_launcher=None,
         remote_control_allowed_users=[],
+        article_writer_publisher=None,
     )
 
     msg = IncomingMessage(

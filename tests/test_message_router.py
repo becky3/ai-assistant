@@ -77,6 +77,7 @@ def _make_router(
     slack_client: AsyncMock | None = None,
     remote_control_launcher: object | None = None,
     remote_control_allowed_users: list[str] | None = None,
+    article_writer_publisher: object | None = None,
 ) -> tuple[MockAdapter, MessageRouter]:
     if adapter is None:
         adapter = MockAdapter()
@@ -104,6 +105,7 @@ def _make_router(
         rag_zenn_max_articles=10,
         remote_control_launcher=remote_control_launcher,  # type: ignore[arg-type]
         remote_control_allowed_users=remote_control_allowed_users or [],
+        article_writer_publisher=article_writer_publisher,  # type: ignore[arg-type]
     )
     return adapter, router
 
@@ -761,3 +763,281 @@ async def test_rc_command_url_timeout_reports_log_filename_only() -> None:
     text = adapter.sent_messages[0][0]
     assert "タイムアウト" in text
     assert "slack-foo-1.log" in text
+
+
+# --- article コマンドルーティングテスト (#841) ---
+
+
+def _make_article_publisher(
+    publish_result: object | None = None,
+    publish_exception: BaseException | None = None,
+    timeout: int = 60,
+) -> AsyncMock:
+    """ArticleWriterPublisher のモックを返す."""
+    publisher = AsyncMock()
+    publisher.timeout = timeout
+    if publish_exception is not None:
+        publisher.publish_diary.side_effect = publish_exception
+    else:
+        publisher.publish_diary.return_value = publish_result
+    return publisher
+
+
+async def test_article_command_disabled_returns_explicit_error() -> None:
+    """publisher が None の場合、fail-closed で機能無効メッセージを返し chat にフォールスルーしない."""
+    chat_service = AsyncMock()
+    chat_service.respond.return_value = "通常応答"
+    adapter, router = _make_router(
+        chat_service=chat_service,
+        article_writer_publisher=None,
+        remote_control_allowed_users=["U_AUTHORIZED"],
+    )
+
+    await router.process_message(
+        _make_msg("article write-hatena", user_id="U_AUTHORIZED"),
+    )
+
+    assert len(adapter.sent_messages) == 1
+    assert "記事自動投稿機能は現在無効です" in adapter.sent_messages[0][0]
+    chat_service.respond.assert_not_awaited()
+
+
+async def test_article_command_denied_for_unauthorized_user() -> None:
+    """認可ユーザー allowlist にない user_id からは権限拒否される."""
+    publisher = _make_article_publisher()
+    adapter, router = _make_router(
+        article_writer_publisher=publisher,
+        remote_control_allowed_users=["U_AUTHORIZED"],
+    )
+
+    await router.process_message(
+        _make_msg("article write-hatena", user_id="U_OTHER"),
+    )
+
+    assert len(adapter.sent_messages) == 1
+    assert "権限がありません" in adapter.sent_messages[0][0]
+    publisher.publish_diary.assert_not_called()
+
+
+async def test_article_command_missing_subcommand_returns_usage() -> None:
+    """article のみで subcommand が無い場合、使用方法を返す."""
+    publisher = _make_article_publisher()
+    adapter, router = _make_router(
+        article_writer_publisher=publisher,
+        remote_control_allowed_users=["U_AUTHORIZED"],
+    )
+
+    await router.process_message(_make_msg("article", user_id="U_AUTHORIZED"))
+
+    assert len(adapter.sent_messages) == 1
+    assert "使用方法" in adapter.sent_messages[0][0]
+    assert "write-hatena" in adapter.sent_messages[0][0]
+    publisher.publish_diary.assert_not_called()
+
+
+async def test_article_command_unknown_subcommand_returns_usage() -> None:
+    """article 直下に write-hatena 以外を指定した場合、使用方法を返す."""
+    publisher = _make_article_publisher()
+    adapter, router = _make_router(
+        article_writer_publisher=publisher,
+        remote_control_allowed_users=["U_AUTHORIZED"],
+    )
+
+    await router.process_message(
+        _make_msg("article write-zenn", user_id="U_AUTHORIZED"),
+    )
+
+    assert len(adapter.sent_messages) == 1
+    assert "使用方法" in adapter.sent_messages[0][0]
+    publisher.publish_diary.assert_not_called()
+
+
+async def test_article_write_hatena_success_message() -> None:
+    """正常系: 成功時に開始メッセージ + 完了メッセージが順に送信される."""
+    from src.services.article_publisher import ArticlePublishResult
+
+    publisher = _make_article_publisher(
+        publish_result=ArticlePublishResult(
+            status="ok",
+            article_path="articles/hatena/2026-02-10-diary.md",
+            draft_url="https://example.hatenablog.com/entry/2026/05/20/152523",
+            pr_url="https://github.com/becky3/article-writer/pull/71",
+            worktree_removed=True,
+            worktree_path=None,
+        ),
+    )
+    adapter, router = _make_router(
+        article_writer_publisher=publisher,
+        remote_control_allowed_users=["U_AUTHORIZED"],
+    )
+
+    await router.process_message(
+        _make_msg("article write-hatena", user_id="U_AUTHORIZED"),
+    )
+
+    assert len(adapter.sent_messages) == 2
+    assert "開始します" in adapter.sent_messages[0][0]
+    success_msg = adapter.sent_messages[1][0]
+    assert "成功しました" in success_msg
+    assert "articles/hatena/2026-02-10-diary.md" in success_msg
+    assert "https://example.hatenablog.com" in success_msg
+    assert "https://github.com/becky3/article-writer/pull/71" in success_msg
+
+
+async def test_article_write_hatena_success_with_cleanup_failure() -> None:
+    """成功 + worktree 削除失敗（status=ok, worktree_removed=False）時、残置 worktree を Slack 通知する."""
+    from src.services.article_publisher import ArticlePublishResult
+
+    publisher = _make_article_publisher(
+        publish_result=ArticlePublishResult(
+            status="ok",
+            article_path="articles/hatena/2026-05-20-diary.md",
+            draft_url="https://example.hatenablog.com/entry/2026/05/20/152523",
+            pr_url="https://github.com/becky3/article-writer/pull/71",
+            worktree_removed=False,
+            worktree_path="D:/GitHub/becky3/article-writer-wt-auto-20260520",
+        ),
+    )
+    adapter, router = _make_router(
+        article_writer_publisher=publisher,
+        remote_control_allowed_users=["U_AUTHORIZED"],
+    )
+
+    await router.process_message(
+        _make_msg("article write-hatena", user_id="U_AUTHORIZED"),
+    )
+
+    assert len(adapter.sent_messages) == 2
+    success_msg = adapter.sent_messages[1][0]
+    assert "成功しました（worktree 削除のみ失敗）" in success_msg
+    assert "残置 worktree: article-writer-wt-auto-20260520" in success_msg
+
+
+async def test_article_write_hatena_failure_includes_worktree_path() -> None:
+    """exit_code 非 0 + JSON 解析成功時、残置 worktree パスをメッセージに含める."""
+    from src.services.article_publisher import ArticlePublishFailure
+
+    publisher = _make_article_publisher(
+        publish_result=ArticlePublishFailure(
+            exit_code=1,
+            raw_json={
+                "status": "error",
+                "failed_phase": "git",
+                "error": "phase 3 failed",
+                "worktree_path": "../article-writer-wt-diary-20260520",
+                "merged": False,
+                "worktree_removed": False,
+            },
+        ),
+    )
+    adapter, router = _make_router(
+        article_writer_publisher=publisher,
+        remote_control_allowed_users=["U_AUTHORIZED"],
+    )
+
+    await router.process_message(
+        _make_msg("article write-hatena", user_id="U_AUTHORIZED"),
+    )
+
+    assert len(adapter.sent_messages) == 2
+    failure_msg = adapter.sent_messages[1][0]
+    assert "失敗" in failure_msg
+    assert "exit code: 1" in failure_msg
+    assert "失敗 Phase: git" in failure_msg
+    assert "phase 3 failed" in failure_msg
+    assert "../article-writer-wt-diary-20260520" in failure_msg
+
+
+async def test_article_write_hatena_timeout_includes_minutes() -> None:
+    """タイムアウト時にタイムアウト分数と worktree 残置の可能性を通知する."""
+    from src.services.article_publisher import ArticlePublishTimeoutError
+
+    publisher = _make_article_publisher(
+        publish_exception=ArticlePublishTimeoutError("timeout"),
+        timeout=1200,  # 20 分
+    )
+    adapter, router = _make_router(
+        article_writer_publisher=publisher,
+        remote_control_allowed_users=["U_AUTHORIZED"],
+    )
+
+    await router.process_message(
+        _make_msg("article write-hatena", user_id="U_AUTHORIZED"),
+    )
+
+    assert len(adapter.sent_messages) == 2
+    timeout_msg = adapter.sent_messages[1][0]
+    assert "タイムアウト" in timeout_msg
+    assert "20分" in timeout_msg
+    assert "worktree" in timeout_msg
+
+
+async def test_article_write_hatena_response_file_error_uses_spec_format() -> None:
+    """ArticlePublishResponseFileError 時、仕様書の「実行結果の解析失敗時」出力フォーマットで通知する."""
+    from pathlib import Path
+
+    from src.services.article_publisher import ArticlePublishResponseFileError
+
+    publisher = _make_article_publisher(
+        publish_exception=ArticlePublishResponseFileError(
+            reason="レスポンスファイルが見つかりません: .tmp/auto-publish-diary/result.json",
+            exit_code=0,
+            stdout_tail="some final claude response\nmore output",
+            result_path=Path("D:/GitHub/becky3/article-writer/.tmp/auto-publish-diary/result.json"),
+        ),
+    )
+    adapter, router = _make_router(
+        article_writer_publisher=publisher,
+        remote_control_allowed_users=["U_AUTHORIZED"],
+    )
+
+    await router.process_message(
+        _make_msg("article write-hatena", user_id="U_AUTHORIZED"),
+    )
+
+    assert len(adapter.sent_messages) == 2
+    msg = adapter.sent_messages[1][0]
+    assert msg.startswith("❌ 日記の自動投稿に失敗しました（実行結果の解析に失敗）")
+    assert "理由: レスポンスファイルが見つかりません" in msg
+    assert "exit code: 0" in msg
+    assert "stdout 末尾:" in msg
+    assert "some final claude response" in msg
+
+
+async def test_article_write_hatena_absolute_worktree_path_shows_basename_only() -> None:
+    """worktree_path が絶対パスの場合、Slack 通知には末尾セグメントのみ含める（情報露出防止）."""
+    from src.services.article_publisher import ArticlePublishFailure
+
+    for absolute_path, expected_basename in [
+        ("C:/foo/bar/article-writer-wt-diary-20260520", "article-writer-wt-diary-20260520"),
+        ("/abs/path/to/article-writer-wt-x", "article-writer-wt-x"),
+        ("C:\\foo\\bar\\article-writer-wt-y", "article-writer-wt-y"),
+    ]:
+        publisher = _make_article_publisher(
+            publish_result=ArticlePublishFailure(
+                exit_code=1,
+                raw_json={
+                    "status": "error",
+                    "failed_phase": "publish",
+                    "error": "phase failed",
+                    "worktree_path": absolute_path,
+                    "merged": False,
+                    "worktree_removed": False,
+                },
+            ),
+        )
+        adapter, router = _make_router(
+            article_writer_publisher=publisher,
+            remote_control_allowed_users=["U_AUTHORIZED"],
+        )
+
+        await router.process_message(
+            _make_msg("article write-hatena", user_id="U_AUTHORIZED"),
+        )
+
+        failure_msg = adapter.sent_messages[1][0]
+        assert expected_basename in failure_msg, f"Failed for: {absolute_path}"
+        # 絶対パスの親ディレクトリが漏れていないこと
+        assert "/foo/bar/" not in failure_msg, f"Leaked path for: {absolute_path}"
+        assert "\\foo\\bar\\" not in failure_msg, f"Leaked path for: {absolute_path}"
+        assert "/abs/path/to/" not in failure_msg, f"Leaked path for: {absolute_path}"

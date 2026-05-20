@@ -22,6 +22,7 @@ AI Assistantは、Slack上で動作するAIアシスタントである。
 | 11 | 設定管理 | アプリケーション設定の3層分離（シークレット・環境依存値・共通設定値） | [config-management.md](infrastructure/config-management.md) |
 | 12 | Remote Control 起動 | Slack コマンドからホスト PC 上の指定リポジトリで `claude remote-control` を起動し、接続 URL を返す | [remote-control-launch.md](features/remote-control-launch.md) |
 | 13 | ログ出力 | 全 handler / 主要サービスのタイミングログによる観測性向上 | [logging.md](infrastructure/logging.md) |
+| 14 | 記事自動投稿 | Slack コマンドから article-writer リポジトリで `/auto-publish-diary` スキルを起動し、結果を Slack に通知 | [article-publishing.md](features/article-publishing.md) |
 
 ## 3. 技術スタック
 
