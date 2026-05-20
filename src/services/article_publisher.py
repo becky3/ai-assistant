@@ -135,6 +135,19 @@ class ArticleWriterPublisher:
             "--output-format", "text",
         )
 
+        # 防御的クリーンアップ: 前回実行の result.json が残っている状態で
+        # 今回 subprocess が result.json 未更新のまま失敗（Phase 0 到達前のクラッシュ等）した場合、
+        # 古い結果を誤読しないよう、起動直前に既存ファイルを削除する。
+        # article-writer 側スキルも Phase 0 で同等の削除を行うが、ai-assistant 側でも二重に防御する
+        result_path = self.result_path
+        try:
+            result_path.unlink(missing_ok=True)
+        except OSError as e:
+            logger.warning(
+                "article_publish failed to remove stale result file: %s, err=%s",
+                result_path, e,
+            )
+
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=str(self._repo_path),
@@ -163,7 +176,6 @@ class ArticleWriterPublisher:
         )
 
         tail = _tail_lines(stdout_text, 10)
-        result_path = self.result_path
 
         if not result_path.is_file():
             reason = (
@@ -235,7 +247,11 @@ def _tail_lines(text: str, n: int) -> str:
 
 
 def _optional_str(value: object) -> str | None:
-    """JSON の値を任意文字列に変換する（None / 非文字列は None として扱う）."""
+    """JSON の値を任意文字列に変換する.
+
+    `None` はそのまま `None` を返す。文字列はそのまま返す。
+    非文字列（数値・bool 等）は `str(value)` で文字列化して返す（スキーマ違反データに対する防御的変換）。
+    """
     if value is None:
         return None
     if isinstance(value, str):

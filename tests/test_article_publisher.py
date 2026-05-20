@@ -43,12 +43,26 @@ def _stub_proc(stdout: bytes = b"", stderr: bytes = b"", returncode: int = 0) ->
     return proc
 
 
-def _write_result(repo_path: Path, payload: dict[str, object]) -> Path:
-    """テスト用に repo_path 配下にレスポンスファイルを作成する."""
+def _make_subprocess_mock_writing_result(
+    repo_path: Path,
+    payload_text: str | None,
+    returncode: int = 0,
+    stdout: bytes = b"",
+) -> AsyncMock:
+    """create_subprocess_exec のモック.
+
+    呼び出されたタイミングで result.json を書き込む（実際のスキル動作のシミュレーション）。
+    `payload_text=None` の場合は書き込みをスキップ（result.json 不在ケース用）。
+    """
     result_path = repo_path / RESULT_FILE_RELATIVE
-    result_path.parent.mkdir(parents=True, exist_ok=True)
-    result_path.write_text(json.dumps(payload), encoding="utf-8")
-    return result_path
+
+    async def fake_exec(*_args: object, **_kwargs: object) -> AsyncMock:
+        if payload_text is not None:
+            result_path.parent.mkdir(parents=True, exist_ok=True)
+            result_path.write_text(payload_text, encoding="utf-8")
+        return _stub_proc(stdout=stdout, returncode=returncode)
+
+    return AsyncMock(side_effect=fake_exec)
 
 
 async def test_publish_diary_nonexistent_repo_raises(tmp_path: Path) -> None:
@@ -68,7 +82,7 @@ async def test_publish_diary_claude_binary_missing(tmp_path: Path) -> None:
 
 async def test_publish_diary_success_reads_result_file(tmp_path: Path) -> None:
     """終了コード 0 + レスポンスファイル解析成功時、ArticlePublishResult が返る."""
-    _write_result(tmp_path, {
+    payload = json.dumps({
         "status": "ok",
         "article_path": "articles/hatena/2026-05-20-diary.md",
         "draft_url": "https://example.hatenablog.com/entry/2026/05/20/152523",
@@ -82,7 +96,7 @@ async def test_publish_diary_success_reads_result_file(tmp_path: Path) -> None:
         "src.services.article_publisher.shutil.which", return_value="/usr/bin/claude",
     ), patch(
         "src.services.article_publisher.asyncio.create_subprocess_exec",
-        new=AsyncMock(return_value=_stub_proc(returncode=0)),
+        new=_make_subprocess_mock_writing_result(tmp_path, payload, returncode=0),
     ):
         result = await publisher.publish_diary()
 
@@ -97,9 +111,10 @@ async def test_publish_diary_success_reads_result_file(tmp_path: Path) -> None:
 
 async def test_publish_diary_passes_expected_args(tmp_path: Path) -> None:
     """claude -p に '/auto-publish-diary' + --dangerously-skip-permissions が渡される."""
-    _write_result(tmp_path, {"status": "ok"})
+    mock_exec = _make_subprocess_mock_writing_result(
+        tmp_path, json.dumps({"status": "ok"}), returncode=0,
+    )
     publisher = _make_publisher(tmp_path)
-    mock_exec = AsyncMock(return_value=_stub_proc(returncode=0))
     with patch(
         "src.services.article_publisher.shutil.which", return_value="/usr/bin/claude",
     ), patch(
@@ -117,7 +132,7 @@ async def test_publish_diary_passes_expected_args(tmp_path: Path) -> None:
 
 async def test_publish_diary_failure_returns_failure(tmp_path: Path) -> None:
     """終了コード非 0 + レスポンスファイル解析成功時、ArticlePublishFailure が返る."""
-    _write_result(tmp_path, {
+    payload = json.dumps({
         "status": "error",
         "failed_phase": "publish",
         "error": "phase publish failed",
@@ -129,7 +144,7 @@ async def test_publish_diary_failure_returns_failure(tmp_path: Path) -> None:
         "src.services.article_publisher.shutil.which", return_value="/usr/bin/claude",
     ), patch(
         "src.services.article_publisher.asyncio.create_subprocess_exec",
-        new=AsyncMock(return_value=_stub_proc(returncode=1)),
+        new=_make_subprocess_mock_writing_result(tmp_path, payload, returncode=1),
     ):
         result = await publisher.publish_diary()
 
@@ -161,15 +176,12 @@ async def test_publish_diary_missing_result_file_raises(tmp_path: Path) -> None:
 
 async def test_publish_diary_invalid_json_raises(tmp_path: Path) -> None:
     """レスポンスファイルが JSON として不正な場合、ResponseFileError が発生する."""
-    result_path = tmp_path / RESULT_FILE_RELATIVE
-    result_path.parent.mkdir(parents=True, exist_ok=True)
-    result_path.write_text("{not valid json", encoding="utf-8")
     publisher = _make_publisher(tmp_path)
     with patch(
         "src.services.article_publisher.shutil.which", return_value="/usr/bin/claude",
     ), patch(
         "src.services.article_publisher.asyncio.create_subprocess_exec",
-        new=AsyncMock(return_value=_stub_proc(returncode=1)),
+        new=_make_subprocess_mock_writing_result(tmp_path, "{not valid json", returncode=1),
     ):
         with pytest.raises(ArticlePublishResponseFileError) as exc_info:
             await publisher.publish_diary()
@@ -180,15 +192,12 @@ async def test_publish_diary_invalid_json_raises(tmp_path: Path) -> None:
 
 async def test_publish_diary_non_dict_json_raises(tmp_path: Path) -> None:
     """レスポンスファイルの JSON が dict でない場合、ResponseFileError が発生する."""
-    result_path = tmp_path / RESULT_FILE_RELATIVE
-    result_path.parent.mkdir(parents=True, exist_ok=True)
-    result_path.write_text('["array", "is", "wrong"]', encoding="utf-8")
     publisher = _make_publisher(tmp_path)
     with patch(
         "src.services.article_publisher.shutil.which", return_value="/usr/bin/claude",
     ), patch(
         "src.services.article_publisher.asyncio.create_subprocess_exec",
-        new=AsyncMock(return_value=_stub_proc(returncode=0)),
+        new=_make_subprocess_mock_writing_result(tmp_path, '["array", "is", "wrong"]', returncode=0),
     ):
         with pytest.raises(ArticlePublishResponseFileError) as exc_info:
             await publisher.publish_diary()
@@ -218,3 +227,29 @@ async def test_result_path_property_returns_absolute_path(tmp_path: Path) -> Non
     publisher = _make_publisher(tmp_path)
     assert publisher.result_path == tmp_path / RESULT_FILE_RELATIVE
     assert publisher.result_path.is_absolute()
+
+
+async def test_publish_diary_removes_stale_result_file_before_launch(tmp_path: Path) -> None:
+    """前回実行の result.json が残っている場合、起動直前に削除される（古い結果の誤読防止）."""
+    # 前回の result.json を残置
+    stale_path = tmp_path / RESULT_FILE_RELATIVE
+    stale_path.parent.mkdir(parents=True, exist_ok=True)
+    stale_path.write_text(
+        json.dumps({"status": "ok", "pr_url": "https://stale/old/pull/0"}),
+        encoding="utf-8",
+    )
+
+    publisher = _make_publisher(tmp_path)
+
+    # subprocess が result.json を書き戻さない場合、削除されているため ResponseFileError になる
+    with patch(
+        "src.services.article_publisher.shutil.which", return_value="/usr/bin/claude",
+    ), patch(
+        "src.services.article_publisher.asyncio.create_subprocess_exec",
+        new=AsyncMock(return_value=_stub_proc(returncode=0)),
+    ):
+        with pytest.raises(ArticlePublishResponseFileError):
+            await publisher.publish_diary()
+
+    # 前回の result.json が削除されていることを確認（subprocess の stub が書き戻さないため）
+    assert not stale_path.exists()
