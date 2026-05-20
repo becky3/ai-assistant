@@ -65,6 +65,9 @@ def test_get_settings_loads_from_env_and_toml(monkeypatch: pytest.MonkeyPatch) -
             "REMOTE_CONTROL_REPOSITORIES",
             "ai-assistant=/path/to/ai-assistant,agent-commons=/path/to/agent-commons",
         )
+        monkeypatch.setenv(
+            "ARTICLE_WRITER_REPO_PATH", "/path/to/article-writer",
+        )
 
     # .env の代わりに git 管理されている .env.example を使用
     get_settings.cache_clear()

@@ -76,6 +76,9 @@ async def test_init_db_and_get_session(monkeypatch: pytest.MonkeyPatch) -> None:
             "REMOTE_CONTROL_REPOSITORIES",
             "ai-assistant=/path/to/ai-assistant,agent-commons=/path/to/agent-commons",
         )
+        monkeypatch.setenv(
+            "ARTICLE_WRITER_REPO_PATH", "/path/to/article-writer",
+        )
     monkeypatch.setattr(
         _EnvLoader, "model_config",
         {**_EnvLoader.model_config, "env_file": ".env.example"},
