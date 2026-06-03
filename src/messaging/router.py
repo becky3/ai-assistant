@@ -1326,8 +1326,10 @@ def _format_article_success(result: ArticlePublishResult) -> str:
     lines = [header]
     if result.article_path:
         lines.append(f"記事: {result.article_path}")
-    if result.draft_url:
-        lines.append(f"下書き: {result.draft_url}")
+    if result.edit_url:
+        lines.append(f"下書き編集: {result.edit_url}")
+    if result.public_url:
+        lines.append(f"公開URL: {result.public_url}")
     if result.pr_url:
         lines.append(f"PR: {result.pr_url}")
     if result.status and result.status != "ok":

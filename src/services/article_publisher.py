@@ -67,7 +67,8 @@ class ArticlePublishResult:
 
     status: str
     article_path: str | None
-    draft_url: str | None
+    edit_url: str | None
+    public_url: str | None
     pr_url: str | None
     worktree_removed: bool
     worktree_path: str | None
@@ -228,14 +229,15 @@ class ArticleWriterPublisher:
         result = ArticlePublishResult(
             status=str(payload.get("status", "")),
             article_path=_optional_str(payload.get("article_path")),
-            draft_url=_optional_str(payload.get("draft_url")),
+            edit_url=_optional_str(payload.get("edit_url")),
+            public_url=_optional_str(payload.get("public_url")),
             pr_url=_optional_str(payload.get("pr_url")),
             worktree_removed=bool(payload.get("worktree_removed", False)),
             worktree_path=_optional_str(payload.get("worktree_path")),
         )
         logger.info(
-            "article_publish complete: status=%s, draft_url=%s, pr_url=%s",
-            result.status, result.draft_url, result.pr_url,
+            "article_publish complete: status=%s, edit_url=%s, public_url=%s, pr_url=%s",
+            result.status, result.edit_url, result.public_url, result.pr_url,
         )
         return result
 

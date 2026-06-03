@@ -21,7 +21,7 @@ RSS記事の自動収集・要約配信、チャットでの質問応答を行�
 | **Botプロセスガード** | PIDファイルによるプロセス管理で、多重起動の防止・グレースフルシャットダウン・子プロセスのクリーンアップを行う |
 | **Remote Control 起動** | Slack コマンド (`@bot rc start <repo-key>`) でホスト PC 上の指定リポジトリで `claude remote-control` を起動し、claude.ai/code 接続 URL を返す。外出先のスマホから PC 操作なしで Claude Code セッションを開始できる。許可ユーザーと対象リポジトリの allowlist 設定が必要 |
 | **ログ出力** | 全 handler・主要サービスにタイミングログを付与し、所要時間・実行段階の事後追跡を可能にする |
-| **記事自動投稿** | Slack コマンド (`@bot article write-hatena`) または Slack reminder からホスト PC 上の article-writer リポジトリで `/auto-publish-diary` スキルを起動し、Hatena への日記下書き登録・PR 作成・マージまでを無人実行。結果（下書き URL・PR URL）を Slack に通知する |
+| **記事自動投稿** | Slack コマンド (`@bot article write-hatena`) または Slack reminder からホスト PC 上の article-writer リポジトリで `/auto-publish-diary` スキルを起動し、Hatena への日記下書き登録・PR 作成・マージまでを無人実行。結果（下書き編集 URL・公開 URL・PR URL）を Slack に通知する |
 
 全機能の一覧と仕様書リンクは [全体仕様概要](docs/specs/overview.md) を参照。
 
