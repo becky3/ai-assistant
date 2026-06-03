@@ -85,7 +85,8 @@ async def test_publish_diary_success_reads_result_file(tmp_path: Path) -> None:
     payload = json.dumps({
         "status": "ok",
         "article_path": "articles/hatena/2026-05-20-diary.md",
-        "draft_url": "https://example.hatenablog.com/entry/2026/05/20/152523",
+        "edit_url": "https://blog.hatena.ne.jp/example/example.hatenablog.com/edit?entry=1234567890",
+        "public_url": "https://example.hatenablog.com/entry/2026/05/20/000000",
         "pr_url": "https://github.com/becky3/article-writer/pull/71",
         "merged": True,
         "worktree_removed": True,
@@ -103,7 +104,8 @@ async def test_publish_diary_success_reads_result_file(tmp_path: Path) -> None:
     assert isinstance(result, ArticlePublishResult)
     assert result.status == "ok"
     assert result.article_path == "articles/hatena/2026-05-20-diary.md"
-    assert result.draft_url == "https://example.hatenablog.com/entry/2026/05/20/152523"
+    assert result.edit_url == "https://blog.hatena.ne.jp/example/example.hatenablog.com/edit?entry=1234567890"
+    assert result.public_url == "https://example.hatenablog.com/entry/2026/05/20/000000"
     assert result.pr_url == "https://github.com/becky3/article-writer/pull/71"
     assert result.worktree_removed is True
     assert result.worktree_path is None

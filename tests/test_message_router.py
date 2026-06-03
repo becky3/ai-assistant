@@ -860,7 +860,8 @@ async def test_article_write_hatena_success_message() -> None:
         publish_result=ArticlePublishResult(
             status="ok",
             article_path="articles/hatena/2026-02-10-diary.md",
-            draft_url="https://example.hatenablog.com/entry/2026/05/20/152523",
+            edit_url="https://blog.hatena.ne.jp/example/example.hatenablog.com/edit?entry=1234567890",
+            public_url="https://example.hatenablog.com/entry/2026/05/20/000000",
             pr_url="https://github.com/becky3/article-writer/pull/71",
             worktree_removed=True,
             worktree_path=None,
@@ -892,7 +893,8 @@ async def test_article_write_hatena_success_with_cleanup_failure() -> None:
         publish_result=ArticlePublishResult(
             status="ok",
             article_path="articles/hatena/2026-05-20-diary.md",
-            draft_url="https://example.hatenablog.com/entry/2026/05/20/152523",
+            edit_url="https://blog.hatena.ne.jp/example/example.hatenablog.com/edit?entry=1234567890",
+            public_url="https://example.hatenablog.com/entry/2026/05/20/000000",
             pr_url="https://github.com/becky3/article-writer/pull/71",
             worktree_removed=False,
             worktree_path="D:/GitHub/becky3/article-writer-wt-auto-20260520",

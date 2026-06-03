@@ -3,7 +3,7 @@
 ## 概要
 
 Slack コマンドにより、ホスト PC 上の article-writer リポジトリで `claude -p '/auto-publish-diary'` を起動し、日記記事の生成 → Hatena 下書き登録 → PR 作成 → 即マージ → worktree クリーンアップまでを無人実行する機能。
-実行結果（成功時の下書き URL・PR URL、失敗時の残置 worktree パス）を Slack に通知する。
+実行結果（成功時の下書き編集 URL・公開 URL・PR URL、失敗時の残置 worktree パス）を Slack に通知する。
 
 主用途は Slack reminder からの定時自動投稿。手動運用負荷を下げ、日記投稿の安定継続を実現する。
 
@@ -63,7 +63,7 @@ Slack コマンドにより、ホスト PC 上の article-writer リポジトリ
 6. `claude -p '/auto-publish-diary' --dangerously-skip-permissions --output-format text` を `cwd=ARTICLE_WRITER_REPO_PATH` で起動する。stdout / stderr を捕捉し、終了コードを取得する
 7. プロセスがタイムアウト時間内に終了しない場合は kill し、タイムアウトエラーを Slack に返す
 8. 親リポ直下のレスポンスファイル `<ARTICLE_WRITER_REPO_PATH>/.tmp/auto-publish-diary/result.json` を読み込み、JSON としてパースする。ファイル不在・読み取り失敗・JSON 解析失敗・dict 以外の値の場合は実行結果解析エラーを Slack に返す
-9. 終了コードが 0 + JSON 解析成功の場合は結果フィールド（`status` / `article_path` / `draft_url` / `pr_url` / `worktree_removed` / `worktree_path`）を Slack 通知に整形する
+9. 終了コードが 0 + JSON 解析成功の場合は結果フィールド（`status` / `article_path` / `edit_url` / `public_url` / `pr_url` / `worktree_removed` / `worktree_path`）を Slack 通知に整形する
 10. 終了コードが非 0 + JSON 解析成功の場合は失敗結果として Slack に返す。失敗時の JSON に `worktree_path` が含まれる場合は併せて通知する
 
 ステップ 4・5 が処理開始メッセージの後にあるのは、ホスト固有の前提（ディレクトリ実在・`claude` 実行ファイル PATH 解決）の検証を `ArticleWriterPublisher` サービス層に集約し、router 側を薄く保つ設計上の判断による。構成エラー時は「開始」「失敗」の 2 メッセージがユーザーに届くが、処理は正しく中断される。
@@ -75,7 +75,8 @@ Slack コマンドにより、ホスト PC 上の article-writer リポジトリ
 ```
 ✅ 日記の自動投稿に成功しました
 記事: articles/hatena/2026-05-20-diary.md
-下書き: https://example.hatenablog.com/entry/2026/05/20/152523
+下書き編集: https://blog.hatena.ne.jp/example/example.hatenablog.com/edit?entry=1234567890
+公開URL: https://example.hatenablog.com/entry/2026/05/20/000000
 PR: https://github.com/becky3/article-writer/pull/71
 ```
 
@@ -84,7 +85,8 @@ PR: https://github.com/becky3/article-writer/pull/71
 ```
 ✅ 日記の自動投稿に成功しました（worktree 削除のみ失敗）
 記事: articles/hatena/2026-05-20-diary.md
-下書き: https://example.hatenablog.com/entry/2026/05/20/152523
+下書き編集: https://blog.hatena.ne.jp/example/example.hatenablog.com/edit?entry=1234567890
+公開URL: https://example.hatenablog.com/entry/2026/05/20/000000
 PR: https://github.com/becky3/article-writer/pull/71
 残置 worktree: article-writer-wt-auto-20260520
 ```
