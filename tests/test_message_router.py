@@ -881,7 +881,11 @@ async def test_article_write_hatena_success_message() -> None:
     success_msg = adapter.sent_messages[1][0]
     assert "成功しました" in success_msg
     assert "articles/hatena/2026-02-10-diary.md" in success_msg
-    assert "https://example.hatenablog.com" in success_msg
+    assert (
+        "下書き編集: https://blog.hatena.ne.jp/example/example.hatenablog.com/edit?entry=1234567890"
+        in success_msg
+    )
+    assert "公開URL: https://example.hatenablog.com/entry/2026/05/20/000000" in success_msg
     assert "https://github.com/becky3/article-writer/pull/71" in success_msg
 
 
@@ -912,6 +916,11 @@ async def test_article_write_hatena_success_with_cleanup_failure() -> None:
     assert len(adapter.sent_messages) == 2
     success_msg = adapter.sent_messages[1][0]
     assert "成功しました（worktree 削除のみ失敗）" in success_msg
+    assert (
+        "下書き編集: https://blog.hatena.ne.jp/example/example.hatenablog.com/edit?entry=1234567890"
+        in success_msg
+    )
+    assert "公開URL: https://example.hatenablog.com/entry/2026/05/20/000000" in success_msg
     assert "残置 worktree: article-writer-wt-auto-20260520" in success_msg
 
 
