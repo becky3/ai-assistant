@@ -63,7 +63,12 @@ class ArticlePublishResponseFileError(ArticlePublishError):
 
 @dataclass(frozen=True)
 class ArticlePublishResult:
-    """起動成功時の結果（result.json のうち本機能が依存するフィールド）."""
+    """起動成功時の結果（result.json のうち本機能が依存するフィールド）.
+
+    `status` は通常 "ok"。`status="error"` の場合は終了コードが 0 でも実態は失敗で、
+    `error` / `failed_phase` フィールドにエラー情報が入る（article-writer 側の result.json 契約）。
+    本機能はこれらのフィールドを保持し、表示側で `status="error"` を検出して汎用エラー表示に分岐する。
+    """
 
     status: str
     article_path: str | None
@@ -72,6 +77,8 @@ class ArticlePublishResult:
     pr_url: str | None
     worktree_removed: bool
     worktree_path: str | None
+    error: str | None = None
+    failed_phase: str | None = None
 
 
 @dataclass(frozen=True)
@@ -234,6 +241,8 @@ class ArticleWriterPublisher:
             pr_url=_optional_str(payload.get("pr_url")),
             worktree_removed=bool(payload.get("worktree_removed", False)),
             worktree_path=_optional_str(payload.get("worktree_path")),
+            error=_optional_str(payload.get("error")),
+            failed_phase=_optional_str(payload.get("failed_phase")),
         )
         logger.info(
             "article_publish complete: status=%s, edit_url=%s, public_url=%s, pr_url=%s",

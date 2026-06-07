@@ -1300,7 +1300,7 @@ class MessageRouter:
         if isinstance(outcome, ArticlePublishFailure):
             response = _format_article_failure(outcome)
         else:
-            response = _format_article_success(outcome)
+            response = _format_article_result(outcome)
 
         await self._messaging.send_message(response, thread_id, channel)
         logger.info(
@@ -1316,8 +1316,21 @@ def _build_article_usage() -> str:
     )
 
 
-def _format_article_success(result: ArticlePublishResult) -> str:
-    """成功時の Slack メッセージを組み立てる."""
+def _format_article_result(result: ArticlePublishResult) -> str:
+    """`ArticlePublishResult` を Slack メッセージに整形する.
+
+    `result.status == "error"` の場合は終了コードが 0 でも実態は失敗のため汎用エラー表示に分岐し、
+    それ以外は成功表示（worktree 削除のみ失敗のサブパターン含む）を返すディスパッチャ。
+    article-writer 側でエラー文言・分類を追加・変更しても本リポの追従改修が不要になる疎結合化の実装。
+    """
+    if result.status == "error":
+        return _format_article_failure_message(
+            exit_code=None,
+            failed_phase=result.failed_phase,
+            error=result.error,
+            worktree_path=result.worktree_path,
+        )
+
     header = (
         "✅ 日記の自動投稿に成功しました"
         if result.worktree_removed
@@ -1349,23 +1362,43 @@ def _format_article_response_file_error(err: ArticlePublishResponseFileError) ->
     )
 
 
-def _format_article_failure(failure: ArticlePublishFailure) -> str:
-    """失敗時の Slack メッセージを組み立てる（article-writer の result.json スキーマ準拠）."""
-    raw = failure.raw_json
-    lines = [
-        "❌ 日記の自動投稿に失敗しました",
-        f"exit code: {failure.exit_code}",
-    ]
-    failed_phase = raw.get("failed_phase")
-    if isinstance(failed_phase, str) and failed_phase:
+def _format_article_failure_message(
+    *,
+    exit_code: int | None,
+    failed_phase: str | None,
+    error: str | None,
+    worktree_path: str | None,
+) -> str:
+    """失敗時の Slack メッセージを組み立てる共通ロジック.
+
+    exit_code=非0 (ArticlePublishFailure 経由) と status=error + exit_code=0
+    (ArticlePublishResult 経由) の両方から呼び出される。
+    exit_code が None の場合は exit code 行を省略する（status=error 経路向け）。
+    """
+    lines = ["❌ 日記の自動投稿に失敗しました"]
+    if exit_code is not None:
+        lines.append(f"exit code: {exit_code}")
+    if failed_phase:
         lines.append(f"失敗 Phase: {failed_phase}")
-    error_text = raw.get("error")
-    if isinstance(error_text, str) and error_text:
-        lines.append(f"理由: {error_text}")
-    worktree_path = raw.get("worktree_path")
-    if isinstance(worktree_path, str) and worktree_path:
+    if error:
+        lines.append(f"理由: {error}")
+    if worktree_path:
         lines.append(f"残置 worktree: {_safe_worktree_label(worktree_path)}")
     return "\n".join(lines)
+
+
+def _format_article_failure(failure: ArticlePublishFailure) -> str:
+    """終了コード非 0 + JSON 解析成功時の Slack メッセージ."""
+    raw = failure.raw_json
+    failed_phase = raw.get("failed_phase")
+    error_text = raw.get("error")
+    worktree_path = raw.get("worktree_path")
+    return _format_article_failure_message(
+        exit_code=failure.exit_code,
+        failed_phase=failed_phase if isinstance(failed_phase, str) and failed_phase else None,
+        error=error_text if isinstance(error_text, str) and error_text else None,
+        worktree_path=worktree_path if isinstance(worktree_path, str) and worktree_path else None,
+    )
 
 
 def _safe_worktree_label(worktree_path: str) -> str:
