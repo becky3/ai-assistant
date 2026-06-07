@@ -132,6 +132,38 @@ async def test_publish_diary_passes_expected_args(tmp_path: Path) -> None:
     assert kwargs["cwd"] == str(tmp_path)
 
 
+async def test_publish_diary_status_error_with_zero_exit_returns_result(tmp_path: Path) -> None:
+    """終了コード 0 + status=error の場合、ArticlePublishResult に error / failed_phase が入る (Issue #848).
+
+    article-writer 側が exit_code=0 で status=error を返すケース（例: cleanup phase の失敗）でも、
+    本リポは ArticlePublishResult として受け取り、error / failed_phase を表示側に渡せるようにする。
+    表示側 (_format_article_result) が status="error" を検出して汎用エラー表示に分岐する。
+    """
+    payload = json.dumps({
+        "status": "error",
+        "failed_phase": "cleanup",
+        "error": "gh pr merge failed: stale review",
+        "worktree_path": "../article-writer-wt-foo",
+        "merged": False,
+        "worktree_removed": False,
+    })
+    publisher = _make_publisher(tmp_path)
+    with patch(
+        "src.services.article_publisher.shutil.which", return_value="/usr/bin/claude",
+    ), patch(
+        "src.services.article_publisher.asyncio.create_subprocess_exec",
+        new=_make_subprocess_mock_writing_result(tmp_path, payload, returncode=0),
+    ):
+        result = await publisher.publish_diary()
+
+    assert isinstance(result, ArticlePublishResult)
+    assert result.status == "error"
+    assert result.error == "gh pr merge failed: stale review"
+    assert result.failed_phase == "cleanup"
+    assert result.worktree_removed is False
+    assert result.worktree_path == "../article-writer-wt-foo"
+
+
 async def test_publish_diary_failure_returns_failure(tmp_path: Path) -> None:
     """終了コード非 0 + レスポンスファイル解析成功時、ArticlePublishFailure が返る."""
     payload = json.dumps({

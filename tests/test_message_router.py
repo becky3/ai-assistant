@@ -1052,3 +1052,83 @@ async def test_article_write_hatena_absolute_worktree_path_shows_basename_only()
         assert "/foo/bar/" not in failure_msg, f"Leaked path for: {absolute_path}"
         assert "\\foo\\bar\\" not in failure_msg, f"Leaked path for: {absolute_path}"
         assert "/abs/path/to/" not in failure_msg, f"Leaked path for: {absolute_path}"
+
+
+async def test_article_write_hatena_status_error_uses_generic_failure_format() -> None:
+    """status="error" + exit_code=0 のとき、成功表示ではなく汎用エラー表示を使う (Issue #848).
+
+    article-writer 側が status=error の result.json を返した場合、終了コードが 0 でも
+    実態は失敗のため、`_format_article_result` 経由で汎用エラー表示に分岐する。
+    個別現象（マージ失敗等）の文言を本リポで分岐せず、result.json の `error` /
+    `failed_phase` をそのまま表示することで article-writer 側の追加・変更に追従不要とする。
+    """
+    from src.services.article_publisher import ArticlePublishResult
+
+    publisher = _make_article_publisher(
+        publish_result=ArticlePublishResult(
+            status="error",
+            article_path=None,
+            edit_url=None,
+            public_url=None,
+            pr_url=None,
+            worktree_removed=False,
+            worktree_path="../article-writer-wt-diary-20260607",
+            error="gh pr merge failed: stale review",
+            failed_phase="publish",
+        ),
+    )
+    adapter, router = _make_router(
+        article_writer_publisher=publisher,
+        remote_control_allowed_users=["U_AUTHORIZED"],
+    )
+
+    await router.process_message(
+        _make_msg("article write-hatena", user_id="U_AUTHORIZED"),
+    )
+
+    assert len(adapter.sent_messages) == 2
+    msg = adapter.sent_messages[1][0]
+    # 汎用エラー表示が使われていること（成功ヘッダーが出ないこと）
+    assert msg.startswith("❌ 日記の自動投稿に失敗しました")
+    assert "✅" not in msg
+    assert "worktree 削除のみ失敗" not in msg
+    # result.json の error / failed_phase / worktree_path が表示されること
+    assert "失敗 Phase: publish" in msg
+    assert "理由: gh pr merge failed: stale review" in msg
+    assert "残置 worktree: ../article-writer-wt-diary-20260607" in msg
+    # exit_code=0 (ArticlePublishResult 経由) のときは exit code 行を出さない（status=error 経路向け設計）
+    assert "exit code:" not in msg
+
+
+async def test_article_write_hatena_status_error_without_optional_fields() -> None:
+    """status="error" で error / failed_phase が無い場合でも、汎用エラーヘッダーは表示される.
+
+    article-writer 側がフィールドを省略しても、ヘッダーのみは確実に出る (degrade 設計)。
+    """
+    from src.services.article_publisher import ArticlePublishResult
+
+    publisher = _make_article_publisher(
+        publish_result=ArticlePublishResult(
+            status="error",
+            article_path=None,
+            edit_url=None,
+            public_url=None,
+            pr_url=None,
+            worktree_removed=False,
+            worktree_path=None,
+            error=None,
+            failed_phase=None,
+        ),
+    )
+    adapter, router = _make_router(
+        article_writer_publisher=publisher,
+        remote_control_allowed_users=["U_AUTHORIZED"],
+    )
+
+    await router.process_message(
+        _make_msg("article write-hatena", user_id="U_AUTHORIZED"),
+    )
+
+    assert len(adapter.sent_messages) == 2
+    msg = adapter.sent_messages[1][0]
+    assert msg == "❌ 日記の自動投稿に失敗しました"
