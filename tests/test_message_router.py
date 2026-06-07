@@ -1058,7 +1058,7 @@ async def test_article_write_hatena_status_error_uses_generic_failure_format() -
     """status="error" + exit_code=0 のとき、成功表示ではなく汎用エラー表示を使う (Issue #848).
 
     article-writer 側が status=error の result.json を返した場合、終了コードが 0 でも
-    実態は失敗のため、`_format_article_success` 経由で汎用エラー表示に分岐する。
+    実態は失敗のため、`_format_article_result` 経由で汎用エラー表示に分岐する。
     個別現象（マージ失敗等）の文言を本リポで分岐せず、result.json の `error` /
     `failed_phase` をそのまま表示することで article-writer 側の追加・変更に追従不要とする。
     """

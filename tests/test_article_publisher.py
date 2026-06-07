@@ -137,7 +137,7 @@ async def test_publish_diary_status_error_with_zero_exit_returns_result(tmp_path
 
     article-writer 側が exit_code=0 で status=error を返すケース（例: cleanup phase の失敗）でも、
     本リポは ArticlePublishResult として受け取り、error / failed_phase を表示側に渡せるようにする。
-    表示側 (_format_article_success) が status="error" を検出して汎用エラー表示に分岐する。
+    表示側 (_format_article_result) が status="error" を検出して汎用エラー表示に分岐する。
     """
     payload = json.dumps({
         "status": "error",
