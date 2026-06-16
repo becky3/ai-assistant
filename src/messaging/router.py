@@ -12,7 +12,7 @@ import logging
 import re
 import socket
 from datetime import datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
@@ -34,7 +34,6 @@ from src.services.remote_control import (
 )
 
 if TYPE_CHECKING:
-    from slack_sdk.web.async_client import AsyncWebClient
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from src.mcp_bridge.client_manager import MCPClientManager
@@ -552,12 +551,10 @@ class MessageRouter:
         session_factory: async_sessionmaker[AsyncSession] | None,
         channel_id: str | None,
         max_articles_per_feed: int,
-        feed_card_layout: Literal["vertical", "horizontal"],
         timezone: str,
         env_name: str,
         mcp_manager: MCPClientManager | None,
         bot_start_time: datetime | None,
-        slack_client: AsyncWebClient | None,
         rag_bluesky_handle: str,
         rag_zenn_username: str,
         rag_bluesky_max_posts: int,
@@ -572,12 +569,10 @@ class MessageRouter:
         self._session_factory = session_factory
         self._channel_id = channel_id
         self._max_articles_per_feed = max_articles_per_feed
-        self._feed_card_layout = feed_card_layout
         self._timezone = timezone
         self._env_name = env_name
         self._mcp_manager = mcp_manager
         self._bot_start_time = bot_start_time
-        self._slack_client = slack_client
         self._rag_bluesky_handle = rag_bluesky_handle
         self._rag_zenn_username = rag_zenn_username
         self._rag_bluesky_max_posts = rag_bluesky_max_posts
@@ -758,7 +753,6 @@ class MessageRouter:
                 self._collector is not None
                 and self._session_factory is not None
                 and self._channel_id is not None
-                and self._slack_client is not None
             ):
                 from src.scheduler.jobs import daily_collect_and_deliver
 
@@ -768,9 +762,8 @@ class MessageRouter:
                     )
                     feed_count, article_count = await daily_collect_and_deliver(
                         self._collector, self._session_factory,
-                        self._slack_client, self._channel_id,
+                        self._messaging, self._channel_id,
                         max_articles_per_feed=self._max_articles_per_feed,
-                        layout=self._feed_card_layout,
                         skip_summary=True,
                     )
                     await self._messaging.send_message(
@@ -810,7 +803,6 @@ class MessageRouter:
         if (
             self._session_factory is not None
             and self._channel_id is not None
-            and self._slack_client is not None
         ):
             from src.scheduler.jobs import feed_test_deliver
 
@@ -820,9 +812,8 @@ class MessageRouter:
                 )
                 await feed_test_deliver(
                     session_factory=self._session_factory,
-                    slack_client=self._slack_client,
+                    messaging=self._messaging,
                     channel_id=self._channel_id,
-                    layout=self._feed_card_layout,
                 )
                 await self._messaging.send_message(
                     "テスト配信が完了しました", thread_id, channel
@@ -851,14 +842,6 @@ class MessageRouter:
         thread_id = msg.thread_id
         channel = msg.channel
 
-        if self._slack_client is None:
-            await self._messaging.send_message(
-                "エラー: deliver コマンドは Slack 接続時のみ使用できます。",
-                thread_id, channel,
-            )
-            logger.info("handle_deliver complete: result=no_slack_client")
-            return
-
         from src.scheduler.jobs import daily_collect_and_deliver
 
         try:
@@ -867,9 +850,8 @@ class MessageRouter:
             )
             await daily_collect_and_deliver(
                 self._collector, self._session_factory,
-                self._slack_client, self._channel_id,
+                self._messaging, self._channel_id,
                 max_articles_per_feed=self._max_articles_per_feed,
-                layout=self._feed_card_layout,
             )
             await self._messaging.send_message(
                 "配信が完了しました", thread_id, channel

@@ -24,7 +24,8 @@ from py_common_lib.secrets import SecretNotFoundError, get_secret
 from src.config.settings import SERVICE_NAME, get_settings
 from src.db.models import Article, Feed
 from src.db.session import get_session_factory, init_db
-from src.scheduler.jobs import format_daily_digest, post_article_to_thread
+from src.messaging.slack_adapter import SlackAdapter
+from src.scheduler.jobs import _to_card
 
 # --- テスト用ダミー記事データ ---
 DUMMY_ARTICLES = [
@@ -165,68 +166,44 @@ async def main() -> None:
         )
         feeds = {f.id: f for f in feed_result.scalars().all()}
 
-    digest = format_daily_digest(
-        articles, feeds, layout=layout,
-    )
-
-    if not digest:
+    if not articles:
         print("配信する記事がありません")
         return
 
     client = AsyncWebClient(token=bot_token)
     channel = settings.slack_news_channel_id
 
-    # ヘッダー
-    await client.chat_postMessage(
-        channel=channel,
-        text=f":test_tube: 配信カードテスト (layout={layout})",
-        blocks=[
-            {
-                "type": "header",
-                "text": {
-                    "type": "plain_text",
-                    "text": f":test_tube: 配信カードテスト (layout={layout})",
-                },
-            },
-        ],
+    # MessagingPort（SlackAdapter）の配信プリミティブで投稿する
+    adapter = SlackAdapter(
+        slack_client=client,
+        bot_user_id="",
+        thread_history_service=None,  # type: ignore[arg-type]
+        bot_token=bot_token,
+        feed_card_layout=layout,
     )
 
+    # ヘッダー
+    await adapter.post_header(channel, f":test_tube: 配信カードテスト (layout={layout})")
+
     # フィードごとに親メッセージ + スレッド
-    for feed_id, (parent_blocks, article_blocks_list) in digest.items():
+    by_feed: dict[int, list[Article]] = {}
+    for article in articles:
+        by_feed.setdefault(article.feed_id, []).append(article)
+
+    for feed_id, feed_articles in by_feed.items():
         feed = feeds.get(feed_id)
         feed_name = feed.name if feed else "不明"
         try:
-            parent_result = await client.chat_postMessage(
-                channel=channel,
-                text=f"📰 {feed_name}",
-                blocks=parent_blocks,
-                unfurl_links=False,
-                unfurl_media=False,
-            )
-            parent_ts = parent_result["ts"]
-            print(f"  親メッセージ投稿完了: {feed_name}")
-
-            for article_blocks in article_blocks_list:
-                await post_article_to_thread(
-                    client, channel, parent_ts, article_blocks,
-                )
-            print(f"  スレッド記事投稿完了: {feed_name} ({len(article_blocks_list)}件)")
+            thread = await adapter.start_feed_thread(channel, feed_name)
+            for article in feed_articles:
+                await adapter.post_article_card(thread, _to_card(article))
+            print(f"  投稿完了: {feed_name} ({len(feed_articles)}件)")
         except Exception as exc:
             print(f"  投稿エラー: {feed_name} - {exc}")
 
     # フッター
-    await client.chat_postMessage(
-        channel=channel,
-        text=":bulb: これはテスト配信です",
-        blocks=[
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": ":bulb: これはテスト配信です（ダミー記事のため実際のリンクは無効です）",
-                },
-            },
-        ],
+    await adapter.post_footer(
+        channel, ":bulb: これはテスト配信です（ダミー記事のため実際のリンクは無効です）"
     )
 
     print()

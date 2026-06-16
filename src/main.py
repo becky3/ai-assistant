@@ -168,6 +168,7 @@ async def main() -> None:
             thread_history_service=thread_history_service,
             format_instruction=slack_format,
             bot_token=get_secret(key="SLACK_BOT_TOKEN", service=SERVICE_NAME),
+            feed_card_layout=settings.feed_card_layout,
         )
 
         # チャットサービス
@@ -248,12 +249,10 @@ async def main() -> None:
             session_factory=session_factory,
             channel_id=settings.slack_news_channel_id,
             max_articles_per_feed=settings.feed_articles_per_feed,
-            feed_card_layout=settings.feed_card_layout,
             timezone=settings.timezone,
             env_name=settings.env_name,
             mcp_manager=mcp_manager,
             bot_start_time=bot_start_time,
-            slack_client=slack_client,
             rag_bluesky_handle=settings.rag_bluesky_handle,
             rag_zenn_username=settings.rag_zenn_username,
             rag_bluesky_max_posts=settings.rag_bluesky_max_posts,
