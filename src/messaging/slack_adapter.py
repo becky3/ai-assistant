@@ -93,8 +93,8 @@ class SlackAdapter(MessagingPort):
         slack_client: AsyncWebClient,
         bot_user_id: str,
         thread_history_service: ThreadHistoryService,
+        bot_token: str,
         format_instruction: str = "",
-        bot_token: str = "",
         feed_card_layout: Literal["vertical", "horizontal"] = "horizontal",
     ) -> None:
         self._client = slack_client
@@ -135,9 +135,7 @@ class SlackAdapter(MessagingPort):
         プライベートファイルの取得には Bearer 認証が必要。失敗時は例外を送出する。
         """
         logger.info("read_file: name=%s, mimetype=%s", file.name, file.mimetype)
-        headers = (
-            {"Authorization": f"Bearer {self._bot_token}"} if self._bot_token else {}
-        )
+        headers = {"Authorization": f"Bearer {self._bot_token}"}
         async with ConstrainedClient(
             request_timeout=_FILE_DOWNLOAD_TIMEOUT,
             headers=headers,

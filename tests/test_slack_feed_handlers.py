@@ -345,6 +345,16 @@ async def test_handle_feed_import_non_csv_file() -> None:
 
 
 @pytest.mark.asyncio
+async def test_handle_feed_import_missing_download_url() -> None:
+    """feedハンドラ: import ダウンロードURL欠落時は専用エラーを返す."""
+    collector = AsyncMock(spec=FeedCollector)
+    files = [IncomingFile(name="feeds.csv", mimetype="text/csv", download_url="")]
+    result = await _handle_feed_import(collector, files, AsyncMock())
+    assert "エラー" in result
+    assert "ダウンロードURL" in result
+
+
+@pytest.mark.asyncio
 async def test_handle_feed_import_success() -> None:
     """feedハンドラ: import 成功."""
     collector = AsyncMock(spec=FeedCollector)

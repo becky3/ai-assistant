@@ -325,6 +325,9 @@ async def _download_and_parse_csv(
             "CSV形式のファイル（.csv）を添付してください。"
         ))
 
+    if not csv_file.download_url:
+        return ([], "エラー: ファイルのダウンロードURLが取得できませんでした。")
+
     max_file_size = 1 * 1024 * 1024
     if csv_file.size is not None and csv_file.size > max_file_size:
         return ([], f"エラー: ファイルサイズが大きすぎます（最大1MB、実際: {csv_file.size // 1024}KB）")

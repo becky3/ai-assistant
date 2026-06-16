@@ -11,9 +11,10 @@ import abc
 class MessagingListener(abc.ABC):
     """プラットフォームの受信接続を抽象化する Port.
 
-    接続のライフサイクル管理・bot identity の保持・イベントの正規化と
-    dispatch を担う。プラットフォーム固有（Slack Bolt / Discord Gateway 等）の
-    実装はサブクラスに閉じる。
+    抽象 Port が規定するのは接続のライフサイクル（`run`）と bot identity の
+    保持・公開（`bot_user_id`）のみ。イベントの正規化（→ IncomingMessage）・
+    受信フィルタ・ルーターへの dispatch は各プラットフォーム実装
+    （SlackListener 等、Slack Bolt / Discord Gateway 固有部分）に閉じる。
 
     仕様: docs/specs/features/cli-adapter.md
     """
