@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo
 
 from src.llm.base import Message, ToolDefinition
 from src.mcp_bridge.client_manager import MCPToolNotFoundError
-from src.messaging.port import IncomingMessage, MessagingPort
+from src.messaging.port import IncomingFile, IncomingMessage, MessagingPort
 
 from src.messaging.router import (
     MessageRouter,
@@ -38,6 +38,9 @@ class MockAdapter(MessagingPort):
         thread_id: str, channel: str, comment: str,
     ) -> None:
         self.uploaded_files.append((content, filename, thread_id, channel, comment))
+
+    async def read_file(self, file: IncomingFile) -> bytes:
+        return b""
 
     async def fetch_thread_history(
         self, channel: str, thread_id: str, current_message_id: str
@@ -73,7 +76,6 @@ def _make_router(
     rag_zenn_username: str = "",
     max_articles_per_feed: int = 10,
     feed_card_layout: Literal["vertical", "horizontal"] = "horizontal",
-    bot_token: str | None = None,
     slack_client: AsyncMock | None = None,
     remote_control_launcher: object | None = None,
     remote_control_allowed_users: list[str] | None = None,
@@ -93,7 +95,6 @@ def _make_router(
         channel_id="C_TEST",
         max_articles_per_feed=max_articles_per_feed,
         feed_card_layout=feed_card_layout,
-        bot_token=bot_token,
         timezone="Asia/Tokyo",
         env_name="test",
         mcp_manager=mcp_manager,

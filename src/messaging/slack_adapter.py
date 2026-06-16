@@ -8,8 +8,10 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from py_common_lib.httpx import ConstrainedClient
+
 from src.llm.base import Message
-from src.messaging.port import MessagingPort
+from src.messaging.port import IncomingFile, MessagingPort
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +19,9 @@ if TYPE_CHECKING:
     from slack_sdk.web.async_client import AsyncWebClient
 
     from src.services.thread_history import ThreadHistoryService
+
+# Slack ファイルダウンロードのタイムアウト（秒）
+_FILE_DOWNLOAD_TIMEOUT = 30.0
 
 
 class SlackAdapter(MessagingPort):
@@ -31,11 +36,13 @@ class SlackAdapter(MessagingPort):
         bot_user_id: str,
         thread_history_service: ThreadHistoryService,
         format_instruction: str = "",
+        bot_token: str = "",
     ) -> None:
         self._client = slack_client
         self._bot_user_id = bot_user_id
         self._thread_history = thread_history_service
         self._format_instruction = format_instruction
+        self._bot_token = bot_token
 
     async def send_message(self, text: str, thread_id: str, channel: str) -> None:
         """Slack にメッセージを投稿する."""
@@ -61,6 +68,28 @@ class SlackAdapter(MessagingPort):
             filename=filename,
             initial_comment=comment,
         )
+
+    async def read_file(self, file: IncomingFile) -> bytes:
+        """Slack ファイルを token 付きでダウンロードする.
+
+        プライベートファイルの取得には Bearer 認証が必要。失敗時は例外を送出する。
+        """
+        logger.info("read_file: name=%s, mimetype=%s", file.name, file.mimetype)
+        headers = (
+            {"Authorization": f"Bearer {self._bot_token}"} if self._bot_token else {}
+        )
+        async with ConstrainedClient(
+            request_timeout=_FILE_DOWNLOAD_TIMEOUT,
+            headers=headers,
+        ) as client:
+            response = await client.get(file.download_url)
+            if response.status_code == 302:
+                logger.error("File download redirected - auth may have failed")
+                raise RuntimeError(
+                    "ファイルのダウンロードに失敗しました（認証エラー）。Bot権限を確認してください。"
+                )
+            response.raise_for_status()
+            return response.content
 
     async def fetch_thread_history(
         self, channel: str, thread_id: str, current_message_id: str

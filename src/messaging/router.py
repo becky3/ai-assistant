@@ -16,11 +16,8 @@ from typing import TYPE_CHECKING, Literal
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
-import httpx
-from py_common_lib.httpx import ConstrainedClient
-
 from src.mcp_bridge.client_manager import MCPToolNotFoundError
-from src.messaging.port import IncomingMessage, MessagingPort
+from src.messaging.port import IncomingFile, IncomingMessage, MessagingPort
 from src.services.article_publisher import (
     ArticlePublishError,
     ArticlePublishFailure,
@@ -302,10 +299,14 @@ async def _handle_feed_disable(collector: FeedCollector, urls: list[str]) -> str
 
 
 async def _download_and_parse_csv(
-    files: list[dict[str, object]] | None,
-    bot_token: str,
+    files: list[IncomingFile] | None,
+    messaging: MessagingPort,
 ) -> tuple[list[dict[str, str]], str | None]:
-    """CSV添付ファイルを検証・ダウンロード・パースする."""
+    """CSV添付ファイルを検証・ダウンロード・パースする.
+
+    ダウンロードはプラットフォーム抽象（`MessagingPort.read_file`）経由で行い、
+    認証・取得手段はアダプターに委譲する。
+    """
     if not files:
         return ([], (
             "エラー: CSVファイルを添付してください。\n"
@@ -315,9 +316,7 @@ async def _download_and_parse_csv(
 
     csv_file = None
     for f in files:
-        mimetype = str(f.get("mimetype", ""))
-        name = str(f.get("name", ""))
-        if mimetype == "text/csv" or name.endswith(".csv"):
+        if f.mimetype == "text/csv" or f.name.endswith(".csv"):
             csv_file = f
             break
 
@@ -328,30 +327,12 @@ async def _download_and_parse_csv(
         ))
 
     max_file_size = 1 * 1024 * 1024
-    file_size = csv_file.get("size", 0)
-    if isinstance(file_size, int) and file_size > max_file_size:
-        return ([], f"エラー: ファイルサイズが大きすぎます（最大1MB、実際: {file_size // 1024}KB）")
-
-    url_private = csv_file.get("url_private")
-    if not url_private or not isinstance(url_private, str):
-        return ([], "エラー: ファイルのダウンロードURLが取得できませんでした。")
-
-    download_url = csv_file.get("url_private_download") or url_private
-    if not isinstance(download_url, str):
-        download_url = url_private
+    if csv_file.size is not None and csv_file.size > max_file_size:
+        return ([], f"エラー: ファイルサイズが大きすぎます（最大1MB、実際: {csv_file.size // 1024}KB）")
 
     try:
-        async with ConstrainedClient(
-            request_timeout=30.0,
-            headers={"Authorization": f"Bearer {bot_token}"},
-        ) as client:
-            response = await client.get(download_url)
-            if response.status_code == 302:
-                logger.error("File download redirected - auth may have failed")
-                return ([], "エラー: ファイルのダウンロードに失敗しました（認証エラー）。Bot権限を確認してください。")
-            response.raise_for_status()
-            content = response.text
-    except httpx.HTTPError as e:
+        content = (await messaging.read_file(csv_file)).decode("utf-8")
+    except Exception as e:
         logger.exception("Failed to download CSV file")
         return ([], f"エラー: ファイルのダウンロードに失敗しました: {e}")
 
@@ -423,12 +404,12 @@ def _format_error_details(errors: list[str]) -> list[str]:
 
 async def _handle_feed_import(
     collector: FeedCollector,
-    files: list[dict[str, object]] | None,
-    bot_token: str,
+    files: list[IncomingFile] | None,
+    messaging: MessagingPort,
 ) -> str:
     """CSVファイルからフィードを一括インポートする."""
     logger.info("handle_feed_import start: files=%d", len(files) if files else 0)
-    rows, error = await _download_and_parse_csv(files, bot_token)
+    rows, error = await _download_and_parse_csv(files, messaging)
     if error is not None:
         logger.info("handle_feed_import complete: result=download_or_parse_error")
         return error
@@ -451,12 +432,12 @@ async def _handle_feed_import(
 
 async def _handle_feed_replace(
     collector: FeedCollector,
-    files: list[dict[str, object]] | None,
-    bot_token: str,
+    files: list[IncomingFile] | None,
+    messaging: MessagingPort,
 ) -> str:
     """CSVファイルで全フィードを置換する（全削除→再登録）."""
     logger.info("handle_feed_replace start: files=%d", len(files) if files else 0)
-    rows, error = await _download_and_parse_csv(files, bot_token)
+    rows, error = await _download_and_parse_csv(files, messaging)
     if error is not None:
         logger.info("handle_feed_replace complete: result=download_or_parse_error")
         return error
@@ -572,7 +553,6 @@ class MessageRouter:
         channel_id: str | None,
         max_articles_per_feed: int,
         feed_card_layout: Literal["vertical", "horizontal"],
-        bot_token: str | None,
         timezone: str,
         env_name: str,
         mcp_manager: MCPClientManager | None,
@@ -593,7 +573,6 @@ class MessageRouter:
         self._channel_id = channel_id
         self._max_articles_per_feed = max_articles_per_feed
         self._feed_card_layout = feed_card_layout
-        self._bot_token = bot_token
         self._timezone = timezone
         self._env_name = env_name
         self._mcp_manager = mcp_manager
@@ -724,19 +703,13 @@ class MessageRouter:
         elif subcommand == "disable":
             response_text = await _handle_feed_disable(self._collector, urls)
         elif subcommand == "import":
-            if not self._bot_token:
-                response_text = "エラー: Bot Tokenが設定されていません。"
-            else:
-                response_text = await _handle_feed_import(
-                    self._collector, msg.files, self._bot_token
-                )
+            response_text = await _handle_feed_import(
+                self._collector, msg.files, self._messaging
+            )
         elif subcommand == "replace":
-            if not self._bot_token:
-                response_text = "エラー: Bot Tokenが設定されていません。"
-            else:
-                response_text = await _handle_feed_replace(
-                    self._collector, msg.files, self._bot_token
-                )
+            response_text = await _handle_feed_replace(
+                self._collector, msg.files, self._messaging
+            )
         elif subcommand == "export":
             response_text = await _handle_feed_export_via_port(
                 self._collector, self._messaging, thread_id, channel

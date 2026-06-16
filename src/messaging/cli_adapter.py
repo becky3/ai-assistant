@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.llm.base import Message
-from src.messaging.port import MessagingPort
+from src.messaging.port import IncomingFile, MessagingPort
 
 
 class CliAdapter(MessagingPort):
@@ -37,6 +37,10 @@ class CliAdapter(MessagingPort):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
         print(f"\n{comment}\nファイル保存先: {path}\n")
+
+    async def read_file(self, file: IncomingFile) -> bytes:
+        """CLI ではローカルパス（download_url）からファイルを読み込む."""
+        return Path(file.download_url).read_bytes()
 
     async def fetch_thread_history(
         self, channel: str, thread_id: str, current_message_id: str

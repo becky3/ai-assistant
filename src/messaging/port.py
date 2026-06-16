@@ -12,6 +12,20 @@ from src.llm.base import Message
 
 
 @dataclass
+class IncomingFile:
+    """プラットフォーム非依存の受信ファイル参照.
+
+    各プラットフォーム（Slack の file dict、Discord の attachment 等）を
+    中立表現に正規化したもの。実体の取得は `MessagingPort.read_file` が担う。
+    """
+
+    name: str
+    mimetype: str
+    download_url: str
+    size: int | None = None
+
+
+@dataclass
 class IncomingMessage:
     """プラットフォーム非依存の受信メッセージ."""
 
@@ -21,7 +35,7 @@ class IncomingMessage:
     channel: str
     is_in_thread: bool
     message_id: str
-    files: list[dict[str, object]] | None = field(default=None)
+    files: list[IncomingFile] | None = field(default=None)
 
 
 class MessagingPort(abc.ABC):
@@ -53,6 +67,14 @@ class MessagingPort(abc.ABC):
 
         Returns:
             Message のリスト。取得不可の場合は None（DBフォールバック）。
+        """
+
+    @abc.abstractmethod
+    async def read_file(self, file: IncomingFile) -> bytes:
+        """受信ファイルの実体（バイト列）を取得する.
+
+        プラットフォーム固有の認証・ダウンロード手段はアダプター内に閉じる
+        （Slack=token 付き DL / Discord=attachment URL / CLI=ローカル読込）。
         """
 
     @abc.abstractmethod

@@ -581,7 +581,6 @@ async def test_manual_deliver_command_passes_layout_from_router() -> None:
         channel_id=channel_id,
         max_articles_per_feed=10,
         feed_card_layout="vertical",
-        bot_token=None,
         timezone="Asia/Tokyo",
         env_name="",
         mcp_manager=None,

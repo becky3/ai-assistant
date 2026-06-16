@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.messaging.cli_adapter import CliAdapter
-from src.messaging.port import IncomingMessage, MessagingPort
+from src.messaging.port import IncomingFile, IncomingMessage, MessagingPort
 
 
 def test_incoming_message_fields() -> None:
@@ -28,8 +28,14 @@ def test_incoming_message_fields() -> None:
 
 
 def test_incoming_message_with_files() -> None:
-    """IncomingMessage にファイル情報を付与できる."""
-    files = [{"name": "test.csv", "mimetype": "text/csv"}]
+    """IncomingMessage にファイル情報（IncomingFile）を付与できる."""
+    files = [
+        IncomingFile(
+            name="test.csv",
+            mimetype="text/csv",
+            download_url="https://example.com/test.csv",
+        )
+    ]
     msg = IncomingMessage(
         user_id="U1",
         text="feed import",
@@ -41,6 +47,17 @@ def test_incoming_message_with_files() -> None:
     )
     assert msg.files is not None
     assert len(msg.files) == 1
+
+
+async def test_cli_adapter_read_file(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """CliAdapter の read_file はローカルパスからバイト列を読む."""
+    target = tmp_path / "data.csv"
+    target.write_text("url,name\nhttps://x,y", encoding="utf-8")
+    adapter = CliAdapter()
+    content = await adapter.read_file(
+        IncomingFile(name="data.csv", mimetype="text/csv", download_url=str(target))
+    )
+    assert content.decode("utf-8").startswith("url,name")
 
 
 def test_cli_adapter_is_messaging_port() -> None:

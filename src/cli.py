@@ -143,7 +143,6 @@ async def _setup(
         channel_id="cli",
         max_articles_per_feed=settings.feed_articles_per_feed,
         feed_card_layout=settings.feed_card_layout,
-        bot_token=None,
         timezone=settings.timezone,
         env_name=settings.env_name,
         mcp_manager=mcp_manager,

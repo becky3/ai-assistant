@@ -18,7 +18,6 @@ from py_common_lib.secrets import SecretNotFoundError, get_secret
 
 from src.config.settings import SERVICE_NAME, Settings, get_settings, load_assistant_config
 from src.process_guard import (
-    BOT_READY_SIGNAL,
     check_already_running,
     cleanup_children,
     remove_pid_file,
@@ -78,6 +77,7 @@ async def main() -> None:
     from src.mcp_bridge.client_manager import MCPClientManager, build_mcp_server_configs
     from src.messaging.router import MessageRouter
     from src.messaging.slack_adapter import SlackAdapter
+    from src.messaging.slack_listener import SlackListener
     from src.services.article_publisher import ArticleWriterPublisher
     from src.services.chat import ChatService
     from src.services.feed_collector import FeedCollector
@@ -85,8 +85,7 @@ async def main() -> None:
     from src.services.remote_control import RemoteControlLauncher
     from src.services.summarizer import Summarizer
     from src.services.thread_history import ThreadHistoryService
-    from src.slack.app import create_app, socket_mode_handler
-    from src.slack.handlers import register_handlers
+    from src.slack.app import create_app
 
     # 必須シークレットの起動時バリデーション（仕様: config-management.md エッジケース）
     _required_secrets = ["SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_SIGNING_SECRET"]
@@ -168,6 +167,7 @@ async def main() -> None:
             bot_user_id=bot_user_id,
             thread_history_service=thread_history_service,
             format_instruction=slack_format,
+            bot_token=get_secret(key="SLACK_BOT_TOKEN", service=SERVICE_NAME),
         )
 
         # チャットサービス
@@ -249,7 +249,6 @@ async def main() -> None:
             channel_id=settings.slack_news_channel_id,
             max_articles_per_feed=settings.feed_articles_per_feed,
             feed_card_layout=settings.feed_card_layout,
-            bot_token=get_secret(key="SLACK_BOT_TOKEN", service=SERVICE_NAME),
             timezone=settings.timezone,
             env_name=settings.env_name,
             mcp_manager=mcp_manager,
@@ -264,18 +263,16 @@ async def main() -> None:
             article_writer_publisher=article_writer_publisher,
         )
 
-        register_handlers(
-            app, router,
+        # 受信リスナー（MessagingListener 抽象経由で起動）
+        listener = SlackListener(
+            app=app,
+            router=router,
+            bot_user_id=bot_user_id,
             auto_reply_channels=settings.get_auto_reply_channels(),
         )
 
         # Socket Mode で起動（グレースフルシャットダウン対応）
-        async with socket_mode_handler(app) as handler:
-            print(BOT_READY_SIGNAL, flush=True)
-            try:
-                await handler.start_async()  # type: ignore[no-untyped-call]
-            except asyncio.CancelledError:
-                logger.info("シャットダウンシグナルを受信しました")
+        await listener.run()
     finally:
         if mcp_manager:
             try:
