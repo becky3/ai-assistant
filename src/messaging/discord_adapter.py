@@ -182,10 +182,19 @@ class DiscordAdapter(MessagingPort):
         bot_user = self._client.user
         bot_id = bot_user.id if bot_user is not None else None
 
-        messages: list[Message] = []
+        # スレッドの元になった発言（starter message）は親チャンネル側にあり
+        # thread.history() に含まれないため、先頭に補完する（Slack の親メッセージ相当）。
+        collected: list[discord.Message] = []
+        starter = await self._fetch_starter_message(target)
+        if starter is not None:
+            collected.append(starter)
         async for m in target.history(
             limit=self._thread_history_limit, oldest_first=True
         ):
+            collected.append(m)
+
+        messages: list[Message] = []
+        for m in collected:
             if str(m.id) == current_message_id:
                 continue
             text = m.content
@@ -197,6 +206,26 @@ class DiscordAdapter(MessagingPort):
                 content = f"<@{m.author.id}>: {text}"
                 messages.append(Message(role="user", content=content))
         return messages
+
+    async def _fetch_starter_message(
+        self, thread: discord.Thread
+    ) -> discord.Message | None:
+        """スレッドの起点となった親チャンネルの発言を取得する（取得不可なら None）.
+
+        メッセージから作成したスレッドは `thread.id == 起点メッセージの id`。
+        キャッシュ済みなら `starter_message`、無ければ親チャンネルから fetch する。
+        """
+        cached = thread.starter_message
+        if cached is not None:
+            return cached
+        parent = thread.parent
+        if not isinstance(parent, discord.TextChannel):
+            return None
+        try:
+            return await parent.fetch_message(thread.id)
+        except Exception:
+            logger.debug("starter message の取得に失敗しました", exc_info=True)
+            return None
 
     def get_format_instruction(self) -> str:
         """Discord Markdown フォーマット指示を返す."""

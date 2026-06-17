@@ -202,6 +202,48 @@ async def test_fetch_thread_history_non_thread_returns_none() -> None:
     assert result is None
 
 
+async def test_fetch_thread_history_includes_starter() -> None:
+    """starter message（親チャンネルの元発言）が履歴の先頭に含まれる."""
+    async def _history(*args: Any, **kwargs: Any) -> Any:
+        for m in thread_messages:
+            yield m
+
+    bot_user = MagicMock()
+    bot_user.id = 42
+    client = MagicMock()
+    client.user = bot_user
+
+    def _msg(mid: int, author_id: int, content: str) -> MagicMock:
+        m = MagicMock()
+        m.id = mid
+        m.author = MagicMock()
+        m.author.id = author_id
+        m.content = content
+        return m
+
+    # starter（元発言「こんにちわ」）は親チャンネル側。thread.history には含まれない
+    starter = _msg(50, 7, "こんにちわ")
+    thread_messages = [
+        _msg(51, 42, "やっほー"),  # bot のスレッド初回返信
+        _msg(99, 7, "最初に何て言った？"),  # current（除外）
+    ]
+
+    thread = MagicMock(spec=discord.Thread)
+    thread.starter_message = starter
+    thread.history = MagicMock(side_effect=_history)
+    client.get_channel = MagicMock(return_value=thread)
+
+    adapter = _make_adapter(client)
+    result = await adapter.fetch_thread_history("300", "300", "99")
+
+    assert result is not None
+    assert len(result) == 2
+    assert result[0].role == "user"
+    assert result[0].content == "<@7>: こんにちわ"  # starter が先頭
+    assert result[1].role == "assistant"
+    assert result[1].content == "やっほー"
+
+
 async def test_fetch_thread_history_converts_messages() -> None:
     async def _history(*args: Any, **kwargs: Any) -> Any:
         for m in messages:
@@ -213,6 +255,8 @@ async def test_fetch_thread_history_converts_messages() -> None:
     client.user = bot_user
 
     thread = MagicMock(spec=discord.Thread)
+    thread.starter_message = None  # starter なし（history のみ検証）
+    thread.parent = None
     thread.history = MagicMock(side_effect=_history)
     client.get_channel = MagicMock(return_value=thread)
 
