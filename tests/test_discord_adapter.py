@@ -73,6 +73,28 @@ async def test_send_message_splits() -> None:
     assert channel.send.await_count == 2
 
 
+async def test_send_message_converts_to_discord_markdown() -> None:
+    channel = _make_channel()
+    client = MagicMock()
+    client.get_channel = MagicMock(return_value=channel)
+    adapter = _make_adapter(client)
+
+    await adapter.send_message("*太字* :bulb:", thread_id="100", channel="100")
+
+    channel.send.assert_awaited_once_with("**太字** 💡")
+
+
+async def test_post_header_converts() -> None:
+    channel = _make_channel()
+    client = MagicMock()
+    client.get_channel = MagicMock(return_value=channel)
+    adapter = _make_adapter(client)
+
+    await adapter.post_header("100", ":newspaper: 今日のニュース")
+
+    channel.send.assert_awaited_once_with("📰 今日のニュース")
+
+
 async def test_send_message_fetch_fallback() -> None:
     channel = _make_channel()
     client = MagicMock()

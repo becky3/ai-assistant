@@ -116,20 +116,38 @@ async def test_ignores_self_message() -> None:
     router.process_message.assert_not_awaited()
 
 
-async def test_ignores_other_bot() -> None:
+async def test_ignores_other_bot_without_mention() -> None:
     listener, client, router = _make_listener()
     client.user = MagicMock()
     client.user.id = 42
     channel = MagicMock(spec=discord.TextChannel)
     channel.id = 100
     msg = _make_message(
-        author_id=7, content="<@42> hi", channel=channel, is_bot=True,
-        mentions=[client.user],
+        author_id=7, content="some bot chatter", channel=channel, is_bot=True,
     )
 
     await client.events["on_message"](msg)
 
     router.process_message.assert_not_awaited()
+
+
+async def test_reminder_bot_with_mention_accepted() -> None:
+    """外部 reminder bot が自 bot をメンションした投稿は受理する."""
+    listener, client, router = _make_listener()
+    client.user = MagicMock()
+    client.user.id = 42
+    channel = MagicMock(spec=discord.TextChannel)
+    channel.id = 100
+    msg = _make_message(
+        author_id=7, content="<@42> deliver", channel=channel, is_bot=True,
+        mentions=[client.user],
+    )
+
+    await client.events["on_message"](msg)
+
+    router.process_message.assert_awaited_once()
+    dispatched = router.process_message.await_args.args[0]
+    assert dispatched.text == "deliver"
 
 
 async def test_ignores_no_mention_outside_auto_reply() -> None:

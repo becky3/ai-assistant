@@ -16,6 +16,7 @@ import discord
 from py_common_lib.httpx import ConstrainedClient
 
 from src.llm.base import Message
+from src.messaging.discord_format import to_discord_markdown
 from src.messaging.port import ArticleCard, IncomingFile, MessagingPort, ThreadRef
 
 logger = logging.getLogger(__name__)
@@ -58,7 +59,7 @@ def _split_message(text: str, limit: int = _MESSAGE_LIMIT) -> list[str]:
 
 def _build_embed(card: ArticleCard) -> discord.Embed:
     """記事カードを discord.Embed に描画する."""
-    description = f"{card.datetime_str}\n\n{card.summary}"
+    description = f"{card.datetime_str}\n\n{to_discord_markdown(card.summary)}"
     if len(description) > _EMBED_DESCRIPTION_LIMIT:
         description = description[: _EMBED_DESCRIPTION_LIMIT - 3] + "..."
     embed = discord.Embed(
@@ -104,7 +105,7 @@ class DiscordAdapter(MessagingPort):
         """Discord にメッセージを送信する（2000 文字で分割）."""
         logger.debug("send_message: channel=%s, length=%d", thread_id, len(text))
         target = await self._resolve_channel(thread_id or channel)
-        for chunk in _split_message(text):
+        for chunk in _split_message(to_discord_markdown(text)):
             await target.send(chunk)
 
     async def upload_file(
@@ -122,7 +123,7 @@ class DiscordAdapter(MessagingPort):
         )
         target = await self._resolve_channel(thread_id or channel)
         file = discord.File(io.BytesIO(content.encode("utf-8")), filename=filename)
-        await target.send(content=comment or None, file=file)
+        await target.send(content=to_discord_markdown(comment) or None, file=file)
 
     async def read_file(self, file: IncomingFile) -> bytes:
         """Discord 添付ファイルをダウンロードする.
@@ -141,7 +142,7 @@ class DiscordAdapter(MessagingPort):
     async def post_header(self, channel: str, text: str) -> None:
         """配信見出しをプレーンテキストで投稿する."""
         target = await self._resolve_channel(channel)
-        await target.send(text)
+        await target.send(to_discord_markdown(text))
 
     async def start_feed_thread(self, channel: str, feed_name: str) -> ThreadRef:
         """フィード親メッセージを投稿しスレッド（独立 channel）を生成する."""
@@ -158,7 +159,7 @@ class DiscordAdapter(MessagingPort):
     async def post_footer(self, channel: str, text: str) -> None:
         """配信フッターをプレーンテキストで投稿する."""
         target = await self._resolve_channel(channel)
-        await target.send(text)
+        await target.send(to_discord_markdown(text))
 
     async def fetch_thread_history(
         self, channel: str, thread_id: str, current_message_id: str

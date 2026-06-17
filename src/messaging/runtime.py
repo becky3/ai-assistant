@@ -177,11 +177,15 @@ class DiscordRuntime(PlatformRuntime):
 
 
 def create_runtime(settings: Settings, assistant: dict[str, object]) -> PlatformRuntime:
-    """settings.platform に応じたプラットフォーム runtime を生成する."""
+    """settings.platform に応じたプラットフォーム runtime を生成する.
+
+    canonical 内部マークアップは Slack mrkdwn（`format_instruction`）に統一する。
+    Discord 向けの Discord Markdown 変換は DiscordAdapter の送信時に行うため、
+    LLM へ渡す整形指示はプラットフォーム間で共通とする（仕様: S2-U3 設計判断）。
+    """
+    format_instruction = str(assistant.get("format_instruction", ""))
     if settings.platform == "discord":
-        discord_format = str(assistant.get("format_instruction_discord", ""))
         logger.info("プラットフォーム: discord")
-        return DiscordRuntime(settings, discord_format)
-    slack_format = str(assistant.get("format_instruction", ""))
+        return DiscordRuntime(settings, format_instruction)
     logger.info("プラットフォーム: slack")
-    return SlackRuntime(settings, slack_format)
+    return SlackRuntime(settings, format_instruction)

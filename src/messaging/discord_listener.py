@@ -124,15 +124,17 @@ class DiscordListener(MessagingListener):
             return  # 未 ready
 
         if message.author.id == me.id:
-            return  # 自己発言
+            return  # 自己発言（最優先で除外しループ防止）
 
-        if message.author.bot:
-            # 他 bot は無視（reminder bot 受理は S2-U3 で例外を追加）
-            logger.debug("message filtered: author is bot")
+        mentioned = me in message.mentions
+
+        if message.author.bot and not mentioned:
+            # 他 bot は自 bot メンション時のみ受理（外部 Discord reminder bot の
+            # 定期トリガー経路。メンション無しの他 bot 発言はループ防止のため無視）
+            logger.debug("message filtered: bot author without mention")
             return
 
         channel = message.channel
-        mentioned = me in message.mentions
         in_auto_reply = self._is_auto_reply_channel(channel)
         if not mentioned and not in_auto_reply:
             return
