@@ -61,6 +61,10 @@ def _make_message(
     msg.raw_mentions = [u.id for u in (mentions or [])]
     msg.attachments = attachments or []
     msg.id = message_id
+    # 通常チャンネルでは発言にスレッドを作成して返信する（Slack 同様）
+    created_thread = MagicMock(spec=discord.Thread)
+    created_thread.id = 9000
+    msg.create_thread = AsyncMock(return_value=created_thread)
     return msg
 
 
@@ -186,9 +190,11 @@ async def test_mention_dispatches_with_strip() -> None:
     dispatched = router.process_message.await_args.args[0]
     assert dispatched.text == "feed list"
     assert dispatched.user_id == "7"
-    assert dispatched.channel == "100"
-    assert dispatched.thread_id == "100"
-    assert dispatched.is_in_thread is False
+    # 通常チャンネル → 発言にスレッド作成し、返信先は新スレッド（id=9000）
+    msg.create_thread.assert_awaited_once()
+    assert dispatched.channel == "9000"
+    assert dispatched.thread_id == "9000"
+    assert dispatched.is_in_thread is False  # 新規スレッド初回は DB フォールバック
     assert dispatched.message_id == "555"
     assert dispatched.files is not None and dispatched.files[0].name == "a.csv"
 
@@ -208,7 +214,8 @@ async def test_auto_reply_channel_without_mention() -> None:
     assert dispatched.text == "hello bot"
 
 
-async def test_thread_message_marked_in_thread() -> None:
+async def test_thread_message_replies_in_existing_thread() -> None:
+    """既存スレッド内の発言はスレッドを新規作成せず、そのスレッドで返信する."""
     listener, client, router = _make_listener()
     client.user = MagicMock()
     client.user.id = 42
@@ -222,5 +229,26 @@ async def test_thread_message_marked_in_thread() -> None:
 
     router.process_message.assert_awaited_once()
     dispatched = router.process_message.await_args.args[0]
-    assert dispatched.is_in_thread is True
+    assert dispatched.is_in_thread is True  # 既存スレッド → 履歴取得対象
     assert dispatched.channel == "300"
+    msg.create_thread.assert_not_awaited()  # 既存スレッドでは新規作成しない
+
+
+async def test_mention_creates_reply_thread() -> None:
+    """通常チャンネルでのメンションは発言にスレッドを作成して返信する."""
+    listener, client, router = _make_listener()
+    client.user = MagicMock()
+    client.user.id = 42
+    channel = MagicMock(spec=discord.TextChannel)
+    channel.id = 100
+    msg = _make_message(
+        author_id=7, content="<@42> こんにちは", channel=channel,
+        mentions=[client.user],
+    )
+
+    await client.events["on_message"](msg)
+
+    msg.create_thread.assert_awaited_once()
+    dispatched = router.process_message.await_args.args[0]
+    assert dispatched.channel == "9000"
+    assert dispatched.is_in_thread is False

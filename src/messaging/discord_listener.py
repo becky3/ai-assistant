@@ -150,24 +150,50 @@ class DiscordListener(MessagingListener):
             logger.debug("message filtered: empty text after strip")
             return
 
-        is_in_thread = isinstance(channel, discord.Thread)
-        channel_id = str(channel.id)
+        # Slack 同様にスレッドへ返信する。既にスレッド内ならそのスレッド、通常
+        # チャンネルなら発言にスレッドを作成して返信先とする。is_in_thread は
+        # 「元発言が既存スレッド内だったか」を表し、ChatService のスレッド履歴取得
+        # 可否に使う（新規スレッド初回は False = DB フォールバック）。
+        original_in_thread = isinstance(channel, discord.Thread)
+        if original_in_thread:
+            target_id = str(channel.id)
+        else:
+            target_id = await self._ensure_reply_thread(message, content)
 
         logger.info(
-            "discord message: user=%s, channel=%s, mentioned=%s, text=%r",
-            message.author.id, channel_id, mentioned, content[:200],
+            "discord message: user=%s, channel=%s, thread=%s, mentioned=%s, text=%r",
+            message.author.id, channel.id, target_id, mentioned, content[:200],
         )
 
         msg = IncomingMessage(
             user_id=str(message.author.id),
             text=content,
-            thread_id=channel_id,
-            channel=channel_id,
-            is_in_thread=is_in_thread,
+            thread_id=target_id,
+            channel=target_id,
+            is_in_thread=original_in_thread,
             message_id=str(message.id),
             files=_to_incoming_files(message.attachments),
         )
         await self._router.process_message(msg)
+
+    async def _ensure_reply_thread(
+        self, message: discord.Message, content: str
+    ) -> str:
+        """発言にスレッドを作成し、その channel id を返す（失敗時は元チャンネル）.
+
+        Discord のスレッドは独立 channel のため、Slack の thread_ts 相当として
+        発言ごとにスレッドを作る。作成失敗時（権限不足・既存スレッド等）は元の
+        チャンネルにフォールバックする。
+        """
+        name = " ".join(content.split())[:80] or "chat"
+        try:
+            thread = await message.create_thread(name=name)
+            return str(thread.id)
+        except Exception:
+            logger.warning(
+                "スレッド作成に失敗しました。チャンネルに返信します", exc_info=True
+            )
+            return str(message.channel.id)
 
     async def run(self) -> None:
         """Gateway に接続し、シャットダウンまでイベントを dispatch する."""
