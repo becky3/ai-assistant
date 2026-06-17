@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from slack_bolt.async_app import AsyncApp
 
-from src.messaging.port import IncomingMessage
+from src.messaging.port import IncomingFile, IncomingMessage
 
 if TYPE_CHECKING:
     from src.messaging.router import MessageRouter
@@ -31,6 +31,27 @@ def strip_mention(text: str) -> str:
     return result
 
 
+def _to_incoming_files(
+    raw_files: list[dict[str, object]] | None,
+) -> list[IncomingFile] | None:
+    """Slack の file dict リストを中立な IncomingFile リストに正規化する."""
+    if not raw_files:
+        return None
+    result: list[IncomingFile] = []
+    for f in raw_files:
+        download_url = f.get("url_private_download") or f.get("url_private") or ""
+        size = f.get("size")
+        result.append(
+            IncomingFile(
+                name=str(f.get("name", "")),
+                mimetype=str(f.get("mimetype", "")),
+                download_url=str(download_url),
+                size=size if isinstance(size, int) else None,
+            )
+        )
+    return result
+
+
 def register_handlers(
     app: AsyncApp,
     router: MessageRouter,
@@ -45,7 +66,7 @@ def register_handlers(
         raw_thread_ts: str | None = event.get("thread_ts")
         event_ts: str = event.get("ts", "")
         thread_ts: str = raw_thread_ts or event_ts
-        files: list[dict[str, object]] | None = event.get("files")
+        files = _to_incoming_files(event.get("files"))
         channel: str = event.get("channel", "")
 
         logger.info(
@@ -86,8 +107,11 @@ def register_handlers(
             logger.debug("message filtered: bot_id present")
             return
 
-        if event.get("subtype"):
-            logger.debug("message filtered: subtype=%s", event.get("subtype"))
+        # file_share（ユーザーのファイル添付）は処理対象。
+        # 編集・削除等のその他サブタイプは従来通り無視する。
+        subtype = event.get("subtype")
+        if subtype and subtype != "file_share":
+            logger.debug("message filtered: subtype=%s", subtype)
             return
 
         channel: str = event.get("channel", "")
@@ -108,7 +132,7 @@ def register_handlers(
         raw_thread_ts: str | None = event.get("thread_ts")
         event_ts: str = event.get("ts", "")
         thread_ts: str = raw_thread_ts or event_ts
-        files: list[dict[str, object]] | None = event.get("files")
+        files = _to_incoming_files(event.get("files"))
 
         cleaned_text = text.strip()
         if not cleaned_text:

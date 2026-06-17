@@ -24,9 +24,9 @@
 | `src/db/` | SQLAlchemy モデル定義・DB セッション管理 |
 | `src/llm/` | LLM プロバイダー抽象化（ローカル / OpenAI / Anthropic）とファクトリ |
 | `src/services/` | ビジネスロジック（チャット応答、RSS 収集、要約等） |
-| `src/slack/` | Slack Bolt アプリ初期化・イベントハンドラ |
-| `src/messaging/` | メッセージング抽象化（Port/Adapter パターン。Slack アダプター、CLI アダプター） |
-| `src/scheduler/` | APScheduler による定期実行ジョブ |
+| `src/slack/` | Slack Bolt アプリ初期化・イベントハンドラ（SlackListener から利用される Slack 受信実装の内部） |
+| `src/messaging/` | メッセージング抽象化（受信 `MessagingListener` Port + 送信 `MessagingPort`/Adapter。Slack/CLI 実装、中立モデル `IncomingFile`/`ArticleCard`/`ThreadRef`）。`MessageRouter` はプラットフォーム非依存 |
+| `src/scheduler/` | APScheduler による定期実行ジョブ（配信は `MessagingPort` 経由） |
 | `src/mcp_bridge/` | MCP サーバーへの接続管理（クライアント側ブリッジ） |
 
 ### ルートレベルファイル

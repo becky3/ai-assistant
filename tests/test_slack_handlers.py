@@ -164,7 +164,7 @@ async def test_auto_reply_ignores_bot_messages() -> None:
 
 
 async def test_auto_reply_ignores_subtype_messages() -> None:
-    """サブタイプ付きメッセージには反応しない."""
+    """サブタイプ付きメッセージ（file_share 以外）には反応しない."""
     router = AsyncMock()
     handlers = _setup_handlers_with_auto_reply(router, ["C_AUTO"])
 
@@ -173,6 +173,33 @@ async def test_auto_reply_ignores_subtype_messages() -> None:
     await handlers["message"](event=event, say=say)
 
     router.process_message.assert_not_called()
+
+
+async def test_auto_reply_processes_file_share() -> None:
+    """file_share（ファイル添付）はメンション無しでも処理される（feed import 等）."""
+    router = AsyncMock()
+    handlers = _setup_handlers_with_auto_reply(router, ["C_AUTO"])
+
+    say = AsyncMock()
+    event = {
+        "user": "U123",
+        "text": "feed import",
+        "channel": "C_AUTO",
+        "ts": "123.456",
+        "subtype": "file_share",
+        "files": [{
+            "name": "feeds.csv",
+            "mimetype": "text/csv",
+            "url_private_download": "https://files.slack.com/feeds.csv",
+        }],
+    }
+    await handlers["message"](event=event, say=say)
+
+    router.process_message.assert_called_once()
+    msg: IncomingMessage = router.process_message.call_args[0][0]
+    assert msg.text == "feed import"
+    assert msg.files is not None
+    assert msg.files[0].name == "feeds.csv"
 
 
 async def test_auto_reply_ignores_when_no_channels_configured() -> None:

@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Literal
 from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
 
 from src.llm.base import Message, ToolDefinition
 from src.mcp_bridge.client_manager import MCPToolNotFoundError
-from src.messaging.port import IncomingMessage, MessagingPort
+from src.messaging.port import (
+    ArticleCard,
+    IncomingFile,
+    IncomingMessage,
+    MessagingPort,
+    ThreadRef,
+)
 
 from src.messaging.router import (
     MessageRouter,
@@ -38,6 +43,21 @@ class MockAdapter(MessagingPort):
         thread_id: str, channel: str, comment: str,
     ) -> None:
         self.uploaded_files.append((content, filename, thread_id, channel, comment))
+
+    async def read_file(self, file: IncomingFile) -> bytes:
+        return b""
+
+    async def post_header(self, channel: str, text: str) -> None:
+        pass
+
+    async def start_feed_thread(self, channel: str, feed_name: str) -> ThreadRef:
+        return ThreadRef(channel=channel, thread_key="thread")
+
+    async def post_article_card(self, thread: ThreadRef, card: ArticleCard) -> None:
+        pass
+
+    async def post_footer(self, channel: str, text: str) -> None:
+        pass
 
     async def fetch_thread_history(
         self, channel: str, thread_id: str, current_message_id: str
@@ -72,9 +92,6 @@ def _make_router(
     rag_bluesky_handle: str = "",
     rag_zenn_username: str = "",
     max_articles_per_feed: int = 10,
-    feed_card_layout: Literal["vertical", "horizontal"] = "horizontal",
-    bot_token: str | None = None,
-    slack_client: AsyncMock | None = None,
     remote_control_launcher: object | None = None,
     remote_control_allowed_users: list[str] | None = None,
     article_writer_publisher: object | None = None,
@@ -92,13 +109,10 @@ def _make_router(
         session_factory=session_factory,
         channel_id="C_TEST",
         max_articles_per_feed=max_articles_per_feed,
-        feed_card_layout=feed_card_layout,
-        bot_token=bot_token,
         timezone="Asia/Tokyo",
         env_name="test",
         mcp_manager=mcp_manager,
         bot_start_time=bot_start_time,
-        slack_client=slack_client,
         rag_bluesky_handle=rag_bluesky_handle,
         rag_zenn_username=rag_zenn_username,
         rag_bluesky_max_posts=100,
@@ -591,8 +605,10 @@ async def test_reminder_deliver_routes_to_deliver() -> None:
 
     await router.process_message(_make_msg("Reminder: deliver."))
 
-    assert len(adapter.sent_messages) == 1
-    assert "Slack 接続時のみ" in adapter.sent_messages[0][0]
+    # deliver ハンドラに到達し、Port 経由で配信が実行される（開始・完了の2メッセージ）
+    assert len(adapter.sent_messages) == 2
+    assert "配信を開始します" in adapter.sent_messages[0][0]
+    assert "配信が完了しました" in adapter.sent_messages[1][0]
 
 
 # --- rc コマンドテスト (Issue #831) ---
