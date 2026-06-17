@@ -107,8 +107,11 @@ def register_handlers(
             logger.debug("message filtered: bot_id present")
             return
 
-        if event.get("subtype"):
-            logger.debug("message filtered: subtype=%s", event.get("subtype"))
+        # file_share（ユーザーのファイル添付）は処理対象。
+        # 編集・削除等のその他サブタイプは従来通り無視する。
+        subtype = event.get("subtype")
+        if subtype and subtype != "file_share":
+            logger.debug("message filtered: subtype=%s", subtype)
             return
 
         channel: str = event.get("channel", "")
