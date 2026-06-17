@@ -1,7 +1,8 @@
 # AI Assistant
 
-Slack上で動作するAI学習支援アシスタント。
+Slack / Discord 上で動作するAI学習支援アシスタント。
 RSS記事の自動収集・要約配信、チャットでの質問応答を行う。
+稼働プラットフォームは `.env` の `PLATFORM`（`slack` / `discord`）で選択でき、メッセージング抽象により同一の機能が両プラットフォームで利用できる。Discord のセットアップは [Discord セットアップ](docs/specs/infrastructure/discord-setup.md) を参照。
 
 コスト最適化のため、タスクの性質に応じてローカルLLM（LM Studio）とオンラインLLM（OpenAI / Anthropic）を使い分ける。チャット応答では Claude CLI によるワンショット実行モードも選択可能。
 
@@ -33,7 +34,7 @@ RSS記事の自動収集・要約配信、チャットでの質問応答を行�
 
 ## 技術スタック
 
-Python 3.11+ / uv / slack-bolt / OpenAI SDK / Anthropic SDK / SQLite + SQLAlchemy / feedparser / MCP SDK / py-common-lib (keyring, ConstrainedClient)
+Python 3.11+ / uv / slack-bolt / discord.py / OpenAI SDK / Anthropic SDK / SQLite + SQLAlchemy / feedparser / MCP SDK / py-common-lib (keyring, ConstrainedClient)
 
 詳細は [全体仕様概要](docs/specs/overview.md) を参照。
 
@@ -139,6 +140,8 @@ uv run mypy src
 - [Bot プロセスガード](docs/specs/infrastructure/bot-process-guard.md)
 - [設定管理](docs/specs/infrastructure/config-management.md)
 - [ログ出力](docs/specs/infrastructure/logging.md)
+- [Discord セットアップ](docs/specs/infrastructure/discord-setup.md)
+- [定時実行（内部スケジューラ）](docs/specs/infrastructure/scheduled-tasks.md)
 
 ### ワークフロー（workflows）
 

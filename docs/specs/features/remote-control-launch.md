@@ -41,7 +41,7 @@ Slack コマンドにより、ホスト PC 上で `claude remote-control` プロ
 
 **振る舞い**:
 
-1. 認可ユーザー allowlist にメッセージ送信者の Slack `user_id` が含まれるか検証する。含まれない場合は権限エラーを返して終了する
+1. 認可ユーザー allowlist（稼働プラットフォームのもの: Slack=`REMOTE_CONTROL_ALLOWED_USERS` / Discord=`DISCORD_REMOTE_CONTROL_ALLOWED_USERS`）にメッセージ送信者の `user_id` が含まれるか検証する。含まれない場合は権限エラーを返して終了する
 2. repo allowlist に `<repo-key>` が含まれるか検証する。含まれない場合は登録済み key 一覧を含むエラーを返して終了する
 3. allowlist の対応パスが実在ディレクトリであることを検証する。存在しない場合は構成エラーを返して終了する
 4. `claude` 実行ファイルが PATH 上で解決できることを検証する。解決できない場合は前提エラーを返して終了する
@@ -88,7 +88,8 @@ repo-key 未登録時:
 
 | 項目名 | 層 | 設計意図 |
 |---|---|---|
-| `REMOTE_CONTROL_ALLOWED_USERS` | 環境依存値 | Slack `user_id` のカンマ区切りリスト。空または未設定の場合は本機能は無効化される（誰も起動できない）。判定は Slack ワークスペース内で一意な `user_id`（例: `U01ABCDEF12`）と完全一致する |
+| `REMOTE_CONTROL_ALLOWED_USERS` | 環境依存値 | 認可ユーザー allowlist（`PLATFORM=slack` 用）。Slack `user_id`（例: `U01ABCDEF12`）のカンマ区切りリスト。空または未設定の場合は本機能は無効化される（誰も起動できない） |
+| `DISCORD_REMOTE_CONTROL_ALLOWED_USERS` | 環境依存値 | 認可ユーザー allowlist（`PLATFORM=discord` 用）。Discord `user_id` のカンマ区切りリスト。ID 体系が Slack と異なるためプラットフォーム別に管理し、稼働プラットフォームに応じて選択される |
 | `REMOTE_CONTROL_REPOSITORIES` | 環境依存値 | `<repo-key>=<絶対パス>` のカンマ区切りリスト。`<repo-key>` は先頭が英数で、英数・`.`・`_`・`-` のみ許可（パストラバーサル防止のため先頭 `.` は不可）。`<絶対パス>` は絶対パスのみ許可（意図しないディレクトリでの起動防止）。同一 key の重複登録・上記制約違反は起動時に検出して即エラー終了する（fail-fast） |
 | `REMOTE_CONTROL_LOG_DIR` | 環境依存値 | 起動ログの出力先ディレクトリ。指定したディレクトリ直下に `<session_name>.log` を出力する。未指定時は `.tmp/remote-control/` |
 | `remote_control_url_timeout` | 共通設定値 | 起動後にログから接続 URL を抽出するタイムアウト秒数 |
@@ -123,7 +124,7 @@ graph LR
 
 | ケース | 振る舞い |
 |---|---|
-| `REMOTE_CONTROL_ALLOWED_USERS` または `REMOTE_CONTROL_REPOSITORIES` が空または未設定 | 本機能は無効。`rc` コマンドを送信したユーザーには「Remote Control 機能は現在無効です」とのメッセージを返す（fail-closed。chat へのフォールスルーはしない） |
+| 認可ユーザー allowlist（プラットフォーム別）または `REMOTE_CONTROL_REPOSITORIES` が空または未設定 | 本機能は無効。`rc` コマンドを送信したユーザーには「Remote Control 機能は現在無効です」とのメッセージを返す（fail-closed。chat へのフォールスルーはしない） |
 | 同じ `<repo-key>` で連続起動 | プロセスは別々に起動される（多重起動制御は本機能のスコープ外）。各セッションは異なる名前で claude.ai/code に並ぶ |
 | URL 抽出タイムアウト | 起動した子プロセスは kill しない（接続自体は遅延後に成立する可能性があるため）。Slack にはタイムアウトエラーを返し、**ログファイル名のみ**（絶対パスではない）を案内する。詳細な絶対パスはサーバーログに出力する |
 | `claude` プロセスが即時終了 | 子プロセスの終了コードを検出してエラー応答する（終了コードを含む） |

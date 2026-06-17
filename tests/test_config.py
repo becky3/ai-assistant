@@ -189,6 +189,39 @@ def test_get_auto_reply_channels_filters_empty_tokens() -> None:
     assert s.get_auto_reply_channels() == ["C111", "C222", "C333"]
 
 
+def test_platform_defaults_to_slack() -> None:
+    """PLATFORM 未指定（テストデフォルト）では slack."""
+    s = Settings(**TEST_SETTINGS_DEFAULTS)
+    assert s.platform == "slack"
+
+
+def test_get_discord_auto_reply_channels_empty() -> None:
+    """Discord 自動返信チャンネル: 空文字は空リスト."""
+    s = Settings(**{**TEST_SETTINGS_DEFAULTS, "discord_auto_reply_channels": ""})
+    assert s.get_discord_auto_reply_channels() == []
+
+
+def test_get_discord_auto_reply_channels_parses() -> None:
+    """Discord 自動返信チャンネル: カンマ区切りをパースし空白をトリムする."""
+    s = Settings(
+        **{**TEST_SETTINGS_DEFAULTS, "discord_auto_reply_channels": " 111 , 222 ,,333 "}
+    )
+    assert s.get_discord_auto_reply_channels() == ["111", "222", "333"]
+
+
+def test_get_discord_remote_control_allowed_users() -> None:
+    """Discord allowlist: カンマ区切りをパースし空白・空トークンを除去する."""
+    s = Settings(**{**TEST_SETTINGS_DEFAULTS, "discord_remote_control_allowed_users": ""})
+    assert s.get_discord_remote_control_allowed_users() == []
+    s = Settings(
+        **{
+            **TEST_SETTINGS_DEFAULTS,
+            "discord_remote_control_allowed_users": " 100000000000000001 , 999 ,, ",
+        }
+    )
+    assert s.get_discord_remote_control_allowed_users() == ["100000000000000001", "999"]
+
+
 def test_remote_control_repositories_rejects_invalid_key_chars() -> None:
     """REMOTE_CONTROL_REPOSITORIES: key に英数._- 以外を含むと ValueError."""
     with pytest.raises(ValueError, match="英数・"):

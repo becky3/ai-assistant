@@ -152,6 +152,11 @@ class SlackAdapter(MessagingPort):
             )
             return response.content
 
+    async def open_thread(self, channel: str, title: str) -> ThreadRef:
+        """告知メッセージを投稿し、その ts をスレッド参照として返す."""
+        result = await self._client.chat_postMessage(channel=channel, text=title)
+        return ThreadRef(channel=channel, thread_key=result["ts"])
+
     async def post_header(self, channel: str, text: str) -> None:
         """配信見出しを header ブロックで投稿する."""
         await self._client.chat_postMessage(

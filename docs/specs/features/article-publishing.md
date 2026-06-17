@@ -16,7 +16,7 @@ Slack コマンドにより、ホスト PC 上の article-writer リポジトリ
 ## 制約
 
 - **二重 allowlist 方式**: 認可ユーザー allowlist の通過とリポジトリパス設定の存在の両方を確認した上で起動する。任意ユーザーでの起動は拒否する。Slack 経由で任意プロセスを起動可能になることを防ぐため
-- **既存 Remote Control allowlist を共用**: 認可ユーザーは Remote Control 機能の `REMOTE_CONTROL_ALLOWED_USERS` を流用する。本機能と Remote Control 起動の許可ユーザーが運用上一致しており、env を増やさないため
+- **既存 Remote Control allowlist を共用**: 認可ユーザーは Remote Control 機能の allowlist（稼働プラットフォーム別。変数は [`remote-control-launch.md`](remote-control-launch.md) 参照）を流用する。本機能と Remote Control 起動の許可ユーザーが運用上一致し、env を増やさないため
 - **起動コマンドはリスト引数で渡す**: `subprocess` の `shell=False` でリスト引数を渡し、コマンドインジェクションを防止する
 - **スキル名はハードコード**: 起動対象のスキルは `/auto-publish-diary` 固定。外部入力（Slack コマンド本文）からスキル名を組み立てない
 - **`--dangerously-skip-permissions` モードで起動する**: `claude -p` は git ネットワーク操作（`git fetch` / `git pull` / `git push`）・`gh pr create` / `gh pr merge` の permission をデフォルトで拒否する。
@@ -55,7 +55,7 @@ Slack コマンドにより、ホスト PC 上の article-writer リポジトリ
 
 **振る舞い**:
 
-1. 認可ユーザー allowlist（`REMOTE_CONTROL_ALLOWED_USERS`）にメッセージ送信者の Slack `user_id` が含まれるか検証する。含まれない場合は権限エラーを返して終了する
+1. 認可ユーザー allowlist（稼働プラットフォームのもの: Slack=`REMOTE_CONTROL_ALLOWED_USERS` / Discord=`DISCORD_REMOTE_CONTROL_ALLOWED_USERS`）にメッセージ送信者の `user_id` が含まれるか検証する。含まれない場合は権限エラーを返して終了する
 2. `ARTICLE_WRITER_REPO_PATH` が設定されているか検証する。空または未設定の場合は機能無効メッセージを返して終了する
 3. Slack に「投稿処理を開始します」メッセージを返す（実行時間が長いため処理開始を明示する）
 4. 設定された絶対パスが実在ディレクトリであることを検証する。存在しない場合は構成エラーを Slack に返して終了する
@@ -156,7 +156,7 @@ stdout 末尾: {直近の数行}
 | 項目名 | 層 | 設計意図 |
 |---|---|---|
 | `ARTICLE_WRITER_REPO_PATH` | 環境依存値 | article-writer リポジトリの絶対パス。空または未設定の場合は本機能は無効化される。絶対パス必須（意図しないディレクトリでの起動防止） |
-| `REMOTE_CONTROL_ALLOWED_USERS` | 環境依存値 | 本機能でも認可ユーザー allowlist として流用する（Remote Control 機能と共用）。詳細は [`remote-control-launch.md`](remote-control-launch.md) の同名項目を参照 |
+| `REMOTE_CONTROL_ALLOWED_USERS` / `DISCORD_REMOTE_CONTROL_ALLOWED_USERS` | 環境依存値 | 本機能でも認可ユーザー allowlist として流用する（Remote Control 機能と共用、稼働プラットフォームのものを使用）。詳細は [`remote-control-launch.md`](remote-control-launch.md) の同名項目を参照 |
 | `article_publish_timeout` | 共通設定値 | `claude -p` 起動のタイムアウト秒数。`/auto-publish-diary` の実機 QA 実測 ~13 分を踏まえて余裕を持たせる |
 
 具体値の制約は pydantic Field 定義（`src/config/settings.py`）が SSoT。仕様書では設計意図のみを記述する。
@@ -190,7 +190,7 @@ graph LR
 | ケース | 振る舞い |
 |---|---|
 | `ARTICLE_WRITER_REPO_PATH` が空または未設定 | 本機能は無効。「機能は現在無効です」とのメッセージを返す（fail-closed） |
-| `REMOTE_CONTROL_ALLOWED_USERS` が空 | 認可ユーザーがいない状態のため、全ユーザーからのコマンドが権限エラーで拒否される |
+| 認可ユーザー allowlist（プラットフォーム別）が空 | 認可ユーザーがいない状態のため、全ユーザーからのコマンドが権限エラーで拒否される |
 | 同時実行（実行中にもう一度コマンドが送信される） | 制約セクション「同時実行制御は提供しない」を参照 |
 | `claude` プロセスが即時終了（result.json 未生成） | 実行結果解析エラーを Slack に返す（exit code と stdout 末尾を含む） |
 | result.json が読み取れない / JSON として不正 / dict でない | 実行結果解析エラーを Slack に返す。`worktree_path` は取得できないため、ユーザーはサーバーログを確認する |

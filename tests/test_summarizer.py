@@ -96,6 +96,34 @@ async def test_summarize_fallback_to_title_on_exception(mock_llm: AsyncMock) -> 
     assert result == "エラーテスト"
 
 
+async def test_summarize_fallback_to_description_on_exception(
+    mock_llm: AsyncMock,
+) -> None:
+    """LLM失敗時、概要があればタイトルでなく概要をそのまま要約として返す."""
+    mock_llm.complete.side_effect = RuntimeError("LLM error")
+    summarizer = Summarizer(llm=mock_llm, reasoning_effort=None)
+
+    result = await summarizer.summarize(
+        "エラーテスト", "https://example.com/article", description="  記事の概要本文  "
+    )
+
+    assert result == "記事の概要本文"  # 概要を優先（trim 済み）
+
+
+async def test_summarize_fallback_to_description_on_empty_response(
+    mock_llm: AsyncMock,
+) -> None:
+    """LLM空応答時、概要があれば概要をそのまま要約として返す."""
+    mock_llm.complete.return_value = LLMResponse(content="")
+    summarizer = Summarizer(llm=mock_llm, reasoning_effort=None)
+
+    result = await summarizer.summarize(
+        "空応答テスト", "https://example.com/article", description="概要テキスト"
+    )
+
+    assert result == "概要テキスト"
+
+
 async def test_exception_log_contains_url_and_lang(
     mock_llm: AsyncMock, caplog: pytest.LogCaptureFixture
 ) -> None:

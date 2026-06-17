@@ -15,6 +15,9 @@ ENV/
 # Environment variables
 .env
 
+# 定時実行スケジュール（ローカル環境ごと・git 管理外。テンプレートは .example を参照）
+config/schedule.toml
+
 # Database
 *.db
 *.sqlite3

@@ -2,8 +2,9 @@
 
 ## 1. プロダクト概要
 
-AI Assistantは、Slack上で動作するAIアシスタントである。
+AI Assistantは、Slack / Discord 上で動作するAIアシスタントである。
 ユーザーとの会話、情報の自動収集・要約配信を通じて、継続的な学習をサポートする。
+稼働プラットフォームは `.env` の `PLATFORM`（`slack` / `discord`）で選択し、メッセージング抽象により同一のサービス層・機能が両プラットフォームで利用できる。Discord のセットアップは [discord-setup.md](infrastructure/discord-setup.md) を参照。
 
 ## 2. 機能一覧
 
@@ -23,6 +24,8 @@ AI Assistantは、Slack上で動作するAIアシスタントである。
 | 12 | Remote Control 起動 | Slack コマンドからホスト PC 上の指定リポジトリで `claude remote-control` を起動し、接続 URL を返す | [remote-control-launch.md](features/remote-control-launch.md) |
 | 13 | ログ出力 | 全 handler / 主要サービスのタイミングログによる観測性向上 | [logging.md](infrastructure/logging.md) |
 | 14 | 記事自動投稿 | Slack コマンドから article-writer リポジトリで `/auto-publish-diary` スキルを起動し、結果を Slack に通知 | [article-publishing.md](features/article-publishing.md) |
+| 15 | Discord 対応 | `PLATFORM=discord` で全機能を Discord 上で動作させる（メッセージング抽象によるプラットフォーム共通化） | [discord-setup.md](infrastructure/discord-setup.md) |
+| 16 | 定時実行 | ローカル設定ファイルのコマンドを毎日定時に内部スケジューラで無人実行（外部 reminder 不要・Slack/Discord 共通） | [scheduled-tasks.md](infrastructure/scheduled-tasks.md) |
 
 ## 3. 技術スタック
 
@@ -31,6 +34,7 @@ AI Assistantは、Slack上で動作するAIアシスタントである。
 | 言語 | Python 3.11+ |
 | パッケージ管理 | uv |
 | Slack SDK | slack-bolt (AsyncApp, Socket Mode) |
+| Discord SDK | discord.py (Gateway, message_content intent) |
 | オンラインLLM | OpenAI (openai SDK) / Anthropic (anthropic SDK) |
 | ローカルLLM | LM Studio (OpenAI互換API) |
 | DB | SQLite + SQLAlchemy (ORM経由で将来DB切替可能) |

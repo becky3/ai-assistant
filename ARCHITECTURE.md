@@ -25,8 +25,8 @@
 | `src/llm/` | LLM プロバイダー抽象化（ローカル / OpenAI / Anthropic）とファクトリ |
 | `src/services/` | ビジネスロジック（チャット応答、RSS 収集、要約等） |
 | `src/slack/` | Slack Bolt アプリ初期化・イベントハンドラ（SlackListener から利用される Slack 受信実装の内部） |
-| `src/messaging/` | メッセージング抽象化（受信 `MessagingListener` Port + 送信 `MessagingPort`/Adapter。Slack/CLI 実装、中立モデル `IncomingFile`/`ArticleCard`/`ThreadRef`）。`MessageRouter` はプラットフォーム非依存 |
-| `src/scheduler/` | APScheduler による定期実行ジョブ（配信は `MessagingPort` 経由） |
+| `src/messaging/` | メッセージング抽象化（受信 `MessagingListener` Port + 送信 `MessagingPort`/Adapter。Slack/Discord/CLI 実装、中立モデル `IncomingFile`/`ArticleCard`/`ThreadRef`、プラットフォーム選択 `runtime.py`、Discord 整形 `discord_format.py`）。`MessageRouter` はプラットフォーム非依存 |
+| `src/scheduler/` | 配信ジョブ（`jobs.py`、`MessagingPort` 経由）と定時実行スケジューラ（`daily_scheduler.py` / `schedule_config.py`、`config/schedule.toml` を毎日定時に実行） |
 | `src/mcp_bridge/` | MCP サーバーへの接続管理（クライアント側ブリッジ） |
 
 ### ルートレベルファイル
@@ -71,6 +71,8 @@
 | `infrastructure/mcp-integration.md` | `src/mcp_bridge/` |
 | `infrastructure/rag-knowledge.md` | 外部リポジトリ（rag-knowledge） |
 | `infrastructure/bot-process-guard.md` | `src/process_guard.py`, `src/bot_manager.py` |
+| `infrastructure/discord-setup.md` | `src/messaging/` (`runtime.py`, `discord_adapter.py`, `discord_listener.py`, `discord_format.py`) |
+| `infrastructure/scheduled-tasks.md` | `src/scheduler/` (`daily_scheduler.py`, `schedule_config.py`) |
 
 ### workflows/
 

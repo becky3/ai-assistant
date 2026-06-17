@@ -81,6 +81,7 @@ TOML はフラット構造（セクションなし）とし、キー名は `Sett
 | `slack_bot_token` | シークレット | Slack API 認証に使用。漏洩でアカウント乗っ取りのリスクがある |
 | `slack_signing_secret` | シークレット | Slack リクエスト署名の検証に使用。漏洩でなりすましのリスクがある |
 | `slack_app_token` | シークレット | Socket Mode 接続の認証に使用。漏洩でアカウント乗っ取りのリスクがある |
+| `discord_bot_token` | シークレット | Discord Gateway 接続の認証に使用（`PLATFORM=discord` 時のみ必須）。漏洩で bot 乗っ取りのリスクがある |
 | `openai_api_key` | シークレット | OpenAI API の認証に使用。漏洩で不正利用・課金被害のリスクがある |
 | `anthropic_api_key` | シークレット | Anthropic API の認証に使用。漏洩で不正利用・課金被害のリスクがある |
 
@@ -90,10 +91,13 @@ TOML はフラット構造（セクションなし）とし、キー名は `Sett
 
 | 項目名 | 層 | 設計意図 |
 |---|---|---|
+| `platform` | 環境依存値 | 稼働プラットフォーム（`slack` / `discord`）をデプロイ先で選択する（具体値・デフォルトはコードの pydantic 定義が SSoT） |
 | `lmstudio_base_url` | 環境依存値 | ローカル LLM サーバーのホスト・ポートはマシンごとに異なる |
 | `database_url` | 環境依存値 | DB ファイルパスはデプロイ先ごとに異なる |
 | `slack_news_channel_id` | 環境依存値 | フィード配信先チャンネル ID は Slack ワークスペースごとに異なる |
 | `slack_auto_reply_channels` | 環境依存値 | 自動返信対象チャンネルはワークスペースごとに異なる |
+| `discord_news_channel_id` | 環境依存値 | Discord のフィード配信先チャンネル ID はサーバーごとに異なる（`PLATFORM=discord` 時に使用） |
+| `discord_auto_reply_channels` | 環境依存値 | Discord の自動返信対象チャンネルはサーバーごとに異なる（`PLATFORM=discord` 時に使用） |
 | `env_name` | 環境依存値 | ステータス表示用の環境識別子はデプロイ先ごとに異なる |
 | `mcp_enabled` | 環境依存値 | MCP サーバーの有無はデプロイ環境に依存する |
 | `mcp_rag_transport` | 環境依存値 | MCP サーバーの接続方式はデプロイ環境に依存する |
@@ -106,7 +110,8 @@ TOML はフラット構造（セクションなし）とし、キー名は `Sett
 | `online_llm_provider` | 環境依存値 | オンライン利用時の API プロバイダーを切り替える |
 | `chat_llm_provider` | 環境依存値 | 利用する LLM をローカル・オンライン・Claude CLI で切り替える |
 | `summarizer_llm_provider` | 環境依存値 | 同上（ローカルとオンラインの切り替え） |
-| `remote_control_allowed_users` | 環境依存値 | Remote Control 起動を許可する Slack ユーザーはデプロイ環境ごとに異なる |
+| `remote_control_allowed_users` | 環境依存値 | rc / article コマンドを許可する Slack ユーザー（`PLATFORM=slack` 用）。プラットフォームで ID 体系が異なるため Discord とは別管理 |
+| `discord_remote_control_allowed_users` | 環境依存値 | rc / article コマンドを許可する Discord ユーザー（`PLATFORM=discord` 用） |
 | `remote_control_repositories` | 環境依存値 | Remote Control 対象リポジトリの絶対パスはホスト PC ごとに異なる |
 | `remote_control_log_dir` | 環境依存値 | Remote Control 起動ログの出力先ディレクトリをホストごとに指定する |
 
@@ -162,7 +167,7 @@ flowchart TD
 | `config/config.toml` に未知のキーが含まれる | `ValueError` で起動中止 |
 | `config/config.toml` のバリデーションエラー | 起動時にエラーメッセージを出力して中止 |
 | keyring 未設定（キー未登録） | `SecretNotFoundError` を送出（フォールバックなし） |
-| Slack 必須シークレットが未設定 | 起動時にエラーメッセージを出力して中止する。必須項目: `SLACK_BOT_TOKEN`、`SLACK_APP_TOKEN`、`SLACK_SIGNING_SECRET` |
+| 必須シークレットが未設定 | 起動時にエラーメッセージを出力して中止する。検証対象は選択プラットフォームのみ（`PLATFORM=slack`: `SLACK_BOT_TOKEN`・`SLACK_APP_TOKEN`・`SLACK_SIGNING_SECRET` / `PLATFORM=discord`: `DISCORD_BOT_TOKEN`） |
 | 任意シークレットが未設定（`OPENAI_API_KEY` 等） | 該当機能使用時に `SecretNotFoundError` |
 | `claude_allowed_tools` が空文字列 | Claude CLI にツール許可を渡さない（ツールなしで応答） |
 
@@ -172,3 +177,4 @@ flowchart TD
 - [MCP 統合](mcp-integration.md) — MCP 関連設定（`mcp_enabled`、`mcp_rag_transport`、`mcp_rag_url`）
 - [チャット応答](../features/chat-response.md) — Claude CLI モード（`claude_allowed_tools`、`claude_timeout`）
 - [RAG ナレッジ](rag-knowledge.md) — RAG 関連設定（`rag_show_sources`、`rag_bluesky_handle`、`rag_zenn_username`）
+- [Discord セットアップ](discord-setup.md) — Discord bot のセットアップ手順（`PLATFORM=discord`・`DISCORD_BOT_TOKEN`）

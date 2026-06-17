@@ -42,6 +42,11 @@ class CliAdapter(MessagingPort):
         """CLI ではローカルパス（download_url）からファイルを読み込む."""
         return Path(file.download_url).read_bytes()
 
+    async def open_thread(self, channel: str, title: str) -> ThreadRef:
+        """告知を表示し、スレッド参照（CLI ではチャンネル）を返す."""
+        print(f"\n## {title}\n")
+        return ThreadRef(channel=channel, thread_key=channel)
+
     async def post_header(self, channel: str, text: str) -> None:
         """配信見出しを標準出力に表示する."""
         print(f"\n=== {text} ===\n")
