@@ -14,8 +14,8 @@ bot 内部のスケジューラで、ローカル設定ファイルに定義し�
 
 - スケジュール定義ファイルは **git 管理外**（環境ごとに異なるチャンネル ID・ユーザー ID を含むため）。`.gitignore` に登録する。テンプレート（`*.example`）のみ git 管理する
 - 実行粒度は **毎日（every day）** のみ。時刻は `HH:MM`（24 時間制）で指定し、`settings.timezone` のタイムゾーンで解釈する
-- 各ジョブは `MessageRouter.process_message` にコマンド文字列を流して実行する。すなわち通常のコマンドと同一経路を通り、応答・配信先は指定チャンネルになる（メンション文字列は不要、コマンドのみ記述）
-- 認可が必要なコマンド（例: `article write-hatena`）は、許可リスト（`REMOTE_CONTROL_ALLOWED_USERS`）に含まれる `user_id` をジョブに指定する必要がある。未指定・非許可の場合はコマンド側で拒否される
+- 各ジョブは `IncomingMessage`（指定チャンネル・`user_id`）を構築して `MessageRouter.process_message` に渡して実行する。すなわち通常のコマンドと同一経路を通り、応答・配信先は指定チャンネルになる（メンション文字列は不要、コマンドのみ記述）
+- 認可が必要なコマンド（例: `article write-hatena`）は、**稼働プラットフォームの許可リスト**（Slack=`REMOTE_CONTROL_ALLOWED_USERS` / Discord=`DISCORD_REMOTE_CONTROL_ALLOWED_USERS`）に含まれる `user_id` をジョブに指定する必要がある。未指定・非許可の場合はコマンド側で拒否される
 - 設定ファイルが存在しない場合はスケジューラは無効（ジョブ 0 件）として正常起動する
 - ジョブ実行中の例外は記録のうえ握り潰し、当該ジョブの次回実行・他ジョブに影響させない
 

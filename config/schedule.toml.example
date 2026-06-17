@@ -6,7 +6,9 @@
 #   time     必須  実行時刻 "HH:MM"（24時間制。settings.timezone のタイムゾーンで解釈）
 #   command  必須  bot に流すコマンド（メンション不要。例: "deliver" / "rag update" / "article write-hatena"）
 #   channel  任意  応答・配信先チャンネル ID（省略時は配信先チャンネル DISCORD_NEWS_CHANNEL_ID / SLACK_NEWS_CHANNEL_ID）
-#   user_id  任意  認可が必要なコマンド用の実行ユーザー ID（REMOTE_CONTROL_ALLOWED_USERS に含めること）
+#   user_id  任意  認可が必要なコマンド用の実行ユーザー ID
+#                  （稼働プラットフォームの許可リストに含めること:
+#                   Slack=REMOTE_CONTROL_ALLOWED_USERS / Discord=DISCORD_REMOTE_CONTROL_ALLOWED_USERS）
 
 [[jobs]]
 time = "00:10"

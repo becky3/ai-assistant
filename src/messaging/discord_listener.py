@@ -207,9 +207,14 @@ class DiscordListener(MessagingListener):
         try:
             thread = await message.create_thread(name=name)
             return str(thread.id)
+        except (discord.Forbidden, discord.HTTPException) as e:
+            # 権限不足・既存スレッド等の想定内失敗。チャンネル直下にフォールバック。
+            # メッセージ毎に出るためノイズ抑制で debug に留める
+            logger.debug("スレッド作成失敗（チャンネルに返信）: %s", e)
+            return str(message.channel.id)
         except Exception:
             logger.warning(
-                "スレッド作成に失敗しました。チャンネルに返信します", exc_info=True
+                "スレッド作成で予期しない例外（チャンネルに返信）", exc_info=True
             )
             return str(message.channel.id)
 

@@ -26,10 +26,15 @@ logger = logging.getLogger(__name__)
 
 
 def seconds_until_next(now: datetime, hour: int, minute: int) -> float:
-    """now から次回の hour:minute までの秒数を返す（同日が過ぎていれば翌日）."""
+    """now から次回の hour:minute までの秒数を返す（同日が過ぎていれば翌日）.
+
+    翌日分は壁時計時刻で再計算するため、DST のあるタイムゾーンでも指定時刻に発火する。
+    """
     target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
     if target <= now:
-        target += timedelta(days=1)
+        target = (now + timedelta(days=1)).replace(
+            hour=hour, minute=minute, second=0, microsecond=0
+        )
     return (target - now).total_seconds()
 
 
@@ -76,13 +81,25 @@ class DailyScheduler:
     async def _run_job(self, job: ScheduledJob) -> None:
         """1 ジョブを毎日実行し続ける."""
         while True:
-            delay = seconds_until_next(datetime.now(tz=self._tz), job.hour, job.minute)
-            logger.info(
-                "scheduled job 待機: command=%r, %02d:%02d, in %.0fs",
-                job.command, job.hour, job.minute, delay,
-            )
-            await asyncio.sleep(delay)
-            await self._fire(job)
+            try:
+                delay = seconds_until_next(
+                    datetime.now(tz=self._tz), job.hour, job.minute
+                )
+                logger.info(
+                    "scheduled job 待機: command=%r, %02d:%02d, in %.0fs",
+                    job.command, job.hour, job.minute, delay,
+                )
+                await asyncio.sleep(delay)
+                await self._fire(job)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                # ループ自体が予期しない例外で恒久停止しないようガードする
+                # （次サイクルに進む。暴走防止に短時間バックオフ）
+                logger.exception(
+                    "scheduled job ループで予期しない例外: command=%r", job.command,
+                )
+                await asyncio.sleep(60)
 
     async def _fire(self, job: ScheduledJob) -> None:
         """発火を告知し、スレッド内でジョブのコマンドを実行する."""
