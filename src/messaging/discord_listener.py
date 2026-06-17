@@ -26,12 +26,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Discord のメンション表記 (<@123456> または <@!123456>) にマッチする
-_MENTION_PATTERN = re.compile(r"<@!?\d+>\s*")
+# Discord のメンション表記 (<@123>, <@!123> ユーザー / <@&123> ロール) にマッチする
+_MENTION_PATTERN = re.compile(r"<@[!&]?\d+>\s*")
 
 
 def strip_mention(text: str) -> str:
-    """Discord メンション部分 (<@id> / <@!id>) を除去する."""
+    """Discord メンション部分 (<@id> / <@!id> / <@&id>) を除去する."""
     result = _MENTION_PATTERN.sub("", text).strip()
     if result != text:
         logger.debug("strip_mention: %r -> %r", text, result)
@@ -107,6 +107,27 @@ class DiscordListener(MessagingListener):
         async def on_message(message: discord.Message) -> None:
             await self._handle_message(message)
 
+    def _is_bot_mentioned(
+        self, message: discord.Message, me: discord.ClientUser
+    ) -> bool:
+        """bot へのメンションか判定する.
+
+        本文中の明示的なユーザーメンション（raw_mentions）に加え、bot 用の
+        管理ロール（インテグレーションロール）へのメンションも受理する。Discord
+        では `@bot名` がユーザーではなく同名の bot 管理ロールに解決される場合が
+        あるため。message.mentions はリプライ ping 先も含むため使わない。
+        """
+        if me.id in message.raw_mentions:
+            return True
+        guild = message.guild
+        if guild is None or not message.raw_role_mentions:
+            return False
+        bot_member = guild.me
+        if bot_member is None:
+            return False
+        managed_role_ids = {r.id for r in bot_member.roles if r.is_bot_managed()}
+        return bool(managed_role_ids.intersection(message.raw_role_mentions))
+
     def _is_auto_reply_channel(self, channel: discord.abc.Messageable) -> bool:
         """チャンネル（またはスレッド親）が auto-reply 対象か判定する."""
         if not self._auto_reply_channels:
@@ -126,10 +147,7 @@ class DiscordListener(MessagingListener):
         if message.author.id == me.id:
             return  # 自己発言（最優先で除外しループ防止）
 
-        # 本文中の明示的なメンションのみで判定する（raw_mentions）。
-        # message.mentions はリプライ ping 先も含むため、明示メンション方式
-        # （Slack の app_mention 相当）に揃えて予期せぬ反応を防ぐ。
-        mentioned = me.id in message.raw_mentions
+        mentioned = self._is_bot_mentioned(message, me)
 
         if message.author.bot and not mentioned:
             # 他 bot は自 bot メンション時のみ受理（外部 Discord reminder bot の

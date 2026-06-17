@@ -48,6 +48,8 @@ def _make_message(
     channel: Any,
     is_bot: bool = False,
     mentions: list[Any] | None = None,
+    role_mentions: list[int] | None = None,
+    bot_role_ids: list[int] | None = None,
     attachments: list[Any] | None = None,
     message_id: int = 999,
 ) -> MagicMock:
@@ -59,6 +61,18 @@ def _make_message(
     msg.channel = channel
     # listener は本文中の明示メンション（raw_mentions: ユーザー ID の list）で判定する
     msg.raw_mentions = [u.id for u in (mentions or [])]
+    msg.raw_role_mentions = role_mentions or []
+    # bot 用管理ロール（is_bot_managed=True）を guild.me.roles に持たせる
+    bot_member = MagicMock()
+    bot_member.roles = []
+    for rid in bot_role_ids or []:
+        role = MagicMock()
+        role.id = rid
+        role.is_bot_managed = MagicMock(return_value=True)
+        bot_member.roles.append(role)
+    guild = MagicMock()
+    guild.me = bot_member
+    msg.guild = guild
     msg.attachments = attachments or []
     msg.id = message_id
     # 通常チャンネルでは発言にスレッドを作成して返信する（Slack 同様）
@@ -71,6 +85,7 @@ def _make_message(
 def test_strip_mention() -> None:
     assert strip_mention("<@123> hello") == "hello"
     assert strip_mention("<@!456>  world") == "world"
+    assert strip_mention("<@&789> role") == "role"  # bot 管理ロールメンション
     assert strip_mention("no mention") == "no mention"
 
 
@@ -197,6 +212,44 @@ async def test_mention_dispatches_with_strip() -> None:
     assert dispatched.is_in_thread is False  # 新規スレッド初回は DB フォールバック
     assert dispatched.message_id == "555"
     assert dispatched.files is not None and dispatched.files[0].name == "a.csv"
+
+
+async def test_bot_role_mention_accepted() -> None:
+    """@bot がユーザーではなく bot 管理ロールに解決された場合も受理する."""
+    listener, client, router = _make_listener()
+    client.user = MagicMock()
+    client.user.id = 42
+    channel = MagicMock(spec=discord.TextChannel)
+    channel.id = 100
+    # ユーザーメンションは空、bot 管理ロール(id=555)へのロールメンション
+    msg = _make_message(
+        author_id=7, content="<@&555> こんにちわ", channel=channel,
+        role_mentions=[555], bot_role_ids=[555],
+    )
+
+    await client.events["on_message"](msg)
+
+    router.process_message.assert_awaited_once()
+    dispatched = router.process_message.await_args.args[0]
+    assert dispatched.text == "こんにちわ"
+
+
+async def test_unrelated_role_mention_ignored() -> None:
+    """bot 管理ロール以外のロールメンションは無視する."""
+    listener, client, router = _make_listener()
+    client.user = MagicMock()
+    client.user.id = 42
+    channel = MagicMock(spec=discord.TextChannel)
+    channel.id = 100
+    # 別ロール(999)へのメンション。bot 管理ロールは 555
+    msg = _make_message(
+        author_id=7, content="<@&999> hi", channel=channel,
+        role_mentions=[999], bot_role_ids=[555],
+    )
+
+    await client.events["on_message"](msg)
+
+    router.process_message.assert_not_awaited()
 
 
 async def test_auto_reply_channel_without_mention() -> None:
