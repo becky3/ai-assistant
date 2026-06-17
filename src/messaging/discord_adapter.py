@@ -145,6 +145,13 @@ class DiscordAdapter(MessagingPort):
             )
             return response.content
 
+    async def open_thread(self, channel: str, title: str) -> ThreadRef:
+        """告知メッセージを投稿し、その投稿にスレッドを作成して参照を返す."""
+        target = await self._resolve_channel(channel)
+        parent = await target.send(to_discord_markdown(title))
+        thread = await parent.create_thread(name=title[:80] or "scheduled")
+        return ThreadRef(channel=str(thread.id), thread_key=str(thread.id))
+
     async def post_header(self, channel: str, text: str) -> None:
         """配信見出しをプレーンテキストで投稿する."""
         target = await self._resolve_channel(channel)

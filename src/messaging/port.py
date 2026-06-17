@@ -105,6 +105,14 @@ class MessagingPort(abc.ABC):
         """
 
     @abc.abstractmethod
+    async def open_thread(self, channel: str, title: str) -> ThreadRef:
+        """告知メッセージを投稿し、その投稿にスレッドを開いて参照を返す.
+
+        以降の応答をまとめるためのスレッドを作る（定時実行の発火告知等で使用）。
+        Slack=投稿の thread_ts / Discord=作成したスレッド channel / CLI=チャンネル。
+        """
+
+    @abc.abstractmethod
     async def post_header(self, channel: str, text: str) -> None:
         """配信の見出しメッセージを投稿する."""
 

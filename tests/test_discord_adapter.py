@@ -176,6 +176,24 @@ async def test_start_feed_thread() -> None:
     parent.create_thread.assert_awaited_once_with(name="Tech News")
 
 
+async def test_open_thread() -> None:
+    thread = MagicMock()
+    thread.id = 888
+    parent = MagicMock()
+    parent.create_thread = AsyncMock(return_value=thread)
+    channel = _make_channel()
+    channel.send = AsyncMock(return_value=parent)
+    client = MagicMock()
+    client.get_channel = MagicMock(return_value=channel)
+    adapter = _make_adapter(client)
+
+    ref = await adapter.open_thread("100", "🕒 定時実行: deliver")
+
+    assert ref.channel == "888"
+    assert ref.thread_key == "888"
+    parent.create_thread.assert_awaited_once()
+
+
 async def test_post_article_card() -> None:
     thread_channel = _make_channel()
     client = MagicMock()

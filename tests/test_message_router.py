@@ -47,6 +47,9 @@ class MockAdapter(MessagingPort):
     async def read_file(self, file: IncomingFile) -> bytes:
         return b""
 
+    async def open_thread(self, channel: str, title: str) -> ThreadRef:
+        return ThreadRef(channel=channel, thread_key="thread")
+
     async def post_header(self, channel: str, text: str) -> None:
         pass
 

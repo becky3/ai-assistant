@@ -1,0 +1,23 @@
+# 定時実行スケジュール（テンプレート）
+# このファイルを config/schedule.toml にコピーして使用する（schedule.toml は git 管理外）。
+# 仕様: docs/specs/infrastructure/scheduled-tasks.md
+#
+# 各 job:
+#   time     必須  実行時刻 "HH:MM"（24時間制。settings.timezone のタイムゾーンで解釈）
+#   command  必須  bot に流すコマンド（メンション不要。例: "deliver" / "rag update" / "article write-hatena"）
+#   channel  任意  応答・配信先チャンネル ID（省略時は配信先チャンネル DISCORD_NEWS_CHANNEL_ID / SLACK_NEWS_CHANNEL_ID）
+#   user_id  任意  認可が必要なコマンド用の実行ユーザー ID（REMOTE_CONTROL_ALLOWED_USERS に含めること）
+
+[[jobs]]
+time = "00:10"
+command = "rag update"
+
+[[jobs]]
+time = "03:00"
+command = "deliver"
+
+[[jobs]]
+time = "04:30"
+command = "article write-hatena"
+# article write-hatena は認可コマンド。実行ユーザー ID を許可リストに登録のうえ指定する
+user_id = "REPLACE_WITH_ALLOWED_USER_ID"

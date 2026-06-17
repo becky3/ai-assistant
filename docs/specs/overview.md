@@ -25,6 +25,7 @@ AI Assistantは、Slack / Discord 上で動作するAIアシスタントであ�
 | 13 | ログ出力 | 全 handler / 主要サービスのタイミングログによる観測性向上 | [logging.md](infrastructure/logging.md) |
 | 14 | 記事自動投稿 | Slack コマンドから article-writer リポジトリで `/auto-publish-diary` スキルを起動し、結果を Slack に通知 | [article-publishing.md](features/article-publishing.md) |
 | 15 | Discord 対応 | `PLATFORM=discord` で全機能を Discord 上で動作させる（メッセージング抽象によるプラットフォーム共通化） | [discord-setup.md](infrastructure/discord-setup.md) |
+| 16 | 定時実行 | ローカル設定ファイルのコマンドを毎日定時に内部スケジューラで無人実行（外部 reminder 不要・Slack/Discord 共通） | [scheduled-tasks.md](infrastructure/scheduled-tasks.md) |
 
 ## 3. 技術スタック
 

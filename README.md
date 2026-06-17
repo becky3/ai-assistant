@@ -141,6 +141,7 @@ uv run mypy src
 - [設定管理](docs/specs/infrastructure/config-management.md)
 - [ログ出力](docs/specs/infrastructure/logging.md)
 - [Discord セットアップ](docs/specs/infrastructure/discord-setup.md)
+- [定時実行（内部スケジューラ）](docs/specs/infrastructure/scheduled-tasks.md)
 
 ### ワークフロー（workflows）
 

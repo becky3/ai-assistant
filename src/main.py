@@ -82,6 +82,8 @@ async def main() -> None:
     from src.services.ogp_extractor import OgpExtractor
     from src.services.remote_control import RemoteControlLauncher
     from src.services.summarizer import Summarizer
+    from src.scheduler.daily_scheduler import DailyScheduler
+    from src.scheduler.schedule_config import load_schedule
 
     # プラットフォーム runtime の構築（.env PLATFORM で slack / discord を選択）
     assistant = load_assistant_config()
@@ -92,6 +94,7 @@ async def main() -> None:
 
     mcp_manager: MCPClientManager | None = None
     remote_control_launcher: RemoteControlLauncher | None = None
+    scheduler: DailyScheduler | None = None
     try:
         # 起動時刻を記録 (F5)
         bot_start_time = datetime.now(tz=ZoneInfo(settings.timezone))
@@ -226,9 +229,24 @@ async def main() -> None:
         # 受信リスナー（MessagingListener 抽象経由で起動）
         listener = runtime.create_listener(router)
 
+        # 定時実行スケジューラ（config/schedule.toml があれば毎日定時にコマンド実行）
+        scheduler = DailyScheduler(
+            load_schedule(),
+            router,
+            messaging_adapter,
+            default_channel=runtime.news_channel_id,
+            timezone=settings.timezone,
+        )
+        scheduler.start()
+
         # 接続して起動（グレースフルシャットダウン対応）
         await listener.run()
     finally:
+        if scheduler is not None:
+            try:
+                await scheduler.stop()
+            except Exception:
+                logger.warning("スケジューラ停止失敗", exc_info=True)
         if mcp_manager:
             try:
                 await mcp_manager.cleanup()
