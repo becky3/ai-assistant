@@ -73,13 +73,23 @@ class Summarizer:
                     url,
                     lang,
                 )
-                logger.info("summarize complete: url=%s, result=empty_fallback_to_title", url)
-                return title
+                logger.info("summarize complete: url=%s, result=empty_fallback", url)
+                return self._fallback_summary(title, description)
             logger.info("summarize complete: url=%s, summary_len=%d", url, len(content))
             return content
         except Exception:
             logger.exception(
                 "Failed to summarize article: url=%s, lang=%s", url, lang
             )
-            logger.info("summarize complete: url=%s, result=error_fallback_to_title", url)
-            return title
+            logger.info("summarize complete: url=%s, result=error_fallback", url)
+            return self._fallback_summary(title, description)
+
+    @staticmethod
+    def _fallback_summary(title: str, description: str) -> str:
+        """要約 LLM が失敗・空応答のときのフォールバック.
+
+        概要（description）があればそのまま要約として使う（LLM 不通でも情報量を
+        保つため）。概要が無い場合のみタイトルにフォールバックする。
+        """
+        desc = (description or "").strip()
+        return desc if desc else title
