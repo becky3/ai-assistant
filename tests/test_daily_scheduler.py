@@ -45,6 +45,24 @@ def test_load_schedule_parses_jobs(tmp_path: Path) -> None:
     )
 
 
+def test_load_schedule_jobs_not_list_returns_empty(tmp_path: Path) -> None:
+    """jobs が配列でない場合は空リスト（例外で起動失敗させない）."""
+    p = tmp_path / "schedule.toml"
+    p.write_text('jobs = "oops"\n', encoding="utf-8")
+    assert load_schedule(p) == []
+
+
+def test_load_schedule_skips_non_table_entry(tmp_path: Path) -> None:
+    """jobs の要素がテーブルでない場合はスキップする."""
+    p = tmp_path / "schedule.toml"
+    p.write_text(
+        'jobs = [ "oops", { time = "05:00", command = "ok" } ]\n', encoding="utf-8"
+    )
+    jobs = load_schedule(p)
+    assert len(jobs) == 1
+    assert jobs[0].command == "ok"
+
+
 def test_load_schedule_skips_invalid(tmp_path: Path) -> None:
     p = tmp_path / "schedule.toml"
     p.write_text(

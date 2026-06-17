@@ -42,8 +42,15 @@ def load_schedule(path: Path = DEFAULT_SCHEDULE_PATH) -> list[ScheduledJob]:
         data = tomllib.load(f)
 
     jobs_raw = data.get("jobs", [])
+    if not isinstance(jobs_raw, list):
+        logger.warning("スケジュール設定の jobs が配列ではないため無効化します: %s", path)
+        return []
+
     jobs: list[ScheduledJob] = []
     for i, entry in enumerate(jobs_raw):
+        if not isinstance(entry, dict):
+            logger.warning("スケジュール job[%d]: テーブルではないためスキップ", i)
+            continue
         time_str = str(entry.get("time", "")).strip()
         command = str(entry.get("command", "")).strip()
         if not time_str or not command:

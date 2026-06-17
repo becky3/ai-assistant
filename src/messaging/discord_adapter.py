@@ -103,7 +103,7 @@ class DiscordAdapter(MessagingPort):
 
     async def send_message(self, text: str, thread_id: str, channel: str) -> None:
         """Discord にメッセージを送信する（2000 文字で分割）."""
-        logger.debug("send_message: channel=%s, length=%d", thread_id, len(text))
+        logger.debug("send_message: target=%s, length=%d", thread_id or channel, len(text))
         converted = to_discord_markdown(text)
         if not converted:
             # Discord は空メッセージ送信を拒否するため何も送らない
