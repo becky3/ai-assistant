@@ -43,9 +43,16 @@ class _EnvLoader(BaseSettings):
         extra="ignore",
     )
 
+    # プラットフォーム選択（slack / discord、デフォルト slack）
+    platform: Literal["slack", "discord"] = "slack"
+
     # Slack（CLI実行時は空文字列で動作）
     slack_news_channel_id: str = ""
     slack_auto_reply_channels: str = ""
+
+    # Discord（PLATFORM=discord 時に使用。Slack のみ運用なら未設定で可）
+    discord_news_channel_id: str = ""
+    discord_auto_reply_channels: str = ""
 
     # LM Studio 接続先
     lmstudio_base_url: str
@@ -100,8 +107,11 @@ class Settings(BaseModel):
     """
 
     # --- .env から取得（環境依存値） ---
+    platform: Literal["slack", "discord"]
     slack_news_channel_id: str
     slack_auto_reply_channels: str
+    discord_news_channel_id: str
+    discord_auto_reply_channels: str
     lmstudio_base_url: str
     database_url: str
     env_name: str
@@ -122,10 +132,20 @@ class Settings(BaseModel):
     article_writer_repo_path: str
 
     def get_auto_reply_channels(self) -> list[str]:
-        """自動返信チャンネルのリストを返す（カンマ区切りを解析）."""
+        """Slack 自動返信チャンネルのリストを返す（カンマ区切りを解析）."""
         if not self.slack_auto_reply_channels:
             return []
         return [ch.strip() for ch in self.slack_auto_reply_channels.split(",") if ch.strip()]
+
+    def get_discord_auto_reply_channels(self) -> list[str]:
+        """Discord 自動返信チャンネルのリストを返す（カンマ区切りを解析）."""
+        if not self.discord_auto_reply_channels:
+            return []
+        return [
+            ch.strip()
+            for ch in self.discord_auto_reply_channels.split(",")
+            if ch.strip()
+        ]
 
     def get_remote_control_allowed_users(self) -> list[str]:
         """Remote Control を起動可能な Slack user_id のリストを返す."""

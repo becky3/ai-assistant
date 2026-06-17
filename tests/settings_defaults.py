@@ -9,8 +9,11 @@ from __future__ import annotations
 # 注意: 本番 config.toml の値とは意図的に異なる場合がある（テスト用に安全な値を使用）。
 TEST_SETTINGS_DEFAULTS: dict[str, object] = {
     # .env フィールド
+    "platform": "slack",
     "slack_news_channel_id": "",
     "slack_auto_reply_channels": "",
+    "discord_news_channel_id": "",
+    "discord_auto_reply_channels": "",
     "lmstudio_base_url": "http://localhost:1234",
     "database_url": "sqlite+aiosqlite:///./test.db",
     "env_name": "",

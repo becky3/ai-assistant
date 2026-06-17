@@ -14,9 +14,8 @@ from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
 from py_common_lib.logging import SessionRotatingFileHandler
-from py_common_lib.secrets import SecretNotFoundError, get_secret
 
-from src.config.settings import SERVICE_NAME, Settings, get_settings, load_assistant_config
+from src.config.settings import Settings, get_settings, load_assistant_config
 from src.process_guard import (
     check_already_running,
     cleanup_children,
@@ -76,27 +75,20 @@ async def main() -> None:
     from src.llm.factory import get_provider_for_service
     from src.mcp_bridge.client_manager import MCPClientManager, build_mcp_server_configs
     from src.messaging.router import MessageRouter
-    from src.messaging.slack_adapter import SlackAdapter
-    from src.messaging.slack_listener import SlackListener
+    from src.messaging.runtime import create_runtime
     from src.services.article_publisher import ArticleWriterPublisher
     from src.services.chat import ChatService
     from src.services.feed_collector import FeedCollector
     from src.services.ogp_extractor import OgpExtractor
     from src.services.remote_control import RemoteControlLauncher
     from src.services.summarizer import Summarizer
-    from src.services.thread_history import ThreadHistoryService
-    from src.slack.app import create_app
 
-    # 必須シークレットの起動時バリデーション（仕様: config-management.md エッジケース）
-    _required_secrets = ["SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_SIGNING_SECRET"]
-    for _key in _required_secrets:
-        try:
-            get_secret(key=_key, service=SERVICE_NAME)
-        except SecretNotFoundError:
-            raise SystemExit(
-                f"必須シークレット {_key} が未設定です。"
-                f"keyring で設定してください。"
-            )
+    # プラットフォーム runtime の構築（.env PLATFORM で slack / discord を選択）
+    assistant = load_assistant_config()
+    runtime = create_runtime(settings, assistant)
+
+    # 必須シークレットの起動時バリデーション（選択プラットフォームのみ。仕様: config-management.md エッジケース）
+    runtime.validate_secrets()
 
     mcp_manager: MCPClientManager | None = None
     remote_control_launcher: RemoteControlLauncher | None = None
@@ -107,10 +99,8 @@ async def main() -> None:
         # DB 初期化
         await init_db()
 
-        # アシスタント設定
-        assistant = load_assistant_config()
+        # アシスタント設定（assistant は runtime 構築時に読み込み済み）
         system_prompt = assistant.get("personality", "")
-        slack_format = assistant.get("format_instruction", "")
 
         # サービスごとのLLMプロバイダー（設定に基づいて選択）
         # claude モード時は LLM プロバイダーを生成しない（Claude CLI が直接処理する）
@@ -138,38 +128,9 @@ async def main() -> None:
         else:
             logger.info("MCP無効: ツール呼び出し機能はオフです")
 
-        # Slack アプリ（ThreadHistoryService に必要なため先に作成）
-        app = create_app()
-        slack_client = app.client
-
-        # Bot User ID を取得（スレッド履歴でボットの発言を識別するため）
-        try:
-            auth_result = await slack_client.auth_test()
-        except Exception as e:
-            raise RuntimeError(f"Failed to call Slack auth_test: {e}") from e
-
-        bot_user_id: str | None = auth_result.get("user_id")
-        if not bot_user_id:
-            raise RuntimeError("Slack auth_test response does not contain 'user_id'.")
-        bot_id: str | None = auth_result.get("bot_id")
-
-        # スレッド履歴サービス (F6)
-        thread_history_service = ThreadHistoryService(
-            slack_client=slack_client,
-            bot_user_id=bot_user_id,
-            bot_id=bot_id,
-            limit=settings.thread_history_limit,
-        )
-
-        # SlackAdapter (F9)
-        slack_adapter = SlackAdapter(
-            slack_client=slack_client,
-            bot_user_id=bot_user_id,
-            thread_history_service=thread_history_service,
-            format_instruction=slack_format,
-            bot_token=get_secret(key="SLACK_BOT_TOKEN", service=SERVICE_NAME),
-            feed_card_layout=settings.feed_card_layout,
-        )
+        # プラットフォームアダプター（Slack=auth_test で bot identity 解決 / Discord=client 生成）
+        # 仕様: bot identity 解決タイミングの差は runtime が吸収する
+        messaging_adapter = await runtime.create_adapter()
 
         # チャットサービス
         session_factory = get_session_factory()
@@ -178,8 +139,8 @@ async def main() -> None:
             session_factory=session_factory,
             system_prompt=system_prompt,
             mcp_manager=None if is_claude_mode else mcp_manager,
-            thread_history_fetcher=slack_adapter.fetch_thread_history,
-            format_instruction=slack_adapter.get_format_instruction(),
+            thread_history_fetcher=messaging_adapter.fetch_thread_history,
+            format_instruction=messaging_adapter.get_format_instruction(),
             claude_mode=is_claude_mode,
             claude_allowed_tools=settings.claude_allowed_tools,
             claude_timeout=settings.claude_timeout,
@@ -243,11 +204,11 @@ async def main() -> None:
 
         # MessageRouter (F9)
         router = MessageRouter(
-            messaging=slack_adapter,
+            messaging=messaging_adapter,
             chat_service=chat_service,
             collector=feed_collector,
             session_factory=session_factory,
-            channel_id=settings.slack_news_channel_id,
+            channel_id=runtime.news_channel_id,
             max_articles_per_feed=settings.feed_articles_per_feed,
             timezone=settings.timezone,
             env_name=settings.env_name,
@@ -263,14 +224,9 @@ async def main() -> None:
         )
 
         # 受信リスナー（MessagingListener 抽象経由で起動）
-        listener = SlackListener(
-            app=app,
-            router=router,
-            bot_user_id=bot_user_id,
-            auto_reply_channels=settings.get_auto_reply_channels(),
-        )
+        listener = runtime.create_listener(router)
 
-        # Socket Mode で起動（グレースフルシャットダウン対応）
+        # 接続して起動（グレースフルシャットダウン対応）
         await listener.run()
     finally:
         if mcp_manager:
