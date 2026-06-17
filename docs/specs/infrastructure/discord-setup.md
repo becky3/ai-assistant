@@ -11,26 +11,30 @@ AI Assistant を Discord 上で稼働させるための、Discord 側（Develope
 - 既存の bot は Slack 固定で稼働しており、Discord で動かすにはアプリ登録・トークン取得・intent 有効化・サーバー招待という Discord 固有の準備が必要
 - これらは Developer Portal 上の手動操作（ユーザー操作必須）を含むため、手順を明文化し再現可能にする
 
-## 前提
+## 制約
 
-- Discord アカウントと、bot を招待する Discord サーバー（ギルド）が用意済みであること
-- 本アプリのランタイム（Python 3.11+ / uv）がセットアップ済みであること
-- シークレットは keyring で管理する（サービス名: `ai-assistant`）。詳細は [設定管理](config-management.md)
+- **MESSAGE CONTENT INTENT は必須**。privileged intent であり、無効だとギルドチャンネルでメッセージ本文・添付が空になり bot が本文を読めない（Developer Portal 側の有効化が手動で必要。コード側の `message_content` intent はアプリに実装済み）
+- **Bot Token はシークレット**として keyring（サービス名: `ai-assistant`、キー名 `DISCORD_BOT_TOKEN`）で管理する。`.env` やコードに平文で置かない
+- **稼働プラットフォームは単一**。同時稼働ではなく `.env` の `PLATFORM` で 1 つを選ぶ。`PLATFORM=discord` 時は `DISCORD_BOT_TOKEN` のみ必須シークレットとして起動時検証される
+- bot には招待時に最小権限（メッセージ送信・履歴閲覧・ファイル添付・スレッド作成・Embed）を付与する。権限不足の操作は Discord API エラーになる
+- 前提として Discord アカウントと招待先サーバー（ギルド）、本アプリのランタイム（Python 3.11+ / uv）が用意済みであること
 
-## セットアップ手順
+## インターフェース
 
-### 1. Developer Portal でアプリケーション作成
+### セットアップ手順
+
+#### 1. Developer Portal でアプリケーション作成
 
 1. [Discord Developer Portal](https://discord.com/developers/applications) にログインする
 2. **New Application** でアプリケーションを作成する（名前は任意。bot の表示名は後から変更可能）
 
-### 2. Bot の追加と Bot Token の取得
+#### 2. Bot の追加と Bot Token の取得
 
 1. 作成したアプリケーションの **Bot** セクションを開く
 2. Bot Token を発行・コピーする（**この値はシークレット**。再表示できないため安全に控える）
 3. Token は本アプリ側で keyring に登録する（手順 5）
 
-### 3. MESSAGE CONTENT INTENT の有効化（必須）
+#### 3. MESSAGE CONTENT INTENT の有効化（必須）
 
 1. **Bot** セクションの **Privileged Gateway Intents** で **MESSAGE CONTENT INTENT** を ON にする
 2. これが無効だとギルドチャンネルでメッセージ本文・添付ファイルが空になり、bot がコマンド・チャットを読めない（本 bot は本文を読むため必須）
@@ -38,7 +42,7 @@ AI Assistant を Discord 上で稼働させるための、Discord 側（Develope
 
 > コード側の intent 有効化（`message_content`）はアプリに実装済みのため、Portal 側の ON のみが手動作業。
 
-### 4. OAuth2 でサーバーへ招待
+#### 4. OAuth2 でサーバーへ招待
 
 1. **OAuth2** の URL ジェネレーターで scope に `bot` を選択する
 2. Bot Permissions に以下を付与する（本 bot の全機能に必要な最小権限）:
@@ -50,11 +54,11 @@ AI Assistant を Discord 上で稼働させるための、Discord 側（Develope
    - Embed Links（記事カードの Embed 表示）
 3. 生成された招待 URL をブラウザで開き、対象サーバーへ bot を招待する
 
-### 5. keyring に Bot Token を登録
+#### 5. keyring に Bot Token を登録
 
 `DISCORD_BOT_TOKEN` を keyring（サービス名: `ai-assistant`）に登録する。登録方法は [py-common-lib のシークレットストア仕様](https://github.com/becky3/py-common-lib/blob/main/docs/specs/infrastructure/secret-store.md) を参照。
 
-### 6. `.env` の設定
+#### 6. `.env` の設定
 
 `.env` に以下を設定する（チャンネル ID は Discord クライアントの開発者モードを有効化し、対象チャンネルを右クリック →「ID をコピー」で取得する）:
 
@@ -64,16 +68,39 @@ AI Assistant を Discord 上で稼働させるための、Discord 側（Develope
 | `DISCORD_NEWS_CHANNEL_ID` | チャンネル ID | フィード配信先チャンネル |
 | `DISCORD_AUTO_REPLY_CHANNELS` | チャンネル ID（カンマ区切り） | メンション不要で自動応答するチャンネル群（任意） |
 
-### 7. 起動と動作確認
+#### 7. 起動と動作確認
 
 1. `uv run python -m src.main` で起動する
 2. 起動時に必須シークレット `DISCORD_BOT_TOKEN` が検証される（未設定なら中止）
 3. bot が Gateway に接続（`on_ready`）すると稼働状態になる
 4. サーバーで `@bot status` 等のメンションに応答すれば疎通確認完了
 
-## 定期トリガー（reminder）
+### 定期トリガー（reminder）
 
 Discord には Slack の Reminder に相当するネイティブ予約投稿機能がないため、毎朝のフィード配信等の定期実行は **外部の Discord reminder bot** から本 bot をメンションする投稿（例: `@bot deliver`）で起動する。本 bot は自分をメンションする他 bot の投稿を受理する（メンションを伴わない他 bot 発言はループ防止のため無視する）。
+
+## コンポーネント構成
+
+```mermaid
+flowchart LR
+    DP[Discord Developer Portal] -->|Bot Token| KR[keyring DISCORD_BOT_TOKEN]
+    DP -->|MESSAGE CONTENT INTENT 有効化| GW[Discord Gateway]
+    DP -->|OAuth2 招待| GS[Discord サーバー]
+
+    KR --> RT[プラットフォーム runtime]
+    ENV[.env PLATFORM=discord / DISCORD_*] --> RT
+    RT --> DL[Discord 受信リスナー]
+    RT --> DA[Discord アダプター]
+    DL <-->|接続| GW
+    DA <-->|送信| GW
+```
+
+| コンポーネント | 役割 |
+|---|---|
+| Discord Developer Portal | アプリ・Bot 登録、Bot Token 発行、MESSAGE CONTENT INTENT 有効化、OAuth2 招待 URL 生成 |
+| keyring（`DISCORD_BOT_TOKEN`） | Bot Token をシークレットとして保管。起動時に必須検証 |
+| `.env`（`PLATFORM` / `DISCORD_*`） | プラットフォーム選択・配信/自動返信チャンネル ID |
+| プラットフォーム runtime | `PLATFORM=discord` を解決し Discord 受信リスナー・送信アダプターを構築（実装の詳細は [CLI アダプター](../features/cli-adapter.md)） |
 
 ## エッジケース
 
