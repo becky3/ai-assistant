@@ -106,6 +106,8 @@ async def daily_collect_and_deliver(
                 if thread is None:
                     thread = await messaging.start_feed_thread(channel_id, feed.name)
 
+                # この時点で thread は必ず ThreadRef（直前で生成済み or 既存）
+                assert thread is not None
                 await messaging.post_article_card(thread, _to_card(article))
                 posted_count += 1
                 posted_article_ids.append(article.id)

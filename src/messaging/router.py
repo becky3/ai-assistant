@@ -334,9 +334,10 @@ async def _download_and_parse_csv(
 
     try:
         content = (await messaging.read_file(csv_file)).decode("utf-8")
-    except Exception as e:
+    except Exception:
+        # 例外文字列はユーザーに返さない（内部情報露出防止）。詳細は logger に残す
         logger.exception("Failed to download CSV file")
-        return ([], f"エラー: ファイルのダウンロードに失敗しました: {e}")
+        return ([], "エラー: ファイルのダウンロードに失敗しました。Bot 権限・ファイルを確認してください。")
 
     try:
         reader = csv.DictReader(io.StringIO(content))

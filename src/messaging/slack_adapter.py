@@ -134,7 +134,7 @@ class SlackAdapter(MessagingPort):
 
         プライベートファイルの取得には Bearer 認証が必要。失敗時は例外を送出する。
         """
-        logger.info("read_file: name=%s, mimetype=%s", file.name, file.mimetype)
+        logger.debug("read_file start: name=%s, mimetype=%s", file.name, file.mimetype)
         headers = {"Authorization": f"Bearer {self._bot_token}"}
         async with ConstrainedClient(
             request_timeout=_FILE_DOWNLOAD_TIMEOUT,
@@ -147,6 +147,9 @@ class SlackAdapter(MessagingPort):
                     "ファイルのダウンロードに失敗しました（認証エラー）。Bot権限を確認してください。"
                 )
             response.raise_for_status()
+            logger.debug(
+                "read_file complete: name=%s, size=%d", file.name, len(response.content)
+            )
             return response.content
 
     async def post_header(self, channel: str, text: str) -> None:
