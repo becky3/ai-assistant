@@ -83,7 +83,10 @@ class _EnvLoader(BaseSettings):
     summarizer_llm_provider: Literal["local", "online"]
 
     # Remote Control 起動（リポジトリパス・許可ユーザーはホスト依存）
+    # 許可ユーザーはプラットフォームで ID 体系が異なるため別管理
+    # （remote_control_allowed_users=Slack / discord_remote_control_allowed_users=Discord）
     remote_control_allowed_users: str = ""
+    discord_remote_control_allowed_users: str = ""
     remote_control_repositories: str = ""
     remote_control_log_dir: str = ""
 
@@ -127,6 +130,7 @@ class Settings(BaseModel):
     chat_llm_provider: Literal["local", "online", "claude"]
     summarizer_llm_provider: Literal["local", "online"]
     remote_control_allowed_users: str
+    discord_remote_control_allowed_users: str
     remote_control_repositories: str
     remote_control_log_dir: str
     article_writer_repo_path: str
@@ -154,6 +158,16 @@ class Settings(BaseModel):
         return [
             u.strip()
             for u in self.remote_control_allowed_users.split(",")
+            if u.strip()
+        ]
+
+    def get_discord_remote_control_allowed_users(self) -> list[str]:
+        """Remote Control / article コマンドを実行可能な Discord user_id のリストを返す."""
+        if not self.discord_remote_control_allowed_users:
+            return []
+        return [
+            u.strip()
+            for u in self.discord_remote_control_allowed_users.split(",")
             if u.strip()
         ]
 

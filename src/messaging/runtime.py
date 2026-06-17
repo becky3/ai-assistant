@@ -60,6 +60,11 @@ class PlatformRuntime(abc.ABC):
     def news_channel_id(self) -> str:
         """フィード配信先チャンネル ID を返す."""
 
+    @property
+    @abc.abstractmethod
+    def remote_control_allowed_users(self) -> list[str]:
+        """rc / article コマンドを許可するユーザー ID のリスト（プラットフォーム別）."""
+
 
 class SlackRuntime(PlatformRuntime):
     """Slack 用 runtime（Bolt + Socket Mode）."""
@@ -128,6 +133,10 @@ class SlackRuntime(PlatformRuntime):
     def news_channel_id(self) -> str:
         return self._settings.slack_news_channel_id
 
+    @property
+    def remote_control_allowed_users(self) -> list[str]:
+        return self._settings.get_remote_control_allowed_users()
+
 
 class DiscordRuntime(PlatformRuntime):
     """Discord 用 runtime（discord.py Gateway）."""
@@ -174,6 +183,10 @@ class DiscordRuntime(PlatformRuntime):
     @property
     def news_channel_id(self) -> str:
         return self._settings.discord_news_channel_id
+
+    @property
+    def remote_control_allowed_users(self) -> list[str]:
+        return self._settings.get_discord_remote_control_allowed_users()
 
 
 def create_runtime(settings: Settings, assistant: dict[str, object]) -> PlatformRuntime:

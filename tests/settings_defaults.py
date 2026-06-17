@@ -29,6 +29,7 @@ TEST_SETTINGS_DEFAULTS: dict[str, object] = {
     "chat_llm_provider": "local",
     "summarizer_llm_provider": "local",
     "remote_control_allowed_users": "",
+    "discord_remote_control_allowed_users": "",
     "remote_control_repositories": "",
     "remote_control_log_dir": "",
     "article_writer_repo_path": "",

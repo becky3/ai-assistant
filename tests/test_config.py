@@ -209,6 +209,19 @@ def test_get_discord_auto_reply_channels_parses() -> None:
     assert s.get_discord_auto_reply_channels() == ["111", "222", "333"]
 
 
+def test_get_discord_remote_control_allowed_users() -> None:
+    """Discord allowlist: カンマ区切りをパースし空白・空トークンを除去する."""
+    s = Settings(**{**TEST_SETTINGS_DEFAULTS, "discord_remote_control_allowed_users": ""})
+    assert s.get_discord_remote_control_allowed_users() == []
+    s = Settings(
+        **{
+            **TEST_SETTINGS_DEFAULTS,
+            "discord_remote_control_allowed_users": " 100000000000000001 , 999 ,, ",
+        }
+    )
+    assert s.get_discord_remote_control_allowed_users() == ["100000000000000001", "999"]
+
+
 def test_remote_control_repositories_rejects_invalid_key_chars() -> None:
     """REMOTE_CONTROL_REPOSITORIES: key に英数._- 以外を含むと ValueError."""
     with pytest.raises(ValueError, match="英数・"):

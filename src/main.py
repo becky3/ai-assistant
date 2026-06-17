@@ -164,8 +164,9 @@ async def main() -> None:
         )
 
         # Remote Control 起動サービス（allowlist 設定がある場合のみ有効化）
+        # 許可ユーザーは選択プラットフォームの allowlist を runtime 経由で取得する
         rc_repositories = settings.get_remote_control_repositories()
-        rc_allowed_users = settings.get_remote_control_allowed_users()
+        rc_allowed_users = runtime.remote_control_allowed_users
         if rc_repositories and rc_allowed_users:
             rc_log_dir = (
                 Path(settings.remote_control_log_dir)
@@ -184,7 +185,8 @@ async def main() -> None:
         else:
             remote_control_launcher = None
             logger.info(
-                "Remote Control 起動は無効（REMOTE_CONTROL_ALLOWED_USERS / REMOTE_CONTROL_REPOSITORIES のいずれかが未設定）",
+                "Remote Control 起動は無効（許可ユーザー（プラットフォーム別 allowlist）/ "
+                "REMOTE_CONTROL_REPOSITORIES のいずれかが未設定）",
             )
 
         # 記事自動投稿サービス（ARTICLE_WRITER_REPO_PATH 設定がある場合のみ有効化）

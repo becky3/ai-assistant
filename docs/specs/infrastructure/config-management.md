@@ -110,7 +110,8 @@ TOML はフラット構造（セクションなし）とし、キー名は `Sett
 | `online_llm_provider` | 環境依存値 | オンライン利用時の API プロバイダーを切り替える |
 | `chat_llm_provider` | 環境依存値 | 利用する LLM をローカル・オンライン・Claude CLI で切り替える |
 | `summarizer_llm_provider` | 環境依存値 | 同上（ローカルとオンラインの切り替え） |
-| `remote_control_allowed_users` | 環境依存値 | Remote Control 起動を許可する Slack ユーザーはデプロイ環境ごとに異なる |
+| `remote_control_allowed_users` | 環境依存値 | rc / article コマンドを許可する Slack ユーザー（`PLATFORM=slack` 用）。プラットフォームで ID 体系が異なるため Discord とは別管理 |
+| `discord_remote_control_allowed_users` | 環境依存値 | rc / article コマンドを許可する Discord ユーザー（`PLATFORM=discord` 用） |
 | `remote_control_repositories` | 環境依存値 | Remote Control 対象リポジトリの絶対パスはホスト PC ごとに異なる |
 | `remote_control_log_dir` | 環境依存値 | Remote Control 起動ログの出力先ディレクトリをホストごとに指定する |
 

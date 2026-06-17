@@ -60,13 +60,14 @@ AI Assistant を Discord 上で稼働させるための、Discord 側（Develope
 
 #### 6. `.env` の設定
 
-`.env` に以下を設定する（チャンネル ID は Discord クライアントの開発者モードを有効化し、対象チャンネルを右クリック →「ID をコピー」で取得する）:
+`.env` に以下を設定する。チャンネル ID・ユーザー ID は Discord クライアントの**開発者モードを有効化**（ユーザー設定 → 詳細設定 → 開発者モード）し、対象を右クリック →「ID をコピー」で取得する:
 
 | キー | 値 | 説明 |
 |---|---|---|
 | `PLATFORM` | `discord` | 稼働プラットフォームを Discord に切り替える |
 | `DISCORD_NEWS_CHANNEL_ID` | チャンネル ID | フィード配信先チャンネル |
 | `DISCORD_AUTO_REPLY_CHANNELS` | チャンネル ID（カンマ区切り） | メンション不要で自動応答するチャンネル群（任意） |
+| `DISCORD_REMOTE_CONTROL_ALLOWED_USERS` | ユーザー ID（カンマ区切り） | rc / article コマンドの認可ユーザー（Discord ID）。ID 体系が Slack と異なるため Discord 専用変数を用いる（任意） |
 
 #### 7. 起動と動作確認
 

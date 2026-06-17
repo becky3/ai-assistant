@@ -50,6 +50,27 @@ def test_news_channel_id_per_platform() -> None:
     assert discord_rt.news_channel_id == "111"
 
 
+def test_remote_control_allowed_users_per_platform() -> None:
+    slack_rt = create_runtime(
+        _settings(
+            platform="slack",
+            remote_control_allowed_users="U_SLACK",
+            discord_remote_control_allowed_users="123",
+        ),
+        {},
+    )
+    discord_rt = create_runtime(
+        _settings(
+            platform="discord",
+            remote_control_allowed_users="U_SLACK",
+            discord_remote_control_allowed_users="123",
+        ),
+        {},
+    )
+    assert slack_rt.remote_control_allowed_users == ["U_SLACK"]
+    assert discord_rt.remote_control_allowed_users == ["123"]
+
+
 def test_slack_validate_secrets_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_get_secret(*, key: str, service: str) -> str:
         raise SecretNotFoundError(f"missing {key}")
