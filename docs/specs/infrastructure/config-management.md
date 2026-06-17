@@ -91,7 +91,7 @@ TOML はフラット構造（セクションなし）とし、キー名は `Sett
 
 | 項目名 | 層 | 設計意図 |
 |---|---|---|
-| `platform` | 環境依存値 | 稼働プラットフォーム（`slack` / `discord`）をデプロイ先で選択する。デフォルト `slack` |
+| `platform` | 環境依存値 | 稼働プラットフォーム（`slack` / `discord`）をデプロイ先で選択する（具体値・デフォルトはコードの pydantic 定義が SSoT） |
 | `lmstudio_base_url` | 環境依存値 | ローカル LLM サーバーのホスト・ポートはマシンごとに異なる |
 | `database_url` | 環境依存値 | DB ファイルパスはデプロイ先ごとに異なる |
 | `slack_news_channel_id` | 環境依存値 | フィード配信先チャンネル ID は Slack ワークスペースごとに異なる |

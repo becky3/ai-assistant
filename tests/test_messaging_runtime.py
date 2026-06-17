@@ -34,9 +34,8 @@ def test_create_runtime_selects_slack() -> None:
 
 
 def test_create_runtime_selects_discord() -> None:
-    rt = create_runtime(
-        _settings(platform="discord"), {"format_instruction_discord": "y"}
-    )
+    # canonical 統一設計のため Discord 専用整形キーは持たない（format_instruction を共用）
+    rt = create_runtime(_settings(platform="discord"), {"format_instruction": "y"})
     assert isinstance(rt, DiscordRuntime)
 
 

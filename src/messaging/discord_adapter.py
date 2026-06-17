@@ -104,9 +104,15 @@ class DiscordAdapter(MessagingPort):
     async def send_message(self, text: str, thread_id: str, channel: str) -> None:
         """Discord にメッセージを送信する（2000 文字で分割）."""
         logger.debug("send_message: channel=%s, length=%d", thread_id, len(text))
+        converted = to_discord_markdown(text)
+        if not converted:
+            # Discord は空メッセージ送信を拒否するため何も送らない
+            logger.debug("send_message: skipped empty message")
+            return
         target = await self._resolve_channel(thread_id or channel)
-        for chunk in _split_message(to_discord_markdown(text)):
-            await target.send(chunk)
+        for chunk in _split_message(converted):
+            if chunk:
+                await target.send(chunk)
 
     async def upload_file(
         self,
@@ -173,6 +179,9 @@ class DiscordAdapter(MessagingPort):
         if not isinstance(target, discord.Thread):
             return None
 
+        bot_user = self._client.user
+        bot_id = bot_user.id if bot_user is not None else None
+
         messages: list[Message] = []
         async for m in target.history(
             limit=self._thread_history_limit, oldest_first=True
@@ -182,7 +191,7 @@ class DiscordAdapter(MessagingPort):
             text = m.content
             if not text:
                 continue
-            if m.author.id == (self._client.user.id if self._client.user else None):
+            if m.author.id == bot_id:
                 messages.append(Message(role="assistant", content=text))
             else:
                 content = f"<@{m.author.id}>: {text}"

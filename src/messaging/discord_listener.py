@@ -126,7 +126,10 @@ class DiscordListener(MessagingListener):
         if message.author.id == me.id:
             return  # 自己発言（最優先で除外しループ防止）
 
-        mentioned = me in message.mentions
+        # 本文中の明示的なメンションのみで判定する（raw_mentions）。
+        # message.mentions はリプライ ping 先も含むため、明示メンション方式
+        # （Slack の app_mention 相当）に揃えて予期せぬ反応を防ぐ。
+        mentioned = me.id in message.raw_mentions
 
         if message.author.bot and not mentioned:
             # 他 bot は自 bot メンション時のみ受理（外部 Discord reminder bot の

@@ -1,10 +1,16 @@
 """Slack mrkdwn → Discord Markdown 変換.
 
-仕様: docs/specs/features/slack-formatting.md
+仕様: docs/specs/features/cli-adapter.md
 
-Core / LLM / bot 内部文字列は canonical な Slack mrkdwn で出力する。Discord
-送信時に本モジュールで Discord Markdown へ変換する（整形差分のアダプター内局所化）。
-コードスパン（インライン / フェンス）は保護し、その外側のみ変換する。
+Core / LLM / bot 内部文字列は canonical な Slack mrkdwn で出力する（仕様:
+cli-adapter.md の「canonical な Slack mrkdwn に統一し、Discord Markdown 変換は
+各送信アダプター内に閉じる」制約）。Discord 送信時に本モジュールで Discord
+Markdown へ変換する（整形差分のアダプター内局所化）。コードスパン（インライン /
+フェンス）は保護し、その外側のみ変換する。
+
+Note: slack-formatting.md の「後処理変換方式は採用しない」は LLM 出力方向
+（Markdown → mrkdwn）の話であり、本モジュールの送信前変換（mrkdwn → Discord
+Markdown）は別レイヤーの責務。
 """
 
 from __future__ import annotations

@@ -34,7 +34,7 @@ AI Assistant を Discord 上で稼働させるための、Discord 側（Develope
 
 1. **Bot** セクションの **Privileged Gateway Intents** で **MESSAGE CONTENT INTENT** を ON にする
 2. これが無効だとギルドチャンネルでメッセージ本文・添付ファイルが空になり、bot がコマンド・チャットを読めない（本 bot は本文を読むため必須）
-3. bot が 100 サーバー未満で稼働する個人運用の場合、Portal 上でそのまま有効化できる
+3. 個人運用規模では Portal 上でそのまま有効化できる（大規模公開 bot は Discord 側の審査が必要になる場合がある）
 
 > コード側の intent 有効化（`message_content`）はアプリに実装済みのため、Portal 側の ON のみが手動作業。
 

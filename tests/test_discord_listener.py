@@ -57,7 +57,8 @@ def _make_message(
     msg.author.bot = is_bot
     msg.content = content
     msg.channel = channel
-    msg.mentions = mentions or []
+    # listener は本文中の明示メンション（raw_mentions: ユーザー ID の list）で判定する
+    msg.raw_mentions = [u.id for u in (mentions or [])]
     msg.attachments = attachments or []
     msg.id = message_id
     return msg
