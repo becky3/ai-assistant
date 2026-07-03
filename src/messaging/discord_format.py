@@ -24,6 +24,7 @@ _EMOJI_MAP = {
     ":file_folder:": "📁",
     ":books:": "📚",
     ":robot_face:": "🤖",
+    ":warning:": "⚠️",
 }
 
 # Slack リンク <url|text> / <url>

@@ -25,6 +25,10 @@ logger = logging.getLogger(__name__)
 _MESSAGE_LIMIT = 2000
 # Discord Embed description の文字数制限
 _EMBED_DESCRIPTION_LIMIT = 4096
+# Discord Embed title の文字数制限
+_EMBED_TITLE_LIMIT = 256
+# Discord Embed の URL（image.url 等）の文字数制限
+_EMBED_URL_LIMIT = 2048
 # ファイルダウンロードのタイムアウト（秒）
 _FILE_DOWNLOAD_TIMEOUT = 30.0
 
@@ -57,18 +61,38 @@ def _split_message(text: str, limit: int = _MESSAGE_LIMIT) -> list[str]:
     return chunks
 
 
+def _sanitize_image_url(url: str) -> str | None:
+    """Discord Embed の image URL 制限を満たさない URL を除外する.
+
+    2048 文字超・http(s) 以外の形式は API バリデーション（400）で投稿全体が
+    失敗するため、画像なし扱い（None）に落とす。
+    """
+    if len(url) > _EMBED_URL_LIMIT or not url.startswith(("http://", "https://")):
+        logger.info(
+            "embed image を省略します（URL 制限違反）: length=%d, url=%.100s",
+            len(url), url,
+        )
+        return None
+    return url
+
+
 def _build_embed(card: ArticleCard) -> discord.Embed:
-    """記事カードを discord.Embed に描画する."""
+    """記事カードを discord.Embed に描画する（API 制限に合わせてサニタイズ）."""
+    title = card.title
+    if len(title) > _EMBED_TITLE_LIMIT:
+        title = title[: _EMBED_TITLE_LIMIT - 3] + "..."
     description = f"{card.datetime_str}\n\n{to_discord_markdown(card.summary)}"
     if len(description) > _EMBED_DESCRIPTION_LIMIT:
         description = description[: _EMBED_DESCRIPTION_LIMIT - 3] + "..."
     embed = discord.Embed(
-        title=card.title,
+        title=title,
         url=card.url,
         description=description,
     )
     if card.image_url:
-        embed.set_image(url=card.image_url)
+        image_url = _sanitize_image_url(card.image_url)
+        if image_url:
+            embed.set_image(url=image_url)
     return embed
 
 

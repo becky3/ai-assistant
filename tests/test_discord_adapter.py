@@ -61,6 +61,43 @@ def test_build_embed() -> None:
     assert embed.image.url == "https://example.com/img.png"
 
 
+def test_build_embed_truncates_long_title() -> None:
+    card = ArticleCard(
+        title="t" * 300,
+        url="https://example.com",
+        datetime_str="06-17 10:00",
+        summary="要約本文",
+    )
+    embed = _build_embed(card)
+    assert embed.title is not None
+    assert len(embed.title) == 256
+    assert embed.title.endswith("...")
+
+
+def test_build_embed_drops_too_long_image_url() -> None:
+    card = ArticleCard(
+        title="Sample Title",
+        url="https://example.com",
+        datetime_str="06-17 10:00",
+        summary="要約本文",
+        image_url="https://example.com/img.png?sig=" + "a" * 2048,
+    )
+    embed = _build_embed(card)
+    assert embed.image.url is None
+
+
+def test_build_embed_drops_malformed_image_url() -> None:
+    card = ArticleCard(
+        title="Sample Title",
+        url="https://example.com",
+        datetime_str="06-17 10:00",
+        summary="要約本文",
+        image_url="//example.com/img.png",
+    )
+    embed = _build_embed(card)
+    assert embed.image.url is None
+
+
 async def test_send_message_splits() -> None:
     channel = _make_channel()
     client = MagicMock()

@@ -111,7 +111,7 @@ flowchart LR
 | Discord 受信リスナー | discord.py Gateway を束ね、`on_message` の正規化・受信フィルタ（自己/他 bot 除外・メンション判定・auto-reply 判定・自 bot メンションする他 bot の受理）・dispatch を行う受信リスナー実装 |
 | 送受信アダプター抽象（`MessagingPort`） | メッセージ送信・ファイル送信/受信ファイル取得（`read_file`）・スレッド履歴取得・フォーマット指示・告知スレッド開始（`open_thread`）・フィード配信プリミティブ（ヘッダー / 親スレッド開始 / 記事カード / フッター）のインターフェース定義 |
 | Slack アダプター | Slack API を使用した送信実装（Block Kit 描画・配信プリミティブを含む） |
-| Discord アダプター | discord.py を使用した送信実装（Discord Markdown 変換・2000 文字分割・Embed カード描画・配信プリミティブを含む） |
+| Discord アダプター | discord.py を使用した送信実装（Discord Markdown 変換・2000 文字分割・Embed カード描画（タイトル・画像 URL の API 制限サニタイズ含む）・配信プリミティブを含む） |
 | CLI アダプター | stdout / ローカルファイルを使用した送信実装 |
 | モックアダプター | テスト用の送信実装 |
 | メッセージルーター | 入力メッセージに応じた適切なサービスへの振り分け（プラットフォーム非依存） |
