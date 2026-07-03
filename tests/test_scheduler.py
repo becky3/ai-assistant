@@ -264,6 +264,175 @@ async def test_daily_collect_and_deliver_does_not_crash_on_error(db_factory) -> 
     messaging.post_article_card.assert_not_called()
 
 
+async def test_post_failure_skips_article_and_continues(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """1 記事の投稿失敗でフィードが中断せず、他記事は配信・失敗記事は未配信のまま残る."""
+    async with db_factory() as session:
+        feed = (await session.execute(select(Feed))).scalar_one()
+        session.add(Article(
+            feed_id=feed.id,
+            title="Second",
+            url="https://example.com/2",
+            summary="summary",
+            collected_at=datetime.now(tz=timezone.utc),
+        ))
+        await session.commit()
+        feeds = list((await session.execute(select(Feed))).scalars().all())
+        undelivered = list(
+            (await session.execute(
+                select(Article).where(Article.delivered == False)  # noqa: E712
+                .order_by(Article.url.asc())
+            )).scalars().all()
+        )
+    collector = _make_sequential_collector(undelivered)
+    collector.get_enabled_feeds.return_value = feeds
+
+    messaging = _make_messaging()
+    # 1 記事目のみ失敗させる
+    messaging.post_article_card.side_effect = [
+        RuntimeError("400 Bad Request"),
+        None,
+    ]
+    await daily_collect_and_deliver(
+        collector=collector,
+        session_factory=db_factory,
+        messaging=messaging,
+        channel_id="C123",
+    )
+
+    # 失敗記事は同一実行内で再試行されない（呼び出しは 2 記事分のみ）
+    assert messaging.post_article_card.call_count == 2
+    # エラー通知がスレッドに投稿される
+    messaging.send_message.assert_called_once()
+    notice = messaging.send_message.call_args.args[0]
+    assert ":warning:" in notice
+    assert "https://example.com/1" in notice
+    # 配信は継続しフッターも投稿される
+    messaging.post_footer.assert_called_once()
+
+    async with db_factory() as session:
+        articles = {
+            a.url: a for a in (await session.execute(select(Article))).scalars().all()
+        }
+    assert articles["https://example.com/1"].delivered is False
+    assert articles["https://example.com/2"].delivered is True
+
+
+async def test_invalid_url_article_discarded_as_delivered(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """リンク URL が不正な記事は投稿せず破棄し、配信済み扱いで再試行させない."""
+    async with db_factory() as session:
+        feed = (await session.execute(select(Feed))).scalar_one()
+        session.add(Article(
+            feed_id=feed.id,
+            title="Broken Link",
+            url="//example.com/broken",
+            summary="summary",
+            collected_at=datetime.now(tz=timezone.utc),
+        ))
+        await session.commit()
+        feeds = list((await session.execute(select(Feed))).scalars().all())
+        undelivered = list(
+            (await session.execute(
+                select(Article).where(Article.delivered == False)  # noqa: E712
+            )).scalars().all()
+        )
+    collector = _make_sequential_collector(undelivered)
+    collector.get_enabled_feeds.return_value = feeds
+
+    messaging = _make_messaging()
+    await daily_collect_and_deliver(
+        collector=collector,
+        session_factory=db_factory,
+        messaging=messaging,
+        channel_id="C123",
+    )
+
+    # 不正 URL 記事はカード投稿もエラー通知もされない（正常記事 1 件のみ投稿）
+    assert messaging.post_article_card.call_count == 1
+    posted_card = messaging.post_article_card.call_args.args[1]
+    assert posted_card.url == "https://example.com/1"
+    messaging.send_message.assert_not_called()
+
+    async with db_factory() as session:
+        articles = {
+            a.url: a for a in (await session.execute(select(Article))).scalars().all()
+        }
+    # 破棄記事も配信済み扱いになり、以後の配信対象から外れる
+    assert articles["//example.com/broken"].delivered is True
+    assert articles["https://example.com/1"].delivered is True
+
+
+async def test_discard_only_feed_posts_nothing(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """破棄記事のみのフィードではヘッダー・スレッド・フッターを投稿しない."""
+    async with db_factory() as session:
+        feed = (await session.execute(select(Feed))).scalar_one()
+        existing = (await session.execute(select(Article))).scalar_one()
+        existing.delivered = True
+        session.add(Article(
+            feed_id=feed.id,
+            title="Broken Only",
+            url="//example.com/broken-only",
+            summary="summary",
+            collected_at=datetime.now(tz=timezone.utc),
+        ))
+        await session.commit()
+        feeds = list((await session.execute(select(Feed))).scalars().all())
+        undelivered = list(
+            (await session.execute(
+                select(Article).where(Article.delivered == False)  # noqa: E712
+            )).scalars().all()
+        )
+    collector = _make_sequential_collector(undelivered)
+    collector.get_enabled_feeds.return_value = feeds
+
+    messaging = _make_messaging()
+    result = await daily_collect_and_deliver(
+        collector=collector,
+        session_factory=db_factory,
+        messaging=messaging,
+        channel_id="C123",
+    )
+
+    # 投稿は一切発生せず、配信数にも計上されない
+    assert result == (0, 0)
+    messaging.post_header.assert_not_called()
+    messaging.start_feed_thread.assert_not_called()
+    messaging.post_article_card.assert_not_called()
+    messaging.post_footer.assert_not_called()
+
+    async with db_factory() as session:
+        articles = {
+            a.url: a for a in (await session.execute(select(Article))).scalars().all()
+        }
+    assert articles["//example.com/broken-only"].delivered is True
+
+
+async def test_post_failure_notice_failure_does_not_break_delivery(db_factory) -> None:  # type: ignore[no-untyped-def]
+    """エラー通知の投稿自体が失敗しても配信が継続する."""
+    async with db_factory() as session:
+        feeds = list((await session.execute(select(Feed))).scalars().all())
+        undelivered = list(
+            (await session.execute(
+                select(Article).where(Article.delivered == False)  # noqa: E712
+            )).scalars().all()
+        )
+    collector = _make_sequential_collector(undelivered)
+    collector.get_enabled_feeds.return_value = feeds
+
+    messaging = _make_messaging()
+    messaging.post_article_card.side_effect = RuntimeError("400 Bad Request")
+    messaging.send_message.side_effect = RuntimeError("notice failed")
+
+    await daily_collect_and_deliver(
+        collector=collector,
+        session_factory=db_factory,
+        messaging=messaging,
+        channel_id="C123",
+    )
+
+    # 通知失敗でもフッターまで到達する（ヘッダー投稿済みのため）
+    messaging.post_footer.assert_called_once()
+
+
 async def test_article_model_has_delivered_column_default_false(db_factory) -> None:  # type: ignore[no-untyped-def]
     """Article モデルに delivered カラムが追加されている."""
     async with db_factory() as session:
@@ -512,6 +681,31 @@ async def test_feed_test_deliver_includes_already_delivered_articles(db_factory_
     assert messaging.post_article_card.call_count == 3
     messaging.post_header.assert_called_once()
     messaging.post_footer.assert_called_once()
+
+
+async def test_feed_test_deliver_skips_invalid_url_articles(db_factory_with_delivered) -> None:  # type: ignore[no-untyped-def]
+    """feed test はリンク URL が不正な記事を投稿対象から外す."""
+    async with db_factory_with_delivered() as session:
+        feed = (await session.execute(
+            select(Feed).where(Feed.name == "Feed 1")
+        )).scalar_one()
+        session.add(Article(
+            feed_id=feed.id, title="Broken", url="//example.com/broken",
+            summary="broken", delivered=True,
+            collected_at=datetime.now(tz=timezone.utc),
+        ))
+        await session.commit()
+
+    messaging = _make_messaging()
+    await feed_test_deliver(
+        session_factory=db_factory_with_delivered,
+        messaging=messaging,
+        channel_id="C123",
+    )
+    # 不正 URL の 1 件を除いた 3 件のみ投稿される
+    assert messaging.post_article_card.call_count == 3
+    posted_urls = {c.args[1].url for c in messaging.post_article_card.call_args_list}
+    assert "//example.com/broken" not in posted_urls
 
 
 async def test_feed_test_deliver_limits_output_to_max_feeds() -> None:

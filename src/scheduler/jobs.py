@@ -21,13 +21,26 @@ from src.messaging.port import ArticleCard
 from src.services.feed_collector import NO_SUMMARY_TEXT, FeedCollector
 
 if TYPE_CHECKING:
-    from src.messaging.port import MessagingPort
+    from src.messaging.port import MessagingPort, ThreadRef
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TZ = ZoneInfo("Asia/Tokyo")
 
 _FOOTER_TEXT = ":bulb: 気になる記事があれば、スレッドで聞いてね！"
+
+# 記事リンク URL の許容上限（Discord embed の URL 制限に合わせる。
+# Article.url カラム定義の String(2048) とも一致し、Discord 都合だけの値ではない）
+_ARTICLE_URL_MAX_LENGTH = 2048
+
+
+def _is_valid_article_url(url: str) -> bool:
+    """記事リンクとして投稿可能な URL かを判定する.
+
+    リンクが壊れている記事は読者に価値を提供できないため、投稿せず破棄する
+    判定に使う（形式不正は Discord embed の 400 エラー要因でもある）。
+    """
+    return url.startswith(("http://", "https://")) and len(url) <= _ARTICLE_URL_MAX_LENGTH
 
 
 def _format_article_datetime(article: Article, tz: ZoneInfo = DEFAULT_TZ) -> str:
@@ -40,6 +53,21 @@ def _format_article_datetime(article: Article, tz: ZoneInfo = DEFAULT_TZ) -> str
         dt = dt.replace(tzinfo=ZoneInfo("UTC"))
     local_dt = dt.astimezone(tz)
     return local_dt.strftime("%m-%d %H:%M")
+
+
+async def _notify_post_failure(
+    messaging: MessagingPort, thread: ThreadRef, article: Article, exc: Exception
+) -> None:
+    """記事カード投稿の失敗をフィードスレッドに通知する（通知自体の失敗は配信を止めない）."""
+    text = (
+        f":warning: 記事の投稿に失敗しました: {article.title}\n"
+        f"{article.url}\n"
+        f"エラー: {exc}"
+    )
+    try:
+        await messaging.send_message(text, thread.thread_key, thread.channel)
+    except Exception:
+        logger.exception("Failed to post error notice: %s", article.url)
 
 
 def _to_card(article: Article) -> ArticleCard:
@@ -90,10 +118,22 @@ async def daily_collect_and_deliver(
             thread = None
             posted_count = 0
             posted_article_ids: list[int] = []
+            failed_article_ids: list[int] = []
+            discarded_article_ids: list[int] = []
 
             # 投稿共通処理
             async def _post_single_article(article: Article) -> None:
                 nonlocal header_posted, thread, posted_count
+
+                # リンク URL が壊れている記事は読者に価値がないため投稿せず破棄する
+                # （配信済み扱いにして以後の配信対象から外す）
+                if not _is_valid_article_url(article.url):
+                    logger.warning(
+                        "Discarding article with invalid URL: %s (%r)",
+                        article.title, article.url,
+                    )
+                    discarded_article_ids.append(article.id)
+                    return
 
                 # ヘッダーメッセージ（初回のみ）
                 if not header_posted:
@@ -108,9 +148,19 @@ async def daily_collect_and_deliver(
 
                 # この時点で thread は必ず ThreadRef（直前で生成済み or 既存）
                 assert thread is not None
-                await messaging.post_article_card(thread, _to_card(article))
-                posted_count += 1
-                posted_article_ids.append(article.id)
+                # 1 記事の投稿失敗でフィード全体（収集セッション含む）を中断させない。
+                # 失敗記事は delivered=False のまま残し、次回の配信実行で再試行する。
+                try:
+                    await messaging.post_article_card(thread, _to_card(article))
+                except Exception as exc:
+                    logger.exception(
+                        "Failed to post article card: %s (%s)", article.title, article.url
+                    )
+                    failed_article_ids.append(article.id)
+                    await _notify_post_failure(messaging, thread, article, exc)
+                else:
+                    posted_count += 1
+                    posted_article_ids.append(article.id)
                 await asyncio.sleep(1)
 
             # 1記事要約完了時に即投稿するコールバック
@@ -129,7 +179,9 @@ async def daily_collect_and_deliver(
                 continue
 
             # 収集後、DB上の過去の未配信記事も投稿対象にする
+            # （同一実行内で投稿失敗した記事は再試行しない。次回の配信実行に委ねる）
             if posted_count < effective_max:
+                excluded_ids = posted_article_ids + failed_article_ids + discarded_article_ids
                 async with session_factory() as session:
                     remaining = int(effective_max - posted_count) if effective_max != float("inf") else None
                     result = await session.execute(
@@ -137,7 +189,7 @@ async def daily_collect_and_deliver(
                         .where(
                             Article.feed_id == feed.id,
                             Article.delivered == False,  # noqa: E712
-                            Article.id.notin_(posted_article_ids) if posted_article_ids else True,  # type: ignore[arg-type]
+                            Article.id.notin_(excluded_ids) if excluded_ids else True,  # type: ignore[arg-type]
                         )
                         .order_by(Article.published_at.asc().nullslast(), Article.collected_at.asc())
                         .limit(remaining)
@@ -147,15 +199,17 @@ async def daily_collect_and_deliver(
                 for article in old_articles:
                     await _post_single_article(article)
 
-            # 配信済みフラグを即更新
-            if posted_article_ids:
+            # 配信済みフラグを即更新（破棄記事も配信済み扱いにして再試行させない）
+            delivered_ids = posted_article_ids + discarded_article_ids
+            if delivered_ids:
                 async with session_factory() as session:
                     await session.execute(
                         update(Article)
-                        .where(Article.id.in_(posted_article_ids))
+                        .where(Article.id.in_(delivered_ids))
                         .values(delivered=True)
                     )
                     await session.commit()
+            if posted_article_ids:
                 total_delivered.extend(posted_article_ids)
                 delivered_feed_count += 1
 
@@ -218,6 +272,14 @@ async def feed_test_deliver(
             )
             articles = list(article_result.scalars().all())
 
+        # リンク URL が壊れている記事は本番配信と同様に投稿対象から外す
+        valid_articles = [a for a in articles if _is_valid_article_url(a.url)]
+        if len(valid_articles) < len(articles):
+            logger.info(
+                "feed_test_deliver: filtered %d invalid-URL articles for feed %s",
+                len(articles) - len(valid_articles), feed.name,
+            )
+        articles = valid_articles
         if not articles:
             continue
 
