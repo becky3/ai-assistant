@@ -157,7 +157,7 @@ stdout 末尾: {直近の数行}
 |---|---|---|
 | `ARTICLE_WRITER_REPO_PATH` | 環境依存値 | article-writer リポジトリの絶対パス。空または未設定の場合は本機能は無効化される。絶対パス必須（意図しないディレクトリでの起動防止） |
 | `REMOTE_CONTROL_ALLOWED_USERS` / `DISCORD_REMOTE_CONTROL_ALLOWED_USERS` | 環境依存値 | 本機能でも認可ユーザー allowlist として流用する（Remote Control 機能と共用、稼働プラットフォームのものを使用）。詳細は [`remote-control-launch.md`](remote-control-launch.md) の同名項目を参照 |
-| `article_publish_timeout` | 共通設定値 | `claude -p` 起動のタイムアウト秒数。`/auto-publish-diary` の実機 QA 実測 ~13 分を踏まえて余裕を持たせる |
+| `article_publish_timeout` | 共通設定値 | `claude -p` 起動のタイムアウト秒数。`/auto-publish-diary` は記事生成から PR マージまでを 1 プロセスで実行するため所要時間の振れ幅が大きい。実運用の実測分布に対し、偶発的な遅延が打ち切りにならない余裕を確保する |
 
 具体値の制約は pydantic Field 定義（`src/config/settings.py`）が SSoT。仕様書では設計意図のみを記述する。
 
