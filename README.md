@@ -147,9 +147,7 @@ uv run mypy src
 
 shared-workflows リポジトリで管理。仕様書は [shared-workflows/docs/specs/](https://github.com/becky3/shared-workflows/tree/main/docs/specs) を参照。
 
-- 自動進行管理（auto-progress）
-- Copilot 自動修正ワークフロー（copilot-auto-fix）
-- Claude Code Actions（claude-code-actions）
+- 品質チェック（quality-check）のみ使用。自動実装・Copilot 自動修正・マージ後処理・遅延レビュースキャンの caller は置かない
 
 ### Claude Code 拡張（agentic）
 
